@@ -410,7 +410,7 @@ def _first_touch_status(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     `ceiling` is the slow-restart per-domain cap (or 0 when first touches are paused). It never
     raises the ramp: the number published here is the lower of the two."""
     if ceiling is _FT_CEILING_UNSET:
-        ceiling = _ft_restart_ceiling()
+        ceiling = None      # no restart ceiling since 2026-11-13: each sender's own cap stands
     dom_counts = {}
     out = []
     for a in _first_touch_senders(cfg):
@@ -446,7 +446,7 @@ def _pick_first_touch_from(cfg, today=None, ceiling=_FT_CEILING_UNSET):
     During the slow restart, `ceiling` is also a per-domain cap: two addresses on one domain share
     it. A paused rule passes 0, and nothing is picked."""
     if ceiling is _FT_CEILING_UNSET:
-        ceiling = _ft_restart_ceiling()
+        ceiling = None      # no restart ceiling since 2026-11-13: each sender's own cap stands
     st = _first_touch_status(cfg, today, ceiling=ceiling)
     day = dt.date.today().isoformat()
     with _FT_SLOT_LOCK:
@@ -1203,7 +1203,7 @@ def _wilson_lower(dead, mailed, z=BOUNCE_Z):
     return max(0.0, (centre - spread) / (1 + z2 / mailed))
 
 
-def _bounce_health():
+def _bounce_measure():
     """Trailing hard-bounce rate, computed from the two files this box already owns.
 
     WHY (2026-08-08): outreach ran at a 28-33% recipient-level bounce rate for SEVEN STRAIGHT DAYS
@@ -1382,89 +1382,32 @@ def _bounce_health():
             'post_lb': post_lb, 'post_trailing_blocked': post_trailing}
 
 
-def _restart_ceiling_on(health):
-    """True when a first touch is under the slow-restart per-domain cap.
+def _bounce_health():
+    """The bounce numbers, with no rule attached (2026-11-13, Alejandro: first-email gates removed).
 
-    That is the measured `slow_restart` rule, and also a missing bounce list (`unmeasured`,
-    `ft_measured` false). A paused or unreadable list is not this — those refuse the send.
-    A healthy (`clear`) sample is not this either: the warm-up ramp stands on its own.
+    _bounce_measure() still reads the ledger and the bounce list and still works out the rates, and
+    what it would have ruled is kept under `measured_rule` / `measured_blocked` so the numbers can be
+    watched. But nothing pauses on them any more: `blocked`, `day_blocked` and
+    `post_trailing_blocked` are always False and `ft_rule` is always 'clear', so /send, /health, the
+    Morning Worker banner, Call Mode, pipeline_alerts and outreach_email all read "not paused" from
+    this one place. The single exception is a bounce list that will not parse: `list_unreadable`
+    is passed through and `blocked` stays True for it, because /send still refuses every send in
+    that state (without the list a known-dead address cannot be told from a live one).
     """
-    if not health or health.get('list_unreadable') or health.get('ft_rule') == 'paused':
-        return False
-    if not health.get('ft_measured'):
-        return True
-    return health.get('ft_rule') == 'slow_restart'
-
-
-def _ft_restart_ceiling(health=None):
-    """Per-domain first-touch ceiling for this bounce reading.
-
-    None — no extra ceiling (the post-cutoff sample is healthy and the warm-up ramp stands).
-    0 — first touches are paused, or the bounce list is unreadable. FIRST_TOUCH_RESTART_CAP
-    while the sample is still small, and while there is no list to measure. Callers min this
-    with the ramp, so a lower cap is not raised.
-    """
-    h = health if health is not None else _bounce_health()
-    if h.get('list_unreadable') or h.get('ft_rule') == 'paused':
-        return 0
-    if _restart_ceiling_on(h):
-        return FIRST_TOUCH_RESTART_CAP
-    return None
-
-
-def first_touch_paused(health=None):
-    """True when a first-touch email must not go out.
-
-    The decision is the message type, not the From domain or send-as alias. A warm-up
-    address and the corporate alias are the same kind of first touch.
-
-    Fail closed when the reading cannot be made: an exception from the bounce health,
-    None, or a dict that has no `ft_rule`. A missing bounce list is a real reading
-    (`ft_rule` `unmeasured`): this returns False and the slow-restart cap still applies.
-    An unreadable list and `ft_rule` `paused` both return True. Follow-ups are not this.
-    """
-    if health is None:
-        try:
-            health = _bounce_health()
-        except Exception:
-            return True
-    return _first_touch_bounce_paused(health)
-
-
-def _first_touch_bounce_paused(health):
-    """True when a first touch must not go out. The trailing Wilson reading is not this.
-
-    Follow-ups still see `blocked`. A first touch is paused by the post-cutoff rule or
-    an unreadable bounce list. A health value that is not a reading (not a dict, or a
-    dict with no `ft_rule`) fails closed. A computed `unmeasured` reading — no bounce
-    list on disk — is not a pause: the slow-restart cap still applies.
-    """
-    if not isinstance(health, dict) or 'ft_rule' not in health:
-        return True
-    if health.get('list_unreadable') or health.get('ft_rule') == 'paused':
-        return True
-    return False
+    h = dict(_bounce_measure())
+    unreadable = bool(h.get('list_unreadable'))
+    h['measured_rule'] = h.get('ft_rule')
+    h['measured_why'] = h.get('ft_why')
+    h['measured_blocked'] = bool(h.get('blocked'))
+    h['measured_day_blocked'] = bool(h.get('day_blocked'))
+    h['measured_post_trailing_blocked'] = bool(h.get('post_trailing_blocked'))
+    h.update({'blocked': unreadable, 'day_blocked': False, 'post_trailing_blocked': False,
+              'ft_rule': 'clear', 'ft_why': 'list_unreadable' if unreadable else 'not_enforced',
+              'enforced': False})
+    return h
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
-PROBE_DAILY_CAP = 10      # see _probe_quota_left — the free verification trickle
-
-
-def _probe_quota_left():
-    """PROBE LANE (2026-08-11): the only free way to verify the ~850 'unknown' addresses is to
-    mail them and watch. Doing that in bulk is what poisoned the account in the first place, so
-    this lane is a TRICKLE: at most PROBE_DAILY_CAP never-mailed, not-dead, not-risky recipients
-    per day while the breaker is engaged. Worst case (33% of probes dead) adds ~3 bounces a day
-    against ~150 clean proven sends — the trailing rate keeps FALLING even while probing. Every
-    probe that stays quiet 48h graduates into the proven pool automatically via
-    _proven_deliverable(), so the unknown pile self-verifies at ~70 addresses a week for $0."""
-    today = dt.date.today().isoformat()
-    used = sum(1 for e in _load_ledger()
-               if e.get('ch') == 'email' and str(e.get('d') or '') == today
-               and e.get('lane') == 'probe')
-    return max(0, PROBE_DAILY_CAP - used)
-
-
 def _proven_deliverable():
     """Addresses with DIRECT evidence of deliverability: mailed >= 48h ago, never observed
     bouncing. OBSERVED evidence only — a paid API 'ok' is NOT acceptance-grade (see below).
@@ -1542,7 +1485,13 @@ def _proven_deliverable():
 # delivery only. While the bounce breaker is engaged a ZeroBounce-valid first touch still has to fit
 # the probe quota below it; this gate only narrows what reaches the breaker.
 FIRST_TOUCH_ADMIT_ZEROBOUNCE_VALID = True
-GATE_PASS = ('delivered', 'replied', 'zerobounce_valid')
+# VERIFIED-ONLY REMOVED 2026-11-13 (Alejandro). A first email no longer needs delivery evidence or a
+# paid verdict: 'unverified', 'catch_all', 'risky' and 'awaiting_delivery' all pass. The one class
+# that still does not is 'dead' (it hard-bounced before, or the verifier says the mailbox is gone);
+# mailing those is a guaranteed bounce, not a first touch. Order is strength of evidence, and
+# _pick_recipient takes the strongest address on file.
+GATE_PASS = ('delivered', 'replied', 'zerobounce_valid', 'awaiting_delivery', 'unverified',
+             'catch_all', 'risky')
 
 
 def _load_json_quiet(name, default):
@@ -1638,7 +1587,7 @@ def _recipient_verdict(addr, ev):
 
 def _pick_recipient(addrs, ev):
     """First address in order that passes, plus every address's verdict. (pick or '', [(a, code, why)])."""
-    seen, verdicts, pick = set(), [], ''
+    seen, verdicts = set(), []
     for a in addrs:
         a = (a or '').strip().lower()
         if not a or a in seen:
@@ -1646,8 +1595,9 @@ def _pick_recipient(addrs, ev):
         seen.add(a)
         code, why = _recipient_verdict(a, ev)
         verdicts.append((a, code, why))
-        if not pick and code in GATE_PASS:
-            pick = a
+    # Strongest evidence first (GATE_PASS order), then the order the addresses were offered in.
+    ranked = [a for c in GATE_PASS for a, code, _w in verdicts if code == c]
+    pick = ranked[0] if ranked else ''
     return pick, verdicts
 
 
@@ -2109,8 +2059,8 @@ class Handler(BaseHTTPRequestHandler):
                 # verified-only mode: while blocked, sends to proven-deliverable addresses
                 # (accepted mail >= 48h ago, never bounced) still go through. The worker
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
-                'proven_pool': len(_proven_deliverable()) if _bh['blocked'] else None,
-                'probe_quota_left': _probe_quota_left() if _bh['blocked'] else None,
+                'proven_pool': None,          # verified-only mode was removed 2026-11-13
+                'probe_quota_left': None,     # so was the unverified daily cap
                 # First-touch deliverability gate (2026-09-26): how many first-touch addresses in
                 # today's pool /send would HOLD for lack of evidence, and the full breakdown.
                 # Counts only, never an address.
@@ -2125,8 +2075,7 @@ class Handler(BaseHTTPRequestHandler):
                                                and _senders_active(user, _load_senders()),
                                      'rests': str(_load_senders().get('main_domain') or 'bsgflorida.com'),
                                      'rule': _bh.get('ft_rule') or '',
-                                     'senders': _first_touch_status(
-                                         _load_senders(), ceiling=_ft_restart_ceiling(_bh))},
+                                     'senders': _first_touch_status(_load_senders())},
                 # Lane -> From map and today's per-alias warm-up use (senders.json). senders_active
                 # false = the login cannot send as the aliases (old personal gmail.key), so every
                 # send still leaves as `user`. The board shows this next to the cap.
@@ -2712,9 +2661,8 @@ class Handler(BaseHTTPRequestHandler):
                     'ok': False, 'skip': True, 'hold': 'deliverability',
                     'blocked': 'unverified_first_touch' if _first else 'unverified_recipient',
                     'verdicts': [{'addr': a, 'verdict': c, 'why': w} for a, c, w in _verdicts],
-                    'err': ('HELD — no address for this owner has delivery evidence (%s). A first '
-                            'touch needs a ZeroBounce valid verdict or a previous delivery; nothing '
-                            'was sent and no verification credit was spent.'
+                    'err': ('HELD — every address on file for this owner is known dead (%s). '
+                            'Nothing was sent.'
                             % '; '.join('%s: %s' % (c, w) for _a, c, w in _verdicts[:3]))})
             _gate = {'to': _pick, 'verdict': next(c for a, c, _w in _verdicts if a == _pick),
                      'dropped': len(_verdicts) - 1}
@@ -2738,50 +2686,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(451, {'ok': False, 'skip': True, 'hold': 'bounce_scan',
                                             'blocked': 'bounce_scan_stale', 'err': _fbh})
 
-            # ---- ASSERTED-EVIDENCE TRICKLE (operator decision 2026-10-22: cap it at 10/day) -----
-            # A first touch admitted on 'zerobounce_valid' has NO observed evidence behind it: a paid
-            # API said the mailbox exists, and that is all. This file already measures that class at a
-            # 56% false-valid rate on this list (63 of 113 hard-bounced, 2026-08-26), and _cls() calls
-            # it "PROBE-eligible, not proven". PROBE_DAILY_CAP exists to pace exactly this.
-            #
-            # THE BUG THIS CLOSES. The only code that consulted the quota lived inside
-            # `if _hb['blocked'] and not _ft_exempt:` — so the trickle was read only while the
-            # breaker was engaged, and skipped entirely whenever the trailing rate looked clean or a
-            # warm-up sender made the first touch exempt. The pacing was therefore absent in exactly
-            # the state that precedes a bad day. Measured on 2026-10-21: 43 sends, 42 of them to
-            # addresses this system had never mailed, 0 booked to the probe lane, 5 hard bounces
-            # ("Address not found") — an 11.6% first-touch bounce rate on three brand-new domains.
-            #
-            # Observed evidence is unaffected: 'delivered' and 'replied' never reach this branch, so
-            # follow-ups and re-engagement keep running at the normal caps. Only never-mailed
-            # addresses riding a paid verdict are metered. The send is booked to the EXISTING probe
-            # lane so _probe_quota_left() counts it without a second counter to drift.
-            if _first_touch and _gate.get('verdict') == 'zerobounce_valid':
-                _probe_left = _probe_quota_left()
-                if _probe_left <= 0:
-                    _log_refusal({'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
-                                  'd': dt.date.today().isoformat(), 'gate': 'asserted_quota',
-                                  'code': 'probe_quota_exhausted',
-                                  'case': str((meta or {}).get('c') or '')[:40],
-                                  'cap': PROBE_DAILY_CAP,
-                                  'wl': str((meta or {}).get('wl') or '')})
-                    self.log_message('SEND HELD [asserted quota] case=%s — %d/%d used today',
-                                     str((meta or {}).get('c') or '-')[:40],
-                                     PROBE_DAILY_CAP, PROBE_DAILY_CAP)
-                    # 451 + skip, like the deliverability hold: the worker advances to the next lead.
-                    # A 403 would trip its bounce-breaker branch and pause the whole run, which this
-                    # is not — the list is fine, today's verification trickle is simply spent.
-                    return self._json(451, {
-                        'ok': False, 'skip': True, 'hold': 'asserted_quota',
-                        'blocked': 'probe_quota_exhausted',
-                        'probe_cap': PROBE_DAILY_CAP, 'probe_quota_left': 0,
-                        'err': ('HELD — today\'s %d unverified first touches are used up. This '
-                                'address has only a ZeroBounce valid behind it (no delivery or '
-                                'reply ever observed), so it is paced as a probe. Nothing was sent '
-                                'and no verification credit was spent; it is first in line '
-                                'tomorrow.' % PROBE_DAILY_CAP)})
-                # Book it to the probe lane so the ledger row counts itself against the same quota.
-                meta['lane'] = meta.get('lane') or 'probe'
+        # (The 10-a-day cap on unverified first emails was removed 2026-11-13, Alejandro.)
 
         # ---- daily cap ----
         rcpt = _recipients_today()
@@ -2816,124 +2721,25 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self._json(403, {
                     'ok': False, 'blocked': 'bounce_rate', 'skip': True,
-                    'err': ('BLOCKED: bounce pause could not be read (%s). Nothing was sent.'
+                    'err': ('BLOCKED: the bounce list could not be read (%s). Nothing was sent.'
                             % str(_bhe)[:80])})
         if _hb.get('list_unreadable'):
             return self._json(200, {
                 'ok': False, 'blocked': 'bounce_rate',
                 'err': 'bounce list is UNREADABLE — refusing every send until '
                        'bounced_emails.json parses'})
+        # FIRST-EMAIL GATES REMOVED 2026-11-13 (Alejandro): the post-cutoff bounce pause, the
+        # slow-restart cap that followed it, and verified-only mode (the trailing-rate breaker with
+        # its proven and probe lanes) no longer refuse anything. What still holds a send here: an
+        # unreadable bounce list (above), an unreadable ledger (below), the opt-out ledger, the
+        # bankruptcy stay, mail_guard, the daily caps and each warm-up sender's own daily cap.
         if not meta.get('test'):
-            # First touches follow the post-cutoff rule, not the pre-#83 Wilson reading,
-            # and not the From domain. A warm-up sender and a corporate send-as alias are
-            # the same message type: both hold here, before any From address is chosen.
-            # Follow-ups stay on `blocked` below (proven lane / probe trickle), unchanged.
-            # A ledger that exists but will not parse reads as zero sends. That would lift
-            # every cap and the cohort, so a first touch holds before any of this.
+            # A ledger that exists but will not parse reads as zero sends, which would lift every
+            # cap and the 24h dedupe. A first email holds until it parses.
             if _first_touch and _ledger_unreadable():
                 return self._json(409, {
                     'ok': False, 'skip': True, 'first_touch_cap': True,
                     'err': 'first touch held: mail ledger unreadable'})
-            if _first_touch and first_touch_paused(_hb):
-                return self._json(403, {
-                    'ok': False, 'blocked': 'bounce_rate', 'skip': True,
-                    # Tells the worker log this is the pause, not a verified-only hold.
-                    'first_touch_paused': True,
-                    'err': (
-                        'BLOCKED: post-cutoff first touches, %d of %d bounced (%.0f%%). '
-                        'Rule: paused (%s). The ceiling is %.0f%% once %d have been sent, '
-                        'or %d hard bounces in one day of at least %d. First touches are '
-                        'paused; follow-ups are unchanged.'
-                        % (_hb.get('ft_dead') or 0, _hb.get('ft_sent') or 0,
-                           (_hb.get('ft_rate') or 0) * 100, _hb.get('ft_why') or 'paused',
-                           (_hb.get('day_ceiling') or 0) * 100, _hb.get('day_min') or 0,
-                           _hb.get('ft_hard_bounces') or 0, _hb.get('ft_hard_min') or 0)),
-                    'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
-            # The restart cap is applied only inside _reserve_first_touch_from. Exempt a
-            # first touch from the trailing breaker only when that reserve will run: a
-            # configured warm-up sender, not the login and not the lane map. With no
-            # warm-up sender the send would leave from main_domain, which this cap never
-            # sees, so it holds instead.
-            _ft_warmup = _first_touch_senders(_load_senders()) if _first_touch else []
-            if _first_touch and _restart_ceiling_on(_hb) and not _ft_warmup:
-                return self._json(409, {
-                    'ok': False, 'skip': True, 'first_touch_cap': True,
-                    'err': 'first touch held: no warm-up sender configured during slow restart'})
-            _ft_exempt = bool(_ft_warmup) and _hb.get('ft_rule') in ('slow_restart', 'clear', 'unmeasured')
-            if _hb['blocked'] and not _ft_exempt:
-                # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
-                # may still go out if EVERY recipient has direct acceptance evidence (see
-                # _proven_deliverable). One unproven recipient blocks the whole send — bcc
-                # fan-out must not smuggle unverified addresses through the breaker.
-                _rcpts = [a.strip().lower()
-                          for a in [to] + str(bcc or '').split(',') if a.strip()]
-                _proven = _proven_deliverable()
-                _unproven = sorted(a for a in _rcpts if a not in _proven)
-                # PROBE LANE: unproven recipients may still go if every one of them is merely
-                # UNKNOWN (never observed bouncing, not flagged risky) and today's probe quota
-                # has room. Risky/dead never probe — those classes already have evidence.
-                if _unproven:
-                    _bad = set()
-                    try:
-                        _bad = {str(k).lower() for k in json.load(open(
-                            os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
-                    except Exception:
-                        pass
-                    _ver = {}
-                    try:
-                        _ver = json.load(open(os.path.join(HERE, 'verified_emails.json'),
-                                              encoding='utf-8'))
-                    except Exception:
-                        pass
-                    def _cls(a):
-                        v = (_ver.get(a) or {}).get('v')
-                        if a in _bad or v == 'dead':
-                            return 'dead'
-                        # API-'ok' is PROBE-eligible, not proven (2026-08-26): ZeroBounce 'valid'
-                        # ran a 56% false-valid rate on the 08-24 wave. An ok verdict earns a
-                        # paced probe slot exactly like an unknown; only observed acceptance
-                        # graduates it into the proven pool.
-                        if v == 'ok':
-                            return 'unknown'
-                        return v or 'unknown'
-                    if (all(_cls(a) == 'unknown' for a in _unproven)
-                            and len(_unproven) <= _probe_quota_left()):
-                        meta['lane'] = 'probe'
-                        _unproven = []
-                if _unproven:
-                    # skip:True is the machine-readable "advance, don't halt" signal — the worker
-                    # must treat a held recipient like the 24h-dedupe skip, not like an outage.
-                    # An old worker doc ignores it and halts (safe); a new worker against an old
-                    # server sees no skip field and also halts (safe).
-                    _day_note = ''
-                    if _hb.get('day_blocked'):
-                        _day_note = (
-                            " First-touch emails on %s: %d of %d bounced (%.0f%%), over the %.0f%% "
-                            "daily ceiling (at least %d sent)."
-                            % (_hb.get('day_date') or 'a send day',
-                               _hb.get('day_dead') or 0, _hb.get('day_sent') or 0,
-                               (_hb.get('day_rate') or 0) * 100,
-                               (_hb.get('day_ceiling') or 0) * 100,
-                               _hb.get('day_min') or 0))
-                    return self._json(403, {
-                        'ok': False, 'blocked': 'bounce_rate', 'skip': True,
-                        'proven_pool': len(_proven),
-                        'unproven': _unproven[:8],
-                        'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
-                                f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%, and at "
-                                f"least {_hb['lb']*100:.0f}% once the size of that sample is accounted for). "
-                                f"The safe ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%."
-                                f"{_day_note} "
-                                f"Verified-only mode is ON: follow-ups to addresses that already accepted "
-                                f"mail still send; this one has {len(_unproven)} recipient(s) with no "
-                                f"acceptance evidence ({', '.join(_unproven[:3])}...). They unblock when "
-                                f"the rate clears or after API verification: "
-                                f"python bounces.py && python verify_emails.py && rebuild."),
-                        'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
-                # Keep 'probe' when the probe lane (or the asserted-evidence trickle above) chose it:
-                # _probe_quota_left() counts ledger rows with lane == 'probe', so overwriting it here
-                # meant a probe sent while the breaker was engaged never spent the quota.
-                meta['lane'] = meta.get('lane') or 'proven'
 
         # ---- 24h per-recipient dedupe + in-flight claim (unless test flag set) ----
         # Covers `to` AND every BCC, and reserves them atomically so a concurrent request cannot
@@ -2979,7 +2785,7 @@ class Handler(BaseHTTPRequestHandler):
                     'err': ('first touch HELD — the login %s cannot send as the warm-up domains '
                             '(%s), and first touches no longer leave from the main domain'
                             % (user, ', '.join(_ft_senders)))})
-            _ftp, _ftst = _reserve_first_touch_from(_cfg, ceiling=_ft_restart_ceiling(_hb))
+            _ftp, _ftst = _reserve_first_touch_from(_cfg)
             if not _ftp:
                 _release_recipients(_claimed)
                 return self._json(409, {
@@ -3026,19 +2832,6 @@ class Handler(BaseHTTPRequestHandler):
                 # Only rewrite From: when the lane address differs from the login. Same address =
                 # nothing to rewrite, but it was still metered above.
                 from_addr = _cand if _cand != user else None
-
-        # A first touch under the restart cap (slow_restart, or no bounce list) must leave
-        # from a configured warm-up sender. The reserve above is the normal path; this is
-        # the backstop so a fall-through cannot put main_domain on the envelope. Paused
-        # first touches already returned 403 above and never reach here.
-        if _first_touch and _restart_ceiling_on(_hb):
-            _seen_from = (from_addr or user or '').strip().lower()
-            if _seen_from not in set(_first_touch_senders(_cfg)):
-                _release_recipients(_claimed)
-                _release_first_touch_slot(_ft_slot)
-                return self._json(409, {
-                    'ok': False, 'skip': True, 'first_touch_cap': True,
-                    'err': 'first touch held: no warm-up sender configured during slow restart'})
 
         # ---- FOLLOW-UPS SWITCH ---------------------------------------------------------------
         # After the 24h claim, immediately before SMTP. A first touch (never mailed, and

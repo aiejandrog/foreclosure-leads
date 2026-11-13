@@ -271,8 +271,10 @@ def bounce_alert(sig, at):
         return _alert('bounce-rate', 'fail',
                       'Bounce list is unreadable. Every send is refused until the bounce list parses.', at)
     parts = []
-    rule = str(sig.get('ft_rule') or '')
-    paused = bool(sig.get('day_blocked')) or rule == 'paused'
+    # 2026-11-13: the first-email gates are removed, so nothing is ever paused. The alert stays,
+    # as a report on the measurement: the old rule's verdict is carried in measured_*.
+    rule = str(sig.get('measured_rule') or '')
+    paused = bool(sig.get('measured_day_blocked')) or rule == 'paused'
     if paused:
         when = str(sig.get('day_date') or '').strip() or 'a recent send day'
         day_sent = int(sig.get('day_sent') or 0)
@@ -290,12 +292,12 @@ def bounce_alert(sig, at):
             parts.append('First-touch bounce %.1f%% (%d of %d sent on %s): %d hard bounces in that day, over the %.0f%% ceiling.'
                          % (float(sig.get('day_rate') or 0) * 100, day_dead, day_sent, when,
                             day_dead, ceiling * 100))
-        why = str(sig.get('ft_why') or 'paused')
-        parts.append('Post-cutoff first touches: %.1f%% (%d of %d bounced). Rule: paused (%s).'
+        why = str(sig.get('measured_why') or 'over the limit')
+        parts.append('Post-cutoff first touches: %.1f%% (%d of %d bounced). The old pause rule would have tripped (%s).'
                      % (float(sig.get('ft_rate') or 0) * 100, int(sig.get('ft_dead') or 0),
                         int(sig.get('ft_sent') or 0), why))
-        parts.append('First-touch sends are paused.')
-    elif sig.get('post_trailing_blocked'):
+        parts.append('Nothing is paused: first-email gates were removed 2026-11-13. This is a warning only.')
+    elif sig.get('measured_post_trailing_blocked'):
         # A bad week that started after the verified-send gate. The pre-cutoff 09-19 batch is
         # not this: it stays in the trailing fields and does not open the issue by itself.
         parts.append('Trailing %d-day lower bound %.1f%% (raw %.1f%%, %d of %d) on mail sent after the verified-send cutoff. Ceiling %.0f%%.'
@@ -886,6 +888,12 @@ def bounce_signal(health):
         'post_rate': _f('post_rate'),
         'post_lb': _f('post_lb'),
         'post_trailing_blocked': bool(health.get('post_trailing_blocked')),
+        # What the removed first-email rule would have ruled on these numbers. Nothing acts on
+        # these (gates removed 2026-11-13); bounce_alert reports them so a bad day is still seen.
+        'measured_rule': str(health.get('measured_rule') or ''),
+        'measured_why': str(health.get('measured_why') or ''),
+        'measured_day_blocked': bool(health.get('measured_day_blocked')),
+        'measured_post_trailing_blocked': bool(health.get('measured_post_trailing_blocked')),
     }
 
 
@@ -1341,11 +1349,9 @@ def read_morning(now, th):
             sent += 1
     # True/False only from a real bounce reading. A read that throws is None, not a pause, so
     # an unexplained 0 still alerts here instead of hiding behind a check that failed.
-    paused = None
-    try:
-        paused = bool(S._first_touch_bounce_paused(S._bounce_health()))
-    except Exception:
-        paused = None
+    # The first-email bounce pause was removed 2026-11-13, so a day with eligible leads and no
+    # sends is never "explained by the pause" again: it always alerts.
+    paused = False
     eligible = None
     try:
         queue = S._first_touch_queue_health()

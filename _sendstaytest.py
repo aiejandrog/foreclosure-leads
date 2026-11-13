@@ -575,10 +575,11 @@ def no_warmup_hold():
             'body': 'Hello Jane, a short note about 1 Main St.',
             'meta': {'owner': 'Jane', 'addr': '1 Main St', 'wl': 'active', 'c': '2099-000003-CA-01'}})
         smtp = work / 'smtp_calls.txt'
-        rec('no senders.json: first touch is 409 first_touch_cap and sends nothing',
-            st == 409 and j.get('first_touch_cap') is True and j.get('skip') is True
-            and j.get('err') == 'first touch held: no warm-up sender configured during slow restart'
-            and not smtp.exists(), {'st': st, 'j': j})
+        # 2026-11-13: the slow-restart hold is gone with the other first-email gates. With no
+        # senders.json a first touch on a clear case now sends, from the login.
+        rec('no senders.json: a first touch on a clear case sends (slow-restart hold removed)',
+            st == 200 and j.get('ok') is True and j.get('first_touch') is True and smtp.exists(),
+            {'st': st, 'j': j})
     finally:
         if proc is not None:
             try:

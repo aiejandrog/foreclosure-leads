@@ -1105,25 +1105,18 @@ def _write_preview(entries):
 def hold_first_touches():
     """A sentence when a first touch must not go out, else ''.
 
-    Every row this CLI queues is a cold first touch (a prior send is dropped in
-    `_eligible`). The pause is send_server.first_touch_paused: message type, not the
-    From domain. Fail closed when that reading cannot be made.
+    The first-email bounce pause was removed 2026-11-13 (Alejandro), so the only thing left to
+    hold on here is a bounce list that will not parse: without it a known-dead address cannot be
+    told from a live one, and /send refuses every send in that state too.
     """
     try:
         import send_server as _SS
-        if _SS.first_touch_paused():
-            why = ''
-            try:
-                h = _SS._bounce_health() or {}
-                why = h.get('ft_why') or h.get('ft_rule') or ''
-            except Exception:
-                why = 'unreadable'
-            return ('first touches held: bounce pause (%s). '
-                    'This sender only queues first touches, so nothing goes out.'
-                    % (why or 'paused'))
+        if (_SS._bounce_health() or {}).get('list_unreadable'):
+            return ('first touches held: bounced_emails.json is unreadable. '
+                    'Nothing goes out until it parses.')
         return ''
     except Exception as e:
-        return ('first touches held: bounce pause could not be read (%s). '
+        return ('first touches held: the bounce list could not be read (%s). '
                 'Nothing goes out.' % str(e)[:80])
 
 

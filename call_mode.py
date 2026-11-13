@@ -3471,21 +3471,6 @@ def bake_mail_js(block, where='call mode'):
     return out
 
 
-def _mail_pause_json():
-    """The bridge's first-touch bounce rule at build time: {rule, why, dead, sent, day}. The counts are
-    aggregate (no address); they let the card say '5 of 42 bounced' instead of the raw reason code.
-    'paused' holds a cold email from the card the way it holds one at /send; follow-ups are not first
-    touches."""
-    try:
-        import send_server as _SS
-        h = _SS._bounce_health() or {}
-        return json.dumps({'rule': str(h.get('ft_rule') or 'unmeasured')[:24], 'why': str(h.get('ft_why') or '')[:80],
-                           'dead': int(h.get('day_dead') or 0), 'sent': int(h.get('day_sent') or 0),
-                           'day': str(h.get('day_date') or '')[:10]})
-    except Exception:
-        return json.dumps({'rule': 'unknown', 'why': ''})
-
-
 def _mail_llc_json():
     """entity.display_llc(): the company name AS IT MAY LEGALLY BE SHOWN, or '' (the board's
     SENDER_DEFAULTS.llc is baked the same way). Never a raw entity claim."""
@@ -3513,7 +3498,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
                        ('__TEXTHOLD__', 1), ('__HISTCOV__', 1), ('__CWJS__', 1), ('__CWTIMERJS__', 1),
                        ('__BSIGNER__', 1), ('__SEAT__', 1), ('__REFRESHSTATUS__', 1),
-                       ('__MAILJS__', 1), ('__MAILPAUSE__', 1), ('__MAILLLC__', 1), ('__RELDIAL__', 1)):
+                       ('__MAILJS__', 1), ('__MAILLLC__', 1), ('__RELDIAL__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -3562,7 +3547,6 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__FUNNELJS__', funnel_js) \
                 .replace('__TEXTTPLJS__', text_js) \
                 .replace('__MAILJS__', mail_js) \
-                .replace('__MAILPAUSE__', _mail_pause_json()) \
                 .replace('__MAILLLC__', _mail_llc_json()) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
                 .replace('__OUTCOMES__', oc)                 .replace('__BOOKURL__', BOOKING_URL) \
@@ -7280,18 +7264,7 @@ function mailCheck(r, raw){
   var st = mailStageCM(r);
   if(st === 'replied') return {addr:addr, why:'They already replied by email. Answer them in your inbox, not with a template.'};
   if(st === 'done') return {addr:addr, why:'Three emails already went to this person and the last one promised no more. Call only.'};
-  if(st === 'cold' && MAIL_PAUSE && MAIL_PAUSE.rule === 'paused')
-    return {addr:addr, why:'First emails are paused: ' + mailPauseWhy() + ' Follow-ups still go; a first email waits.'};
   return {addr:addr, why:'', stage:st};
-}
-/* Why first emails are paused, in words. MAIL_PAUSE.why is a code ('day_rate'); the card used to print it raw. */
-function mailPauseWhy(){
-  var m = MAIL_PAUSE || {}, n = +m.sent || 0, d = +m.dead || 0;
-  if(n > 0)
-    return d + ' of ' + n + ' first emails' + (m.day ? ' sent ' + m.day : '') + ' bounced (' + Math.round(100 * d / n) + '%).';
-  var w = {day_rate:'one day\'s first emails bounced over the limit.', hard_bounces:'too many hard bounces in one day.',
-           aggregate:'first emails bounced over the limit.', list_unreadable:'the bounce list could not be read.'};
-  return w[m.why] || ('the bounce rate is over the limit' + (m.why ? ' (' + m.why + ')' : '') + '.');
 }
 /* The email for this lead, this stage, this language: the board's block, the board's values. */
 function composeMail(r, addr, lg){
@@ -8940,7 +8913,6 @@ __TEXTTPLJS__
    words the Morning Worker and the nightly sender use. Empty when the bake failed; MAIL_OK is then
    false and the card shows no email box. Composed on this page, sent by POST /send on the laptop. */
 __MAILJS__
-var MAIL_PAUSE = __MAILPAUSE__;   /* the bridge's first-touch bounce rule at build time: {rule, why} */
 var MAIL_LLC = __MAILLLC__;       /* entity.display_llc(): the company name as it may legally be shown */
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
 

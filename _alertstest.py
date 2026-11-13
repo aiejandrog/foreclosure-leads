@@ -118,11 +118,14 @@ def ft_rows(dead, mailed, day=None):
 
 hot = PA.bounce_signal(health_rows(*ft_rows(2, 20)))
 cold = PA.bounce_signal(health_rows(*ft_rows(0, 20)))
-rec('2 of 20 first touches trips the shared block and the alert',
-    hot['day_blocked'] is True and hot['trailing_blocked'] is False
+# 2026-11-13: first-email gates removed. 2 of 20 no longer BLOCKS anything (day_blocked is False),
+# but the measurement still raises the alert, as a warning that says nothing is paused.
+rec('2 of 20 first touches blocks nothing and still raises the alert',
+    hot['day_blocked'] is False and hot['measured_day_blocked'] is True and hot['trailing_blocked'] is False
     and (a := one({'bounce': hot}, 'bounce-rate')) and a['severity'] == 'fail'
-    and '2 of 20' in a['text'] and clean(a['text']), a['text'] if hot.get('day_blocked') else hot)
-rec('0 of 20 clears the alert', one({'bounce': cold}, 'bounce-rate') is None and cold['day_blocked'] is False)
+    and '2 of 20' in a['text'] and 'Nothing is paused' in a['text'] and clean(a['text']),
+    a['text'] if hot.get('measured_day_blocked') else hot)
+rec('0 of 20 clears the alert', one({'bounce': cold}, 'bounce-rate') is None and cold['measured_day_blocked'] is False)
 unreadable_list = PA.bounce_signal({'list_unreadable': True, 'blocked': True})
 rec('an unreadable bounce list is a fail, not a silent readable:false',
     unreadable_list.get('readable') is True and unreadable_list.get('list_unreadable') is True
@@ -141,14 +144,16 @@ yday = (S.dt.date.today() - S.dt.timedelta(days=1)).isoformat()
 yhot = PA.bounce_signal(health_rows(*ft_rows(2, 20, day=yday)))
 ycold = PA.bounce_signal(health_rows(*ft_rows(1, 20, day=yday)))
 rec("yesterday's 2 of 20 is the cohort the alert names",
-    yhot['day_blocked'] is True and yhot['day_date'] == yday and yhot['trailing_blocked'] is False
+    yhot['measured_day_blocked'] is True and yhot['day_blocked'] is False and yhot['day_date'] == yday
+    and yhot['trailing_blocked'] is False
     and (a := one({'bounce': yhot}, 'bounce-rate')) and yday in a['text'] and '2 of 20' in a['text']
-    and clean(a['text']), a['text'] if yhot.get('day_blocked') else yhot)
+    and clean(a['text']), a['text'] if yhot.get('measured_day_blocked') else yhot)
 rec("yesterday's 1 of 20 does not alert",
-    ycold['day_blocked'] is False and ycold['day_date'] == yday
+    ycold['measured_day_blocked'] is False and ycold['day_date'] == yday
     and one({'bounce': ycold}, 'bounce-rate') is None)
-rec('the pause names the post-cutoff rule',
-    hot['ft_rule'] == 'paused' and 'Rule: paused' in one({'bounce': hot}, 'bounce-rate')['text']
+rec('the warning names the old rule and the live rule reads clear',
+    hot['ft_rule'] == 'clear' and hot['measured_rule'] == 'paused'
+    and 'old pause rule would have tripped' in one({'bounce': hot}, 'bounce-rate')['text']
     and 'Post-cutoff' in one({'bounce': hot}, 'bounce-rate')['text']
     and PA.public_ok({'bounce': hot}))
 
@@ -170,7 +175,7 @@ finally:
     S.BOUNCE_WINDOW_DAYS = _saved_window
 rec('the pre-cutoff batch is reported and does not alert',
     old.get('trailing_blocked') is True and (old.get('pre_dead'), old.get('pre_mailed')) == (31, 85)
-    and old.get('ft_sent') == 0 and old.get('ft_rule') == 'slow_restart'
+    and old.get('ft_sent') == 0 and old.get('ft_rule') == 'clear' and old.get('measured_rule') == 'slow_restart'
     and one({'bounce': old}, 'bounce-rate') is None
     and PA.public_ok({'bounce': old}) and 'example.com' not in json.dumps(old), old)
 

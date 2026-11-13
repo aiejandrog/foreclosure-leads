@@ -2148,8 +2148,8 @@ def restore_stays_from_cache(leads):
 
 def stamp_first_touch_hint(slim):
     """Morning Worker hint (2026-10-02): fth=1 on a lead whose every worker-mailable address the
-    bridge's deliverability gate would hold (send_server._pick_recipient: no delivery, reply or
-    ZeroBounce-valid evidence). The worker keeps such a lead out of its email queue instead of
+    bridge would refuse (send_server._pick_recipient). Since 2026-11-13 that means every address
+    is known DEAD; an unverified address is mailable. The worker keeps such a lead out of its email queue instead of
     offering a send /send refuses, skipping it, and serving it again tomorrow.
 
     Judged on the addresses the lead carries now, never on case history: /send checks only the

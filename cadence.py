@@ -1020,23 +1020,12 @@ def _run(args):
         _pk, _vd = _ss._pick_recipient([_addr], _ev)
         if not _pk:
             held += 1
-            print(f"  HELD step {step+1}/4 -> {s['email']}: no delivery evidence ("
+            print(f"  HELD step {step+1}/4 -> {s['email']}: known-dead address ("
                   + '; '.join(f'{_c}: {_w}' for _a, _c, _w in _vd[:1]) + ') — step stays due')
             continue
         _first = _pk not in _ev['last_mailed'] and next(_c for _a, _c, _w in _vd if _a == _pk) != 'replied'
-        # Shared with /send and outreach_email. Message type, not From domain. Fail closed
-        # when the pause cannot be read. This sits before the warm-up slot is reserved, so
-        # a paused first touch does not consume one. Follow-ups fall through.
-        if _first:
-            try:
-                _ft_paused = bool(_ss.first_touch_paused())
-            except Exception:
-                _ft_paused = True
-            if _ft_paused:
-                held += 1
-                print(f"  HELD step {step+1}/4 -> {s['email']}: first touch, bounce pause "
-                      f"(post-cutoff first-touch rule; follow-ups still send)")
-                continue
+        # The first-email bounce pause was removed 2026-11-13 (Alejandro), here as at /send and
+        # in outreach_email: a first touch is no longer held on the bounce rate.
         # A follow-up waits until bounces.py has scanned cleanly since the last email to this
         # address (bounce_scan.py, 2026-10-19). Same check as /send. The step stays due.
         if not _first:

@@ -1,8 +1,9 @@
-"""First-touch bounce pause is one check, and a broken merge is not a send.
+"""The first-touch bounce pause is GONE everywhere, and a broken merge is still not a send.
 
-The Oct 15 batch left from outreach_email.py, which never asked send_server whether
-first touches were paused. /send already did, before it chose a From address. Cadence
-asked the warm-up picker, which is not the same question when that picker is not used.
+2026-11-13 (Alejandro): the first-email gates were removed. This file used to prove /send, cadence
+and outreach_email all asked one shared pause. It now proves none of them holds a first email on
+the bounce rate, in a fixture the old rule would have paused, and that the two things that must
+still stop a send here do: a merge that did not fill, and a bounce list that will not parse.
 
 These checks use example.com, 2099- case numbers, and EXAMPLE AVE. No network.
 """
@@ -40,26 +41,15 @@ empty = tempfile.mkdtemp()
 S.HERE = empty
 S.SENT_LEDGER = os.path.join(empty, 'mail_sent.json')
 json.dump([], open(S.SENT_LEDGER, 'w'))
-rec('a missing bounce list is unmeasured, not a pause',
-    S.first_touch_paused() is False and S._bounce_health().get('ft_rule') == 'unmeasured')
-rec('slow restart is not a pause',
-    S._first_touch_bounce_paused({'ft_rule': 'slow_restart', 'ft_measured': True}) is False)
-rec('a clear sample is not a pause',
-    S._first_touch_bounce_paused({'ft_rule': 'clear', 'ft_measured': True}) is False)
-rec('paused is a pause, and the reading has no From address on it',
-    S.first_touch_paused({'ft_rule': 'paused', 'ft_why': 'day_rate'}) is True)
-rec('an unreadable list is a pause',
-    S._first_touch_bounce_paused({'ft_rule': 'paused', 'list_unreadable': True}) is True)
-rec('a dict with no ft_rule fails closed', S._first_touch_bounce_paused({}) is True)
-rec('None fails closed', S._first_touch_bounce_paused(None) is True)
-_real_health = S._bounce_health
-S._bounce_health = lambda: (_ for _ in ()).throw(RuntimeError('unreadable'))
-try:
-    rec('an exception while reading the pause fails closed', S.first_touch_paused() is True)
-finally:
-    S._bounce_health = _real_health
+_h = S._bounce_health()
+rec('a missing bounce list: measured as unmeasured, enforced as clear, nothing blocked',
+    _h.get('measured_rule') == 'unmeasured' and _h.get('ft_rule') == 'clear' and _h.get('blocked') is False, _h)
+rec('the pause helpers no longer exist on the bridge',
+    not any(hasattr(S, n) for n in ('first_touch_paused', '_first_touch_bounce_paused',
+                                    '_ft_restart_ceiling', '_restart_ceiling_on',
+                                    '_probe_quota_left', 'PROBE_DAILY_CAP')))
 
-# ---- cadence: paused first touch held, follow-up still sent ------------------------------------
+# ---- cadence: in a fixture the old rule paused, the first touch now sends ----------------------
 paused = tempfile.mkdtemp()
 S.HERE = paused
 S.SENT_LEDGER = os.path.join(paused, 'mail_sent.json')
@@ -75,7 +65,10 @@ for i in range(10):
     })
 json.dump(rows, open(S.SENT_LEDGER, 'w'))
 json.dump(dead, open(os.path.join(paused, 'bounced_emails.json'), 'w'))
-rec('the fixture really is paused', S.first_touch_paused() is True, S._bounce_health().get('ft_rule'))
+_h = S._bounce_health()
+rec('the fixture is one the old rule would have paused, and it blocks nothing now',
+    _h.get('measured_rule') == 'paused' and _h.get('ft_rule') == 'clear'
+    and _h.get('blocked') is False and _h.get('day_blocked') is False, _h)
 
 import cadence as C
 import diligence_gate as DG
@@ -85,7 +78,9 @@ CFG = {
     'ramp': [{'through_day': 9999, 'per_day': 100}],
     'lanes': {'early': 'early@warm.example', 'active': 'active@corp.example',
               'default': 'alejandro@bsgflorida.com'},
-    'first_touch': {'from': ['ft@warm.example'], 'per_day': 5},
+    # per_day 100: the fixture has 10 first touches today from this sender, and the sender's own
+    # daily cap is a gate that STAYS. Room is left so this file tests the pause, not that cap.
+    'first_touch': {'from': ['ft@warm.example'], 'per_day': 100},
 }
 ZB = {'v': 'ok', 'why': 'zerobounce:valid', 'd': TODAY}
 
@@ -140,13 +135,13 @@ sent = []
 rc, out, st = _cadence_run(
     lambda user, pw, disp, to, subj, body, bcc='', attach=None, from_addr=None:
         sent.append(to) or '<mid@example.com>')
-rec('cadence holds a first touch while the bounce pause is on',
-    'first@example.com' not in sent and 'bounce pause' in out, out[-500:])
-rec('cadence does not consume the held first-touch step',
-    st['2099-000301-CA-01']['step'] == 0, st['2099-000301-CA-01'])
+rec('cadence sends the first touch: no bounce pause any more',
+    'first@example.com' in sent and 'bounce pause' not in out, out[-500:])
+rec('cadence advances the first-touch step it sent',
+    st['2099-000301-CA-01']['step'] == 1, st['2099-000301-CA-01'])
 rec('cadence still sends the follow-up',
     'follow@example.com' in sent and st['2099-000302-CA-01']['step'] == 2, (sent, st['2099-000302-CA-01']))
-rec('cadence pause run exits 0', rc == 0, rc)
+rec('cadence run exits 0', rc == 0, rc)
 
 # ---- cadence: a merge refusal does not advance the step ---------------------------------------
 clear = tempfile.mkdtemp()
@@ -171,7 +166,7 @@ rec('cadence refuses a broken merge and does not consume the step',
 rec('cadence still sends the other step after a merge refusal',
     'follow@example.com' in sent2, sent2)
 
-# ---- outreach_email: the CLI that skipped the pause -------------------------------------------
+# ---- outreach_email: holds only on an unreadable bounce list ----------------------------------
 import outreach_email as OE
 otmp = tempfile.mkdtemp()
 OE.PREVIEW_FILE = os.path.join(otmp, 'preview.html')
@@ -208,22 +203,22 @@ def _oe(argv):
 
 S.HERE = empty
 S.SENT_LEDGER = os.path.join(empty, 'mail_sent.json')
-S.first_touch_paused = lambda health=None: True
-try:
-    rc, out = _oe(['--send', '--limit', '1'])
-finally:
-    pass
-rec('outreach_email --send holds every first touch when the pause is on',
-    rc == 0 and mailed == [] and 'HELD before send' in out, out[-400:])
+_real_bh = S._bounce_health
+S._bounce_health = lambda: {'list_unreadable': True, 'blocked': True, 'ft_rule': 'clear'}
+rc, out = _oe(['--send', '--limit', '1'])
+rec('outreach_email --send holds every first touch when the bounce list is unreadable',
+    rc == 0 and mailed == [] and 'HELD before send' in out and 'unreadable' in out, out[-400:])
 rec('that hold is reported on a dry run too, and still sends nothing',
     _oe(['--limit', '1'])[1].find('would hold every first touch') >= 0 and mailed == [])
 
-S.first_touch_paused = lambda health=None: (_ for _ in ()).throw(RuntimeError('no file'))
+S._bounce_health = lambda: (_ for _ in ()).throw(RuntimeError('no file'))
 rc, out = _oe(['--send', '--limit', '1'])
-rec('outreach_email fails closed when the pause cannot be read',
+rec('outreach_email fails closed when the bounce list cannot be read at all',
     rc == 0 and mailed == [] and 'could not be read' in out, out[-400:])
 
-S.first_touch_paused = lambda health=None: False
+# A reading the OLD rule would have paused on (2 of 10 bounced today) holds nothing now.
+S._bounce_health = lambda: {'list_unreadable': False, 'blocked': False, 'ft_rule': 'clear',
+                            'measured_rule': 'paused', 'measured_why': 'hard_bounces'}
 OE._compose_single = lambda r, snd, lang='en': {
     'subj': 'Regarding your property at your property',
     'body': "Hi,\n\nA note.\n\nIf now's not a good time, just tell me and I won't reach out again.",
@@ -242,31 +237,32 @@ row = {}
 if os.path.exists(OE.SENT_LEDGER):
     rows = json.load(open(OE.SENT_LEDGER, encoding='utf-8'))
     row = rows[-1] if rows else {}
-rec('a clear first touch still sends, and the ledger names this tool',
+rec('a first touch sends on a reading the old rule would have paused, and the ledger names this tool',
     rc == 0 and mailed == ['jane@example.com']
     and row.get('source') == 'outreach_email' and row.get('touch') == 'first'
     and row.get('smtp_resp'), (mailed, row))
 
-# ---- wiring: the check sits before any first-touch send ---------------------------------------
+S._bounce_health = _real_bh
+
+# ---- wiring ------------------------------------------------------------------------------------
 osrc = io.open(os.path.join(HERE, 'outreach_email.py'), encoding='utf-8').read()
 send = osrc.split('# ---- send', 1)[1]
-rec('outreach_email asks the pause before the send loop',
+rec('outreach_email asks hold_first_touches before the send loop',
     'hold_first_touches()' in send.split('for i, e in enumerate', 1)[0])
-rec('a pause returns before SMTP', send.find('if _ft_hold') < send.find('_smtp_send'))
+rec('that hold returns before SMTP', send.find('if _ft_hold') < send.find('_smtp_send'))
 csrc = io.open(os.path.join(HERE, 'cadence.py'), encoding='utf-8').read()
-i_first = csrc.find("_first = _pk not in")
-i_pause = csrc.find('first_touch_paused()', i_first)
-i_slot = csrc.find('_reserve_first_touch_from', i_pause)
-rec('cadence asks the pause after it knows the touch and before it reserves a sender',
-    0 < i_first < i_pause < i_slot)
+rec('cadence no longer asks for a first-email pause', 'first_touch_paused' not in csrc and '_ft_paused' not in csrc)
 ssrc = io.open(os.path.join(HERE, 'send_server.py'), encoding='utf-8').read()
 i_skip = ssrc.find('SEND SKIP [merge]')
 i_mem = ssrc.find('_mark_memory_only()', i_skip)
 rec('/send turns a merge refusal into a skip, not a maybe-sent',
     i_skip > 0 and i_mem > i_skip and "'blocked': 'merge_fields'" in ssrc[i_skip:i_mem]
     and '451' in ssrc[i_skip:i_mem])
-rec('the warm-up exemption line is unchanged',
-    "_ft_exempt = bool(_ft_warmup) and _hb.get('ft_rule') in ('slow_restart', 'clear', 'unmeasured')" in ssrc)
+rec('the /send first-email gates are gone from the source',
+    not any(x in ssrc for x in ('first_touch_paused(', '_ft_exempt', 'Verified-only mode is ON',
+                                "'blocked': 'probe_quota_exhausted'", 'no warm-up sender configured during slow restart')))
+rec('what must still refuse a send is still in /send',
+    all(x in ssrc for x in ("'blocked': 'merge_fields'", 'bounce list is UNREADABLE', "'optout'", '_stay_gate')))
 
 sched = []
 for root, dirs, files in os.walk(HERE):

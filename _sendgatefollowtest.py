@@ -73,7 +73,7 @@ rec('race: a reservation from another day never binds today',
 S._FT_SLOTS.clear()
 src = io.open(os.path.join(HERE, 'send_server.py'), encoding='utf-8').read()
 rec('race: /send reserves (not just picks) its first-touch sender',
-    '_reserve_first_touch_from(_cfg, ceiling=_ft_restart_ceiling(_hb))' in src)
+    '_reserve_first_touch_from(_cfg)' in src)
 i_led = src.find("'touch': meta.get('touch') or '',")
 i_rel = src.find('_release_first_touch_slot(_ft_slot)', i_led)
 rec('race: the slot is released only AFTER the ledger row is written', 0 < i_led < i_rel < i_led + 400)

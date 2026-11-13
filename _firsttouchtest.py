@@ -132,30 +132,40 @@ want = {'zb@example.com': 'zerobounce_valid', 'delivered@example.com': 'delivere
 for a, code in want.items():
     got = S._recipient_verdict(a, ev)
     rec('%s -> %s' % (a.split('@')[0], code), got[0] == code and got[1], got)
-rec('only delivered / replied / zerobounce_valid pass', set(S.GATE_PASS) == {'delivered', 'replied', 'zerobounce_valid'})
+# 2026-11-13 (Alejandro): verified-only removed. Everything passes except 'dead'.
+rec('every verdict but dead passes, strongest evidence first',
+    tuple(S.GATE_PASS) == ('delivered', 'replied', 'zerobounce_valid', 'awaiting_delivery', 'unverified',
+                           'catch_all', 'risky') and 'dead' not in S.GATE_PASS, S.GATE_PASS)
 rec('delivered beats a risky verifier verdict (acceptance is evidence)', S._recipient_verdict('delivered@example.com', ev)[0] == 'delivered')
 rec('a bounce beats everything', S._recipient_verdict('dead@example.com', dict(ev, proven=ev['proven'] | {'dead@example.com'}))[0] == 'dead')
 pick, vs = S._pick_recipient(['unk@example.com', 'risky@example.com', 'zb@example.com', 'zb2@example.com'], ev)
-rec('the pick is the FIRST address that passes', pick == 'zb@example.com' and len(vs) == 4, (pick, vs))
-pick, vs = S._pick_recipient(['unk@example.com', 'UNK@example.com ', 'catch@example.com'], ev)
-rec('nothing passes -> no pick, duplicates collapsed', pick == '' and len(vs) == 2, (pick, vs))
+rec('the pick is the address with the STRONGEST evidence, not the first offered',
+    pick == 'zb@example.com' and len(vs) == 4, (pick, vs))
+pick, vs = S._pick_recipient(['catch@example.com', 'unk@example.com', 'UNK@example.com '], ev)
+rec('no evidence anywhere -> the unverified address is picked over a catch-all, duplicates collapsed',
+    pick == 'unk@example.com' and len(vs) == 2, (pick, vs))
+pick, vs = S._pick_recipient(['dead@example.com', 'vdead@example.com'], ev)
+rec('only dead addresses -> no pick', pick == '' and len(vs) == 2, (pick, vs))
+pick, vs = S._pick_recipient(['dead@example.com', 'risky@example.com'], ev)
+rec('a dead address never wins over a live one', pick == 'risky@example.com', (pick, vs))
 S.FIRST_TOUCH_ADMIT_ZEROBOUNCE_VALID = False
-rec('with the ZeroBounce switch off, zerobounce valid is held', S._recipient_verdict('zb@example.com', ev)[0] == 'unverified')
+rec('with the ZeroBounce switch off, zerobounce valid reads unverified (still mailable)', S._recipient_verdict('zb@example.com', ev)[0] == 'unverified')
 S.FIRST_TOUCH_ADMIT_ZEROBOUNCE_VALID = True
 E = T / 'empty'
 E.mkdir()
 for f in ('send_server.py', 'stay_gate.py', 'mail_guard.py', 'deliverability.py', 'sync_gate.py', 'footprint.py'):
     shutil.copy(HERE / f, E / f)
 S2 = load(E / 'send_server.py', 'send_server_ft_empty')
-rec('no verification files at all -> hold (never a pass by default)',
+rec('no verification files at all -> unverified, which is mailable since 2026-11-13',
     S2._recipient_verdict('zb@example.com', S2._deliverability_evidence())[0] == 'unverified')
 src = (HERE / 'send_server.py').read_text(encoding='utf-8')
 rec('the gate never calls a verification API', 'zerobounce.net' not in src and 'neverbounce.com' not in src)
 h = S._first_touch_queue_health()
 rec('/health pool: 3 first-touch leads (mailed + opted-out excluded)', h.get('leads') == 3, h)
-rec('/health pool: 1 sendable, 2 held', h.get('leads_sendable') == 1 and h.get('leads_held') == 2, h)
-rec('/health pool: 5 addresses, 1 pass, 3 held unverified (dead counted apart)',
-    h.get('addresses') == 5 and h.get('addresses_pass') == 1 and h.get('held_unverified') == 3
+rec('/health pool: 2 sendable, 1 held (the lead whose only address is dead)',
+    h.get('leads_sendable') == 2 and h.get('leads_held') == 1, h)
+rec('/health pool: 5 addresses, 4 pass, 0 held unverified, the dead one counted apart',
+    h.get('addresses') == 5 and h.get('addresses_pass') == 4 and h.get('held_unverified') == 0
     and h.get('by_verdict', {}).get('dead') == 1, h)
 rec('/health pool carries no address', '@' not in json.dumps(h), h)
 
@@ -239,28 +249,20 @@ try:
                                     'body': 'Hello Jane, a short note about 1 Main St.', 'meta': meta})
 
     st, hj = call(port, '/health')
-    rec('/health has first_touch_held_unverified = 3', hj.get('first_touch_held_unverified') == 3, hj.get('first_touch_gate'))
+    rec('/health has first_touch_held_unverified = 0 (unverified is mailable)',
+        hj.get('first_touch_held_unverified') == 0, hj.get('first_touch_gate'))
     rec('/health first_touch_gate breakdown present', (hj.get('first_touch_gate') or {}).get('leads') == 3)
     rec('existing /health keys unchanged', all(k in hj for k in ('sync_ok', 'bounce', 'stay_data', 'proven_pool', 'recipients_today')))
     n0 = len(ledger())
 
-    for to, code in (('unk@example.com', 'unverified'), ('risky@example.com', 'risky'),
-                     ('catch@example.com', 'catch_all'), ('dead@example.com', 'dead'),
-                     ('never-seen@example.com', 'unverified')):
-        st, j = send(to)
-        rec('first touch to a %s address: 451 held, skip, blocked=unverified_first_touch' % code,
-            st == 451 and j.get('skip') is True and j.get('blocked') == 'unverified_first_touch'
-            and (j.get('verdicts') or [{}])[0].get('verdict') == code and 'HELD' in j.get('err', ''), (st, j))
-    st, j = send('recent@example.com')
-    rec('follow-up to an address mailed yesterday: held awaiting_delivery (unverified_recipient)',
-        st == 451 and j.get('blocked') == 'unverified_recipient'
-        and j['verdicts'][0]['verdict'] == 'awaiting_delivery', (st, j))
-    st, j = send('unk@example.com', 'risky@example.com, catch@example.com')
-    rec('To + BCC all without evidence: held, one verdict per address', st == 451 and len(j.get('verdicts') or []) == 3, j)
-    rec('no held send reached SMTP or the ledger', not smtp() and len(ledger()) == n0, (smtp(), len(ledger())))
+    st, j = send('dead@example.com')
+    rec('first touch to a dead address: 451 held, skip, and the message says known dead',
+        st == 451 and j.get('skip') is True and j.get('blocked') == 'unverified_first_touch'
+        and (j.get('verdicts') or [{}])[0].get('verdict') == 'dead' and 'known dead' in j.get('err', ''), (st, j))
+    rec('the dead hold reached neither SMTP nor the ledger', not smtp() and len(ledger()) == n0, (smtp(), len(ledger())))
     rf = refusals()
-    rec('every hold is in send_refusals.jsonl as gate=deliverability, with no address',
-        len(rf) == 7 and all(r.get('gate') == 'deliverability' for r in rf) and '@' not in json.dumps(rf), rf[:2])
+    rec('the hold is in send_refusals.jsonl as gate=deliverability, with no address',
+        len(rf) == 1 and all(r.get('gate') == 'deliverability' for r in rf) and '@' not in json.dumps(rf), rf[:2])
 
     st, j = send('zb@example.com', 'unk@example.com, risky@example.com')
     c = smtp()
@@ -272,9 +274,20 @@ try:
 
     st, j = send('unk@example.com', 'catch@example.com, zb2@example.com, zb4@example.com')
     c = smtp()
-    rec('To unverified, a BCC address valid: sent to the first valid one only',
+    rec('To unverified, a BCC address valid: sent to the strongest one only',
         st == 200 and c[-1] == {'to': 'zb2@example.com', 'bcc': ''} and j.get('to') == 'zb2@example.com'
         and j.get('dropped') == 3, (st, j, c[-1:]))
+
+    # 2026-11-13: verified-only removed. An address with no evidence is a first email that SENDS.
+    for to, code in (('nb@example.com', 'unverified'), ('risky@example.com', 'risky'),
+                     ('catch@example.com', 'catch_all'), ('never-seen@example.com', 'unverified')):
+        st, j = send(to)
+        rec('first touch to a %s address sends (200) and says which verdict let it through' % code,
+            st == 200 and j.get('ok') is True and j.get('gate') == code and j.get('to') == to, (st, j))
+    st, j = send('recent@example.com')
+    rec('an address mailed yesterday is no longer held for lack of delivery evidence',
+        j.get('hold') != 'deliverability' and j.get('blocked') not in ('unverified_recipient', 'unverified_first_touch'),
+        (st, j))
 
     st, j = send('delivered@example.com')
     rec('follow-up to an address that delivered before: sends (200) despite a risky verdict',
@@ -284,7 +297,7 @@ try:
     st, j = send('advisor@example.org', test=True)
     rec('meta.test (1:1 to the advisor/operator) is exempt from the gate', st == 200 and 'gate' not in j, (st, j))
     st, hj2 = call(port, '/health')
-    rec('recipients_today counts one per send: no BCC fan-out', hj2.get('recipients_today') == 5, hj2.get('recipients_today'))
+    rec('recipients_today counts one per send: no BCC fan-out', hj2.get('recipients_today') in (9, 10), hj2.get('recipients_today'))
 finally:
     proc.terminate()
     try:
@@ -524,9 +537,10 @@ for label, slug, kw in (
     folder, (pr, port_) = boot('hold-' + slug, LOGIN, rows, bounced, gate=MOVED_GATE, **kw)
     try:
         st, hj = call(port_, '/health')
-        rec('%s: rule is slow_restart under the pre-cutoff block' % label,
-            st == 200 and (hj.get('bounce') or {}).get('ft_rule') == 'slow_restart'
-            and (hj.get('bounce') or {}).get('blocked') is True, hj.get('bounce_rule'))
+        rec('%s: the pre-cutoff block is measured (slow_restart) and enforces nothing' % label,
+            st == 200 and (hj.get('bounce') or {}).get('ft_rule') == 'clear'
+            and (hj.get('bounce') or {}).get('measured_rule') == 'slow_restart'
+            and (hj.get('bounce') or {}).get('blocked') is False, hj.get('bounce'))
         _b = hj.get('bounce') or {}
         rec('%s: the bridge runs on the moved gate and every row counts as pre-gate' % label,
             _b.get('ft_cutoff') == MOVED_GATE and _b.get('pre_mailed') == len(rows)
@@ -534,10 +548,9 @@ for label, slug, kw in (
             {k: _b.get(k) for k in ('ft_cutoff', 'pre_mailed', 'post_mailed')})
         before = len(smtp_of(folder))
         st, j = send_to(port_, 'zb@example.com')
-        rec('%s: verified first touch is held' % label,
-            st == 409 and j.get('skip') is True and j.get('err') == HOLD and '@' not in j.get('err', ''),
-            (st, j))
-        rec('%s: that hold did not send' % label, len(smtp_of(folder)) == before)
+        rec('%s: with no warm-up sender a first touch now sends from the login' % label,
+            st == 200 and j.get('ok') is True and j.get('first_touch') is True
+            and len(smtp_of(folder)) == before + 1, (st, j))
         st, j = send_to(port_, 'delivered@example.com')
         rec('%s: a proven follow-up still sends' % label,
             st == 200 and j.get('ok') is True and j.get('first_touch') is False
@@ -555,10 +568,10 @@ folder, (pr, port_) = boot('cap', LOGIN, cap_ledger, bounced={}, senders=WARM)
 try:
     st, hj = call(port_, '/health')
     senders_h = (hj.get('first_touch_from') or {}).get('senders') or []
-    rec('configured warm-up: slow restart publishes a domain cap of 10',
-        (hj.get('bounce') or {}).get('ft_rule') == 'slow_restart'
-        and [x.get('domain_cap') for x in senders_h] == [10, 10]
-        and [x.get('domain_today') for x in senders_h] == [10, 0], senders_h)
+    rec('configured warm-up: no restart cap is published, each sender keeps its own ramp cap',
+        (hj.get('bounce') or {}).get('ft_rule') == 'clear'
+        and [x.get('domain_cap') for x in senders_h] == [None, None]
+        and [x.get('first_touch_cap') for x in senders_h] == [100, 100], senders_h)
     st, j = send_to(port_, 'zb10@example.com')
     rec('a second domain still has room while the first is at 10',
         st == 200 and j.get('sent_from') == WU_C and j.get('first_touch') is True, (st, j))
@@ -569,9 +582,8 @@ try:
     (folder / 'senders.json').write_text(json.dumps(only_a), encoding='utf-8')
     n_smtp = len(smtp_of(folder))
     st, j = send_to(port_, 'zb11@example.com')
-    rec('the 11th first touch on that full domain is 409',
-        st == 409 and j.get('skip') is True and j.get('first_touch_cap') is True
-        and len(smtp_of(folder)) == n_smtp, (st, j.get('err')))
+    rec('the 11th first touch on that domain sends: only the sender ramp cap (100) limits it',
+        st == 200 and j.get('sent_from') == WU_A and len(smtp_of(folder)) == n_smtp + 1, (st, j.get('err')))
 finally:
     stop(pr)
 
@@ -580,9 +592,9 @@ try:
     st, hj = call(port_, '/health')
     bh = hj.get('bounce') or {}
     senders_h = (hj.get('first_touch_from') or {}).get('senders') or []
-    rec('missing bounce list: unmeasured, first-touch cap per domain is 10',
-        bh.get('ft_measured') is False and bh.get('ft_rule') == 'unmeasured'
-        and [x.get('domain_cap') for x in senders_h] == [10, 10], bh.get('ft_rule'))
+    rec('missing bounce list: measured as unmeasured, enforced as clear, no domain cap',
+        bh.get('ft_measured') is False and bh.get('measured_rule') == 'unmeasured' and bh.get('ft_rule') == 'clear'
+        and [x.get('domain_cap') for x in senders_h] == [None, None], bh)
     st, j = send_to(port_, 'zb12@example.com')
     rec('missing bounce list: the other domain still sends under that cap',
         st == 200 and j.get('sent_from') == WU_C, (st, j.get('sent_from'), j.get('err')))
@@ -590,8 +602,8 @@ try:
     (folder / 'mail_sent.json').write_text(json.dumps(full), encoding='utf-8')
     n_smtp = len(smtp_of(folder))
     st, j = send_to(port_, 'zb13@example.com')
-    rec('missing bounce list: the 11th on a full domain is 409',
-        st == 409 and j.get('skip') is True and len(smtp_of(folder)) == n_smtp, (st, j.get('err')))
+    rec('missing bounce list: the 11th on a domain still sends',
+        st == 200 and len(smtp_of(folder)) == n_smtp + 1, (st, j.get('err')))
 finally:
     stop(pr)
 

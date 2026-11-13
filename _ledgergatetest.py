@@ -96,10 +96,13 @@ rec("a prior hard bounce reads 'dead' and cannot be admitted",
     code == 'dead' and code not in S.GATE_PASS, code)
 
 code, _ = S._recipient_verdict(A, ev())
-rec('no evidence at all is not admitted', code not in S.GATE_PASS, code)
+# 2026-11-13: verified-only removed. No evidence reads 'unverified', and that is admitted now.
+rec("no evidence at all reads 'unverified' and is admitted (verified-only removed)",
+    code == 'unverified' and code in S.GATE_PASS, code)
 
-rec('all three admitting codes are distinguishable in the ledger',
-    len(set(S.GATE_PASS)) == 3 and 'zerobounce_valid' in S.GATE_PASS, S.GATE_PASS)
+rec('every admitting code is distinct, so the ledger still says which one let a send through',
+    len(set(S.GATE_PASS)) == len(S.GATE_PASS) == 7 and 'zerobounce_valid' in S.GATE_PASS
+    and 'dead' not in S.GATE_PASS, S.GATE_PASS)
 
 # ---- 3. _pick_recipient hands back the code for the address it picked -----------------------
 e = ev(proven=(B,), ver={A: {'v': 'risky', 'why': 'invented'}})

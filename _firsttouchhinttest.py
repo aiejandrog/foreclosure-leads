@@ -21,8 +21,17 @@ def rows():
     return [{'case': 'A', 'emails': ['a@gmail.com']}, {'case': 'B', 'emails': []},
             {'case': 'C', 'emails': ['x@weird.example']}, {'case': 'D', 'emails': ['d@gmail.com'], 'fth': 1}]
 
+# 2026-11-13: verified-only removed. An unverified address is mailable, so nothing is stamped for
+# it, and a stale stamp is cleared. Only a lead whose every address is DEAD keeps the hint.
 s = rows(); F.stamp_first_touch_hint(s)
-rec('unverified mailable leads are held', [d.get('fth') for d in s] == [1, None, None, 1], [d.get('fth') for d in s])
+rec('unverified mailable leads are NOT held any more, stale stamp removed',
+    [d.get('fth') for d in s] == [None, None, None, None], [d.get('fth') for d in s])
+_o = S._recipient_verdict
+S._recipient_verdict = lambda a, ev: ('dead', 'bounced') if a in ('a@gmail.com', 'd@gmail.com') else _o(a, ev)
+s = rows(); F.stamp_first_touch_hint(s)
+rec('a lead whose only address is dead is held', [d.get('fth') for d in s] == [1, None, None, 1],
+    [d.get('fth') for d in s])
+S._recipient_verdict = _o
 rec('a lead with no worker-mailable address is not stamped', 'fth' not in s[2])
 
 orig = S._recipient_verdict
@@ -32,9 +41,10 @@ rec('an address the gate passes clears the hint', 'fth' not in s[0])
 S._recipient_verdict = orig
 
 # a case mailed before, at an address since replaced: /send judges only the current addresses
-S._recipient_verdict = lambda a, ev: ('awaiting_delivery', '') if a == 'd@gmail.com' else orig(a, ev)
+S._recipient_verdict = lambda a, ev: ('dead', '') if a == 'd@gmail.com' else orig(a, ev)
 s = rows(); F.stamp_first_touch_hint(s)
-rec('a previously mailed case is judged on its current addresses (held when none pass)', s[3].get('fth') == 1)
+rec('a previously mailed case is judged on its current addresses (held when the current one is dead)',
+    s[3].get('fth') == 1)
 S._recipient_verdict = lambda a, ev: ('delivered', '') if a == 'd@gmail.com' else orig(a, ev)
 s = rows(); F.stamp_first_touch_hint(s)
 rec('a current address with delivery evidence clears the hint, stale stamp removed', 'fth' not in s[3])
