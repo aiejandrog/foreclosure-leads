@@ -98,6 +98,9 @@ def _counts(q):
     for it in (q or {}).get('items', []):
         c[it.get('status', 'pending')] = c.get(it.get('status', 'pending'), 0) + 1
     c['total'] = len((q or {}).get('items', []))
+    c['entity'] = sum(1 for it in (q or {}).get('items', []) if it.get('kind') == 'entity')
+    c['pending'] -= sum(1 for it in (q or {}).get('items', [])
+                        if it.get('kind') == 'entity' and it.get('status', 'pending') == 'pending')
     return c
 
 
@@ -112,6 +115,7 @@ def _desktop_note(q):
                     fh.write('DealFlow equity queue - %s\n' % (q or {}).get('date', _today()))
                     fh.write('updated %s\n\n' % dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
                     fh.write('Leads the free scraper could not read: %d\n' % c['total'])
+                    fh.write('  owner is a bank/LLC/association, owner not resolved yet: %d\n' % c['entity'])
                     fh.write('  waiting for the browser job : %d\n' % c['pending'])
                     fh.write('  token captured, not read yet: %d\n' % c['token'])
                     fh.write('  equity read and saved       : %d\n' % c['done'])
@@ -150,13 +154,19 @@ def clean():
 
 
 # ---- scraper side -----------------------------------------------------------------------------
-def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', reason=''):
-    """Called by records_liens.py for a lead neither free path could read. Never raises."""
+def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', reason='', kind='person'):
+    """Called by records_liens.py for a lead neither free path could read. Never raises.
+
+    kind is 'person' or 'entity'. An entity row is a lead whose owner field holds a bank, an LLC or
+    an association (on a fresh filing that is usually the PLAINTIFF, not the homeowner). A name
+    search on it cannot find the homeowner's mortgages, so the browser job never takes those:
+    they are listed apart as "owner not resolved yet" for the owner resolver."""
     try:
         if case:
             _PENDING.append({'case': str(case), 'owner': str(owner_clean or ''), 'last': str(last or ''),
                              'first': str(first or ''), 'folio': str(folio or ''), 'county': county,
-                             'reason': str(reason or '')[:160], 'status': 'pending'})
+                             'reason': str(reason or '')[:160], 'kind': 'entity' if kind == 'entity' else 'person',
+                             'status': 'pending'})
     except Exception:
         pass
 
@@ -209,7 +219,7 @@ def _set(case, **kw):
 def cmd_next(limit):
     q = _read(qpath(), {'items': []})
     rows = [{'case': it['case'], 'last': it['last'], 'first': it['first'], 'owner': it['owner']}
-            for it in q['items'] if it.get('status') == 'pending'][:limit]
+            for it in q['items'] if it.get('status') == 'pending' and it.get('kind') != 'entity'][:limit]
     print(json.dumps(rows, indent=1))
 
 

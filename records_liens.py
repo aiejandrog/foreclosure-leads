@@ -2010,7 +2010,8 @@ def _run(a, ap):
                         import equity_queue as _EQ
                         _l, _f = (split_owner(oc) or ('', ''))[:2] if oc else ('', '')
                         _EQ.add(case, oc, _l, _f, folio,
-                                reason='free search missed; paid search refused: ' + str(_SPEND['stopped']))
+                                reason='free search missed; paid search refused: ' + str(_SPEND['stopped']),
+                                kind='entity' if COMPANY_RE.search(oc or '') else 'person')
                     except Exception:
                         pass
                 elif (a.repull and case in out and paid > _paid0 and not _def_blocked and not _free_miss):

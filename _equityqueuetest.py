@@ -51,8 +51,17 @@ rec('each row carries the case, the name parts, the folio, a reason and status p
 
 Q.add('2099-000001-CA-01', 'JANE EXAMPLE', 'EXAMPLE', 'JANE')
 Q.add('2099-000003-CA-01', 'ANA TESTER', 'TESTER', 'ANA')
-rec('a second run the same day adds only the new lead', Q.flush() == 1
-    and len(json.load(open(Q.qpath(), encoding='utf-8'))['items']) == 3)
+Q.add('2099-000009-CA-01', 'EXAMPLE BANK N A', 'EXAMPLE BANK N A', '', kind='entity')
+rec('a second run the same day adds only the new leads', Q.flush() == 2
+    and len(json.load(open(Q.qpath(), encoding='utf-8'))['items']) == 4)
+import contextlib  # noqa: E402
+_b = io.StringIO()
+with contextlib.redirect_stdout(_b):
+    Q.cmd_next(25)
+_nx = [x['case'] for x in json.loads(_b.getvalue())]
+rec('the browser job is never handed a bank/LLC/association row', '2099-000009-CA-01' not in _nx and len(_nx) == 3, _nx)
+_c = Q._counts(json.load(open(Q.qpath(), encoding='utf-8')))
+rec('entity rows are counted apart from the ones waiting for the browser', _c['entity'] == 1 and _c['pending'] == 3, _c)
 
 # ---- worker side
 rec('token for a case not on today\'s list is refused', Q.cmd_token('2099-999999-CA-01', 'x' * 40) == 1)
@@ -61,6 +70,7 @@ rec('a token is stored in the scraper\'s own cache under the owner name', Q.cmd_
     and json.load(open(Q.P.records_qs(), encoding='utf-8')).get('JANE EXAMPLE') == 'q' * 60)
 rec('a browser miss is recorded', Q.cmd_miss('2099-000002-CA-01', 'no results for that name') == 0)
 st = {i['case']: i['status'] for i in json.load(open(Q.qpath(), encoding='utf-8'))['items']}
+st.pop('2099-000009-CA-01', None)
 rec('statuses moved: token, miss, pending', st == {'2099-000001-CA-01': 'token', '2099-000002-CA-01': 'miss',
                                                     '2099-000003-CA-01': 'pending'}, st)
 
