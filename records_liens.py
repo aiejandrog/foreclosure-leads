@@ -2006,6 +2006,13 @@ def _run(a, ap):
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
+                    try:                                      # logged for the browser job, never just scrolled past
+                        import equity_queue as _EQ
+                        _l, _f = (split_owner(oc) or ('', ''))[:2] if oc else ('', '')
+                        _EQ.add(case, oc, _l, _f, folio,
+                                reason='free search missed; paid search refused: ' + str(_SPEND['stopped']))
+                    except Exception:
+                        pass
                 elif (a.repull and case in out and paid > _paid0 and not _def_blocked and not _free_miss):
                     # every name was asked the paid way and answered, and none reached this parcel (an
                     # owner name too short to search leaves only the defendants): marked, never paid
@@ -2107,6 +2114,13 @@ def _run(a, ap):
             except Exception:
                 pass
 
+    try:
+        import equity_queue as _EQ
+        _n = _EQ.flush()
+        if _n:
+            print(f"  equity queue: {_n} lead(s) the free search missed are queued for the browser job -> {_EQ.qpath()}")
+    except Exception:
+        pass
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
     if a.repull:
         print(f"     --repull: {done} chain(s) re-read, {merged} narrower than the earlier search (earlier "
