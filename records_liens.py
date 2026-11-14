@@ -139,6 +139,23 @@ def untraceable_owner(clean):
 
 
 # ---- fetch the owner's recorded documents -----------------------------------------------------
+def _queue_for_browser(case, oc, folio, co, r, reason):
+    """Hand one unread lead to equity_queue.py. Never raises, never writes outside the live checkout."""
+    try:
+        if not _real_run():
+            return
+        import equity_queue as _EQ
+        ent = bool(COMPANY_RE.search(oc or ''))
+        sp = (split_owner(oc) or ('', '')) if oc else ('', '')
+        names = ([] if ent or not sp[1] else [(sp[0], sp[1])]) + [tuple(x) for x in (co or [])]
+        if not names and oc:
+            names = [(oc, '')]                               # nothing but the entity: searched as a company
+        _EQ.add(case, oc, sp[0], sp[1], folio, reason=reason, kind='entity' if ent else 'person',
+                names=names, address=r.get('Address') or r.get('addr') or '')
+    except Exception:
+        pass
+
+
 def _real_run():
     """True only when this run reads and writes the checkout's own files. Tests point LEADS / OUT at a
     scratch folder; 2026-11-13 one of them put four invented cases into the live equity queue."""
@@ -150,6 +167,7 @@ def _real_run():
 
 FILE_QS = '__models_file__'      # --models-file: the records come from disk, not from the clerk
 _FILE_MODELS = []
+_FILE_META = {}
 
 
 def records_by_qs(qs):
@@ -1638,6 +1656,7 @@ def main():
                     help="JSON file that makes --max-spend a total across runs (what earlier runs "
                          "spent is subtracted; the total in the file can be lowered, never raised). "
                          "--repull also records each chain it paid to search, so none is paid for twice")
+    ap.add_argument('--folio', default='', help='with --models-file: the folio to analyze against when the lead carries none (found by the browser job)')
     ap.add_argument('--models-file', default='',
                     help="with --case: analyze the search results stored in this JSON file ({'recordingModels': [...]}, "
                          "written by equity_queue.py from a real-browser search) instead of asking the clerk. "
@@ -1751,7 +1770,9 @@ def _run(a, ap):
         if not a.case:
             ap.error('--models-file needs --case')
         a.cached_only = True                                  # nothing is fetched or bought on this path
-        _FILE_MODELS[:] = (json.load(open(a.models_file, encoding='utf-8')) or {}).get('recordingModels') or []
+        _fm_doc = json.load(open(a.models_file, encoding='utf-8')) or {}
+        _FILE_MODELS[:] = _fm_doc.get('recordingModels') or []
+        _FILE_META.clear(); _FILE_META.update({'full': bool(_fm_doc.get('full')), 'searched': str(_fm_doc.get('searched') or '')})
         qs_cache = dict(qs_cache)                             # a copy: the marker below is never saved
 
     picked = []
@@ -1874,7 +1895,7 @@ def _run(a, ap):
         for r in picked:
             _lock_touch()
             case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
-            folio = r.get('Folio', '') or r.get('year_folio', '')
+            folio = r.get('Folio', '') or r.get('year_folio', '') or (a.folio if a.models_file else '')
             judg = num(r.get('judgment'))
             judg, _jsrc = judgment_for(case, judg)
             models = None
@@ -2031,20 +2052,15 @@ def _run(a, ap):
                 models, _folio_only = folio_merge(models, _fm, folio)
                 if _folio_only:
                     _src = 'folio'
+            if models is None and not a.cached_only and not a.reanalyze:
+                # every lead this run could not read goes to the browser job's queue, whatever the
+                # reason, and whatever the owner field holds (2026-11-13: nothing is skipped)
+                _queue_for_browser(case, oc, folio, _co, r,
+                                   'not read: ' + (str(_SPEND['stopped']) or 'the search was blocked or returned nothing'))
             if models is None:
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
-                    try:                                      # logged for the browser job, never just scrolled past
-                        import equity_queue as _EQ
-                        if not _real_run():                   # a test with scratch paths never writes the live queue
-                            raise RuntimeError('not the live checkout')
-                        _l, _f = (split_owner(oc) or ('', ''))[:2] if oc else ('', '')
-                        _EQ.add(case, oc, _l, _f, folio,
-                                reason='free search missed; paid search refused: ' + str(_SPEND['stopped']),
-                                kind='entity' if COMPANY_RE.search(oc or '') else 'person')
-                    except Exception:
-                        pass
                 elif (a.repull and case in out and paid > _paid0 and not _def_blocked and not _free_miss):
                     # every name was asked the paid way and answered, and none reached this parcel (an
                     # owner name too short to search leaves only the defendants): marked, never paid
@@ -2074,12 +2090,16 @@ def _run(a, ap):
                 res['judgment_source'] = _jsrc          # 'court copy': equity_state.card reads it
                 res['judgment_used'] = judg
             if a.models_file:
-                # read off the county page by the browser job (equity_queue.py): only the rows tied to
-                # this parcel were copied, so like a folio-only read it is never a clear or a priced FACT
-                res['truncated'] = True
+                # read off the county page by the browser job (equity_queue.py). When every row of
+                # every name search was copied (the file says full) this is the same evidence the
+                # nightly search reads and it stands as a full chain. Anything less is truncated:
+                # shown, never a clear and never a priced FACT.
                 res['browser_read'] = time.strftime('%Y-%m-%d')
+                res['searched_as'] = _FILE_META.get('searched') or res.get('searched_as')
+                if not _FILE_META.get('full'):
+                    res['truncated'] = True
                 _prev = out.get(case) or {}
-                if _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated'):
+                if res.get('truncated') and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated'):
                     print(f"  ..  {case:22} {oc:26} a full chain is already saved; the browser read is not written over it")
                     continue
             if _folio_only:
@@ -2139,6 +2159,8 @@ def _run(a, ap):
                     if _old:
                         # the mortgages agree, but the new search may still be narrower on liens
                         _carry_lien_totals(_old, _new, res)
+            if res.get('conf') == 'none' and not norm_folio(folio) and not a.cached_only and not a.reanalyze:
+                _queue_for_browser(case, oc, folio, _co, r, 'no folio on the lead: the browser job looks it up')
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1

@@ -45,7 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEEP_DAYS = 7          # queue files
 RETRY_DAYS = 14        # a lead the browser also missed is not queued again for this long
 LOG_LINES = 400
-DAILY_LIMIT = 8        # the worker's default batch: a few minutes a lead when the rows are read off the page
+DAILY_LIMIT = 10       # the worker's default batch: several minutes a lead when the whole search is copied
 
 _PENDING = []          # filled by add() during one records_liens run, written by flush()
 
@@ -94,13 +94,12 @@ def _log(event, **counts):
 
 
 def _counts(q):
-    c = {'pending': 0, 'reading': 0, 'token': 0, 'rows': 0, 'done': 0, 'failed': 0, 'miss': 0}
+    c = {'pending': 0, 'token': 0, 'rows': 0, 'done': 0, 'failed': 0, 'miss': 0}
     for it in (q or {}).get('items', []):
         c[it.get('status', 'pending')] = c.get(it.get('status', 'pending'), 0) + 1
     c['total'] = len((q or {}).get('items', []))
     c['entity'] = sum(1 for it in (q or {}).get('items', []) if it.get('kind') == 'entity')
-    c['pending'] -= sum(1 for it in (q or {}).get('items', [])
-                        if it.get('kind') == 'entity' and it.get('status', 'pending') == 'pending')
+    c['verified'] = sum(1 for it in (q or {}).get('items', []) if it.get('status') == 'done' and it.get('full'))
     return c
 
 
@@ -115,10 +114,10 @@ def _desktop_note(q):
                     fh.write('DealFlow equity queue - %s\n' % (q or {}).get('date', _today()))
                     fh.write('updated %s\n\n' % dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
                     fh.write('Leads the free scraper could not read: %d\n' % c['total'])
-                    fh.write('  owner is a bank/LLC/association, owner not resolved yet: %d\n' % c['entity'])
+                    fh.write('  of those, owner field is a bank/LLC/association (searched by the people named in the case): %d\n' % c['entity'])
                     fh.write('  waiting for the browser job : %d\n' % c['pending'])
                     fh.write('  token captured, not read yet: %d\n' % c['token'])
-                    fh.write('  equity read and saved       : %d\n' % c['done'])
+                    fh.write('  read and saved              : %d  (whole search copied, counts as verified: %d)\n' % (c['done'], c['verified']))
                     fh.write('  browser found nothing       : %d\n' % c['miss'])
                     fh.write('  token did not read          : %d\n' % c['failed'])
                     fh.write('\nDetails (names, cases): %s\n' % qpath((q or {}).get('date')))
@@ -154,20 +153,32 @@ def clean():
 
 
 # ---- scraper side -----------------------------------------------------------------------------
-def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', reason='', kind='person'):
-    """Called by records_liens.py for a lead neither free path could read. Never raises.
+def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', reason='', kind='person',
+        names=None, address=''):
+    """Called by records_liens.py for a lead it could not read. Never raises.
 
-    kind is 'person' or 'entity'. An entity row is a lead whose owner field holds a bank, an LLC or
-    an association (on a fresh filing that is usually the PLAINTIFF, not the homeowner). A name
-    search on it cannot find the homeowner's mortgages, so the browser job never takes those:
-    they are listed apart as "owner not resolved yet" for the owner resolver."""
+    names = every (LAST, FIRST) worth searching, in order: the owner when it is a person, then the
+    people the case names as defendants. 2026-11-13 (Alejandro): "DON'T LET IT SKIP BANK OR
+    ASSOCIATIONS". When the owner field holds a bank or an association (on a fresh filing that is
+    the plaintiff), the homeowner is among the defendants, so those are the names to search. kind is
+    kept as a label only; nothing is skipped on it."""
     try:
         # 2099-... is this repo's invented-case convention: never queued outside a scratch DEALFLOW_DIR
         if case and not (str(case).startswith('2099-') and not os.environ.get('DEALFLOW_DIR')):
+            nm = []
+            for x in (names or []):
+                try:
+                    pair = [str(x[0] or '').strip(), str(x[1] or '').strip()]
+                except Exception:
+                    continue
+                if pair[0] and pair not in nm:
+                    nm.append(pair)
+            if not nm and (last or owner_clean):
+                nm = [[str(last or owner_clean).strip(), str(first or '').strip()]]
             _PENDING.append({'case': str(case), 'owner': str(owner_clean or ''), 'last': str(last or ''),
                              'first': str(first or ''), 'folio': str(folio or ''), 'county': county,
                              'reason': str(reason or '')[:160], 'kind': 'entity' if kind == 'entity' else 'person',
-                             'status': 'pending'})
+                             'names': nm[:6], 'address': str(address or '')[:160], 'status': 'pending'})
     except Exception:
         pass
 
@@ -217,12 +228,35 @@ def _set(case, **kw):
     return None
 
 
+def _names(it):
+    return it.get('names') or [[it.get('last') or it.get('owner') or '', it.get('first') or '']]
+
+
 def cmd_next(limit):
+    """Every pending lead, nothing skipped. A lead with no folio carries its address so the worker
+    can find the folio on the Property Appraiser site first."""
     q = _read(qpath(), {'items': []})
-    rows = [{'case': it['case'], 'last': it['last'], 'first': it['first'], 'owner': it['owner']}
-            for it in q['items'] if it.get('status') == 'pending' and it.get('kind') != 'entity'
-            and _norm_folio(it.get('folio'))][:limit]
-    print(json.dumps(rows, indent=1))
+    rows = []
+    for it in q['items']:
+        if it.get('status') != 'pending':
+            continue
+        row = {'case': it['case'], 'names': _names(it), 'has_folio': bool(_norm_folio(it.get('folio')))}
+        if not row['has_folio']:
+            row['address'] = it.get('address', '')
+        rows.append(row)
+    print(json.dumps(rows[:limit], indent=1))
+
+
+def cmd_folio(case, folio):
+    f = _norm_folio(folio)
+    if len(f) < 10:
+        print('refused: a Miami-Dade folio has 13 digits')
+        return 1
+    if not _set(case, folio=f, folio_src='browser'):
+        print('refused: unknown case for today')
+        return 1
+    print('ok: folio stored')
+    return 0
 
 
 def cmd_token(case, qs):
@@ -253,52 +287,54 @@ def cmd_miss(case, why):
 
 
 # ---- browser hand-off: Claude reads the search results off the page ------------------------------
-# 2026-11-13 (Alejandro chose "Claude reads the results off the page"). Measured the same day:
-#   * the browser tool will not return the county's search token (blocked), and returns only about
-#     a thousand characters per call;
-#   * the county page may not post to this computer (its Content-Security-Policy is default-src self);
-#   * a scripted Chrome window gets no token at all.
-# So the worker runs the search by hand in the real Chrome and runs the script `js` prints. That
-# script reads the results the page already loaded and keeps the rows tied to this parcel: this
-# folio; no folio but the parcel's subdivision; a satisfaction, assignment or release whose original
-# book/page is one of those; and the owner's liens, judgments and tax liens. That is narrower than
-# the nightly search (a name returns about a hundred rows and most carry no folio), so a chain
-# read this way is saved as TRUNCATED: shown, never a clear and never a priced fact. It trims the
-# rows to the twelve fields the parser reads and returns them a few at a time with a checksum. `rows` refuses a chunk whose
-# checksum does not match, so a mis-copied digit cannot become a mortgage balance. `finish` then
-# runs the scraper's own analyze() on the stored rows (records_liens.py --models-file).
+# 2026-11-13. Measured that day: the browser tool will not return the county's search token and
+# returns only about a thousand characters per call; the county page may not post to this computer
+# (Content-Security-Policy default-src self); a scripted Chrome window gets no token at all.
+#
+# So the worker runs the name search by hand in the real Chrome and runs the script `js` prints.
+# Version 1 copied only the rows tied to the parcel and saved the chain as TRUNCATED. Alejandro,
+# the same evening: "I WANT VERIFIED EQUITY ... THE WHOLE SEARCH ... HIDDEN LIENS OR JUDGEMENT".
+# Version 2 copies EVERY row the search returned, for EVERY name on the lead (the owner, and the
+# people the case names as defendants), so the scraper's own analyze() sees exactly what the nightly
+# search would have seen: mortgages, satisfactions, liens, judgments, tax liens, lis pendens. A read
+# is saved as a full chain only when every row of every search arrived and no search hit the
+# clerk's 500-row cap; anything less is still saved TRUNCATED, never as a clear.
+#
+# Rows are packed to fit the tool's answer size: the document type is an index into a list sent in
+# the header, the constant time suffix on dates and the derivable book/page string are dropped and
+# rebuilt here. Every chunk carries a checksum, so a mis-copied digit is refused, not stored.
 FIELDS = ('doC_TYPE', 'foliO_NUMBER', 'seconD_PARTY', 'firsT_PARTY', 'reC_PAGE', 'reC_BOOK', 'reC_DATE',
           'cfN_MASTER_ID', 'oriG_REC_PAGE', 'oriG_REC_BOOK', 'subdiV_NAME', 'reC_BOOKPAGE')
-CHUNK = 5              # rows per call: the browser tool cuts long answers
-MAX_ROWS = 60          # more than this after scoping to the parcel is not a job for hand-copying
+DATE_SFX = ' 12:00:00 AM'
+BUDGET = 820           # characters of row data per call: the browser tool cuts long answers
+MAX_ROWS = 520         # the clerk returns at most 500 rows for a name
+CLERK_CAP = 500
 MOD = 1000000007
 
-JS = r"""var out; { const FOLIO = %(folio)s, K = %(chunk)d, F = %(fields)s, N = %(size)d, MAXR = %(maxr)d, MOD = %(mod)d;
+JS = r"""var out; { const K = %(chunk)d, BUD = %(budget)d, MOD = %(mod)d, SFX = %(sfx)s;
 const q = new URLSearchParams(location.search).get('qs');
 if(!q){ out = JSON.stringify({err: 'no search results on this page: run the name search first'}); }
 else {
-  if(!window.__eqRows){
+  if(window.__eqQ !== q){
     const j = await fetch('/officialrecords/api/SearchResults/getStandardRecords?qs=' + encodeURIComponent(q)).then(r => r.json());
-    const nf = v => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
-    const all = j.recordingModels || [];
-    window.__eqAll = all.length;
-    window.__eqOnParcel = all.filter(r => nf(r.foliO_NUMBER) === FOLIO).length;
-    const sub = r => String(r.subdiV_NAME || '').trim(), bp = (b, p) => (Number(b) || 0) + '/' + (Number(p) || 0);
-    const on = all.filter(r => nf(r.foliO_NUMBER) === FOLIO), subs = {}; on.forEach(r => { if(sub(r)) subs[sub(r)] = 1; });
-    const blank = all.filter(r => !nf(r.foliO_NUMBER));
-    const keep = new Set(on); blank.forEach(r => { if(sub(r) && subs[sub(r)]) keep.add(r); });
-    for(let pass = 0; pass < 2; pass++){ const have = {}; keep.forEach(r => { have[bp(r.reC_BOOK, r.reC_PAGE)] = 1; });
-      blank.forEach(r => { if(Number(r.oriG_REC_BOOK) && have[bp(r.oriG_REC_BOOK, r.oriG_REC_PAGE)]) keep.add(r); }); }
-    blank.forEach(r => { if(!sub(r) && /LIEN|JUDG|LIS PENDENS|TAX/i.test(String(r.doC_TYPE || ''))) keep.add(r); });
-    window.__eqRows = all.filter(r => keep.has(r))
-      .map(r => F.map(k => { const v = r[k]; return (typeof v === 'string') ? v.slice(0, 60) : (v == null ? null : v); }));
+    const all = j.recordingModels || [], types = [];
+    const ti = v => { const s = (v == null) ? null : String(v); let i = types.indexOf(s); if(i < 0){ types.push(s); i = types.length - 1; } return i; };
+    const dsfx = all.every(r => r.reC_DATE == null || String(r.reC_DATE).endsWith(SFX));
+    const bpd = all.every(r => String(r.reC_BOOKPAGE == null ? '' : r.reC_BOOKPAGE) === (r.reC_BOOK + '/' + r.reC_PAGE));
+    const rows = all.map(r => { const a = [ti(r.doC_TYPE), r.foliO_NUMBER, r.seconD_PARTY, r.firsT_PARTY, r.reC_PAGE, r.reC_BOOK,
+      (dsfx && r.reC_DATE != null) ? String(r.reC_DATE).slice(0, -SFX.length) : r.reC_DATE, r.cfN_MASTER_ID, r.oriG_REC_PAGE, r.oriG_REC_BOOK, r.subdiV_NAME];
+      if(!bpd) a.push(r.reC_BOOKPAGE); return a.map(v => v === undefined ? null : v); });
+    const cuts = []; let cur = [], len = 0;
+    rows.forEach(r => { const L = JSON.stringify(r).length + 1; if(cur.length && len + L > BUD){ cuts.push(cur); cur = []; len = 0; } cur.push(r); len += L; });
+    if(cur.length) cuts.push(cur);
+    window.__eqQ = q; window.__eq = {n: rows.length, types: types, dsfx: dsfx, bpd: bpd, cuts: cuts};
   }
-  const rows = window.__eqRows, of = Math.ceil(rows.length / N);
-  if(rows.length > MAXR){ out = JSON.stringify({err: 'too many rows', scoped: rows.length, all: window.__eqAll}); }
+  const E = window.__eq;
+  if(K < 0){ out = JSON.stringify({hdr: 1, n: E.n, of: E.cuts.length, dsfx: E.dsfx, bpd: E.bpd, types: E.types}); }
   else {
-    const part = rows.slice(K * N, K * N + N);
+    const part = E.cuts[K] || [];
     let s = 0; part.forEach(r => { const c = r.map(v => v == null ? '' : String(v)).join('|'); for(let i = 0; i < c.length; i++) s = (s * 31 + c.charCodeAt(i)) %% MOD; });
-    out = JSON.stringify({k: K, of: of, all: window.__eqAll, onParcel: window.__eqOnParcel, scoped: rows.length, sum: s, rows: part});
+    out = JSON.stringify({k: K, of: E.cuts.length, sum: s, rows: part});
   }
 } }
 out"""
@@ -314,55 +350,116 @@ def rows_path(case):
     return os.path.join(d, ''.join(ch for ch in case if ch.isalnum() or ch == '-') + '.json')
 
 
+def _canon(v):
+    if v is None:
+        return ''
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
+
+
 def checksum(rows):
     s = 0
     for r in rows:
-        c = '|'.join('' if v is None else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v)) for v in r)
-        for ch in c:
+        for ch in '|'.join(_canon(v) for v in r):
             s = (s * 31 + ord(ch)) % MOD
     return s
 
 
-def js_for(case, chunk=0):
+def js_for(case, chunk=-1):
     q = _read(qpath(), {'items': []})
-    it = next((x for x in q['items'] if x['case'] == case), None)
-    if not it:
+    if not any(x['case'] == case for x in q['items']):
         return None
-    return JS % {'folio': json.dumps(_norm_folio(it.get('folio'))), 'chunk': int(chunk),
-                 'fields': json.dumps(list(FIELDS)), 'size': CHUNK, 'maxr': MAX_ROWS, 'mod': MOD}
+    return JS % {'chunk': int(chunk), 'budget': BUDGET, 'mod': MOD, 'sfx': json.dumps(DATE_SFX)}
 
 
-def accept_chunk(case, payload):
-    """Store one chunk the page returned. -> (ok, message). Chunks arrive in order, 0 first."""
+def _unpack(row, hdr):
+    """One packed row -> the dict the parser reads. Raises on a malformed row."""
+    width = 11 if hdr['bpd'] else 12
+    if not isinstance(row, list) or len(row) != width:
+        raise ValueError('a row has %s fields, expected %d' % (len(row) if isinstance(row, list) else '?', width))
+    ti = row[0]
+    if not isinstance(ti, int) or not 0 <= ti < len(hdr['types']):
+        raise ValueError('a row names a document type the header does not list')
+    d = row[6]
+    if hdr['dsfx'] and d is not None:
+        d = str(d) + DATE_SFX
+    bp = ('%s/%s' % (_canon(row[5]), _canon(row[4]))) if hdr['bpd'] else row[11]
+    vals = [hdr['types'][ti], row[1], row[2], row[3], row[4], row[5], d, row[7], row[8], row[9], row[10], bp]
+    return dict(zip(FIELDS, vals))
+
+
+def accept_search(case, payload, name_index=0):
+    """Store ONE name search: [header, chunk 0, chunk 1, ...] exactly as the page returned them.
+    -> (ok, message). All or nothing: a search with a bad chunk stores no rows."""
     q = _read(qpath(), {'items': []})
     it = next((x for x in q['items'] if x['case'] == case), None)
-    if not it or it.get('kind') == 'entity' or it.get('status') not in ('pending', 'reading'):
+    if not it or it.get('status') not in ('pending', 'rows'):
         return False, 'case is not waiting on today\'s list'
-    if not _norm_folio(it.get('folio')):
-        return False, 'this lead has no folio, so its rows cannot be tied to the parcel'
+    names = _names(it)
+    if not 0 <= int(name_index) < len(names):
+        return False, 'this lead has %d name(s); --name-index must be 0..%d' % (len(names), len(names) - 1)
+    if not isinstance(payload, list) or not payload or not isinstance(payload[0], dict) or not payload[0].get('hdr'):
+        return False, 'the file must be a list that starts with the header object (the --chunk -1 answer)'
+    hdr = payload[0]
     try:
-        k, of, rows = int(payload['k']), int(payload['of']), payload['rows']
-        want = int(payload['sum'])
+        n, of = int(hdr['n']), int(hdr['of'])
+        hdr = {'n': n, 'of': of, 'dsfx': bool(hdr['dsfx']), 'bpd': bool(hdr['bpd']), 'types': list(hdr['types'])}
     except Exception:
-        return False, 'chunk is missing k / of / sum / rows'
-    if not isinstance(rows, list) or len(rows) > CHUNK or any(
-            not isinstance(r, list) or len(r) != len(FIELDS) for r in rows):
-        return False, 'rows are not %d-field lists of at most %d' % (len(FIELDS), CHUNK)
-    if checksum(rows) != want:
-        return False, 'checksum mismatch: the rows were not copied exactly. Run the script for chunk %d again.' % k
-    path = rows_path(case)
-    cur = _read(path, None) if k else None
-    have = (cur or {}).get('chunks', 0)
-    if k != have:
-        return False, 'expected chunk %d next, got %d' % (have, k)
-    models = (cur or {}).get('recordingModels', []) + [dict(zip(FIELDS, r)) for r in rows]
-    if len(models) > MAX_ROWS:
+        return False, 'the header is missing n / of / dsfx / bpd / types'
+    if n > MAX_ROWS:
         return False, 'more than %d rows' % MAX_ROWS
-    done = (k + 1) >= max(1, of)
-    _write(path, {'case': case, 'chunks': k + 1, 'of': of, 'complete': done,
-                  'on_parcel': int(payload.get('onParcel') or 0), 'recordingModels': models})
-    _set(case, status='rows' if done else 'reading', rows=len(models))
-    return True, ('all %d row(s) stored' % len(models)) if done else ('chunk %d of %d stored; run chunk %d next' % (k + 1, of, k + 1))
+    chunks = payload[1:]
+    if len(chunks) != of:
+        return False, 'the header says %d chunk(s), the file has %d' % (of, len(chunks))
+    models = []
+    for i, ch in enumerate(chunks):
+        try:
+            k, rows, want = int(ch['k']), ch['rows'], int(ch['sum'])
+        except Exception:
+            return False, 'chunk %d is missing k / sum / rows' % i
+        if k != i:
+            return False, 'chunks out of order: position %d holds chunk %d' % (i, k)
+        if not isinstance(rows, list) or checksum(rows) != want:
+            return False, 'checksum mismatch in chunk %d: the rows were not copied exactly. Run the script for chunk %d again.' % (k, k)
+        try:
+            models += [_unpack(r, hdr) for r in rows]
+        except ValueError as e:
+            return False, 'chunk %d: %s' % (k, e)
+    if len(models) != n:
+        return False, 'the header says %d row(s), the chunks hold %d' % (n, len(models))
+    path = rows_path(case)
+    cur = _read(path, None) or {'case': case, 'parts': []}
+    cur['parts'] = [p for p in cur['parts'] if p.get('i') != int(name_index)]
+    cur['parts'].append({'i': int(name_index), 'name': ' '.join(x for x in names[int(name_index)] if x),
+                         'n': n, 'capped': n >= CLERK_CAP, 'models': models})
+    _write(path, cur)
+    _set(case, status='rows', rows=sum(p['n'] for p in cur['parts']), searches=len(cur['parts']))
+    left = [i for i in range(len(names)) if i not in {p['i'] for p in cur['parts']}]
+    return True, ('%d row(s) stored for name %d. ' % (n, int(name_index))) + (
+        'Names still to search: %s' % left if left else 'Every name on this lead is stored.')
+
+
+def _models_file(it):
+    """Merge a lead's stored searches into the file records_liens.py reads. -> (path, full)."""
+    path = rows_path(it['case'])
+    cur = _read(path, None) or {'parts': []}
+    seen, models = set(), []
+    for p in sorted(cur['parts'], key=lambda p: p['i']):
+        for m in p['models']:
+            key = (m.get('cfN_MASTER_ID'), m.get('firsT_PARTY'), m.get('seconD_PARTY'), m.get('doC_TYPE'))
+            if key in seen:
+                continue
+            seen.add(key)
+            models.append(m)
+    names = _names(it)
+    full = bool(cur['parts']) and len(cur['parts']) == len(names) and not any(p.get('capped') for p in cur['parts'])
+    out = path[:-5] + '.models.json'
+    _write(out, {'case': it['case'], 'full': full, 'searched': '; '.join(p['name'] for p in cur['parts']),
+                 'searches': len(cur['parts']), 'names_on_lead': len(names), 'recordingModels': models})
+    return out, full
 
 
 def cmd_finish():
@@ -371,21 +468,21 @@ def cmd_finish():
         print('nothing queued today')
         clean()
         return 0
-    for it in q['items']:
-        if it.get('status') == 'reading':            # a half-copied lead is not read: it goes back to waiting
-            it['status'] = 'pending'
-    _write(qpath(), q)
     todo = [it for it in q['items'] if it.get('status') in ('token', 'rows')]
     for it in todo:
         argv = [sys.executable, '-u', 'records_liens.py', '--case', it['case'], '--cached-only']
+        full = None
         if it.get('status') == 'rows':
-            argv += ['--models-file', rows_path(it['case'])]
+            mf, full = _models_file(it)
+            argv += ['--models-file', mf]
+            if it.get('folio_src') == 'browser':
+                argv += ['--folio', it['folio']]
         p = subprocess.run(argv,
                            cwd=HERE, capture_output=True, text=True, timeout=600,
                            encoding='utf-8', errors='replace')
         # the scraper prints "  ok  <case>" only after it wrote the chain to records_liens.json
         ok = p.returncode == 0 and ('  ok  ' + it['case']) in (p.stdout or '')
-        _set(it['case'], status='done' if ok else 'failed',
+        _set(it['case'], status='done' if ok else 'failed', full=full,
              finished_at=dt.datetime.now().isoformat(timespec='seconds'))
         time.sleep(0.5)
     q = _read(qpath(), q)
@@ -401,8 +498,10 @@ def cmd_finish():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('cmd', choices=['status', 'next', 'js', 'rows', 'token', 'miss', 'finish', 'clean'])
-    ap.add_argument('--chunk', type=int, default=0)
+    ap.add_argument('cmd', choices=['status', 'next', 'js', 'rows', 'folio', 'token', 'miss', 'finish', 'clean'])
+    ap.add_argument('--chunk', type=int, default=-1, help='-1 = the header, 0.. = a data chunk')
+    ap.add_argument('--name-index', type=int, default=0)
+    ap.add_argument('--folio', default='')
     ap.add_argument('--file', default='')
     ap.add_argument('--case', default='')
     ap.add_argument('--qs', default='')
@@ -421,6 +520,8 @@ def main():
         return cmd_miss(a.case, a.why)
     if a.cmd == 'finish':
         return cmd_finish()
+    if a.cmd == 'folio':
+        return cmd_folio(a.case, a.folio)
     if a.cmd == 'js':
         s = js_for(a.case, a.chunk)
         print(s if s else 'refused: unknown case for today')
@@ -431,11 +532,7 @@ def main():
         except Exception as e:
             print('refused: could not read --file as JSON (%s)' % str(e)[:60])
             return 1
-        okk, msg = True, 'no chunks in the file'
-        for ch in (payload if isinstance(payload, list) else [payload]):     # one chunk, or the lead's chunks in order
-            okk, msg = accept_chunk(a.case, ch)
-            if not okk:
-                break
+        okk, msg = accept_search(a.case, payload, a.name_index)
         try:
             os.remove(a.file)                                              # the hand-off file is not kept
         except OSError:
