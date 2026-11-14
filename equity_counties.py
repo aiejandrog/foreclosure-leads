@@ -195,7 +195,7 @@ def _alnum(s):
 
 
 def _sane_person(q):
-    """'LAST, FIRST' / 'LAST FIRST' with two real words. 'ARNOLD, &' and '1471, NW' are not names."""
+    """'LAST, FIRST' / 'LAST FIRST' with two real words. 'EXAMPLE, &' and '12, NW' are not names."""
     parts = [p for p in re.split(r'[,\s]+', str(q or '').upper()) if p]
     return len(parts) >= 2 and all(re.fullmatch(r"[A-Z][A-Z'\-]+", p) for p in parts[:2])
 
