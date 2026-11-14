@@ -139,6 +139,15 @@ def untraceable_owner(clean):
 
 
 # ---- fetch the owner's recorded documents -----------------------------------------------------
+def _real_run():
+    """True only when this run reads and writes the checkout's own files. Tests point LEADS / OUT at a
+    scratch folder; 2026-11-13 one of them put four invented cases into the live equity queue."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return (os.path.abspath(OUT) == os.path.join(here, 'records_liens.json')
+            and os.path.abspath(LEADS) == os.path.join(here, 'leads_final.json')
+            and not os.environ.get('PYTEST_CURRENT_TEST'))
+
+
 FILE_QS = '__models_file__'      # --models-file: the records come from disk, not from the clerk
 _FILE_MODELS = []
 
@@ -2028,6 +2037,8 @@ def _run(a, ap):
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
                     try:                                      # logged for the browser job, never just scrolled past
                         import equity_queue as _EQ
+                        if not _real_run():                   # a test with scratch paths never writes the live queue
+                            raise RuntimeError('not the live checkout')
                         _l, _f = (split_owner(oc) or ('', ''))[:2] if oc else ('', '')
                         _EQ.add(case, oc, _l, _f, folio,
                                 reason='free search missed; paid search refused: ' + str(_SPEND['stopped']),
@@ -2062,6 +2073,15 @@ def _run(a, ap):
             if _jsrc:
                 res['judgment_source'] = _jsrc          # 'court copy': equity_state.card reads it
                 res['judgment_used'] = judg
+            if a.models_file:
+                # read off the county page by the browser job (equity_queue.py): only the rows tied to
+                # this parcel were copied, so like a folio-only read it is never a clear or a priced FACT
+                res['truncated'] = True
+                res['browser_read'] = time.strftime('%Y-%m-%d')
+                _prev = out.get(case) or {}
+                if _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated'):
+                    print(f"  ..  {case:22} {oc:26} a full chain is already saved; the browser read is not written over it")
+                    continue
             if _folio_only:
                 # no name search answered: the folio's own instruments are all we saw, and most newer
                 # mortgages carry no folio. Never a clear, never a priced FACT (equity_state: truncated).
@@ -2137,7 +2157,7 @@ def _run(a, ap):
 
     try:
         import equity_queue as _EQ
-        _n = _EQ.flush()
+        _n = _EQ.flush() if _real_run() else 0
         if _n:
             print(f"  equity queue: {_n} lead(s) the free search missed are queued for the browser job -> {_EQ.qpath()}")
     except Exception:
