@@ -209,6 +209,33 @@ rec('the second address line is never read and a box number in addr is stripped'
     '9999' not in json.dumps(V.CONTACT) and 'PMB' not in json.dumps(V.CONTACT)
     and V.CONTACT['addr'] == '100 Example Blvd Ste 200, Miami, FL 33101')
 
+# ── the Florida registration on the footer ──
+CO = M.SENDER['co']
+rec('registration present: ACTIVE record, same entity name (LLC suffix and punctuation ignored)',
+    V.load_registration({'status': 'ACTIVE', 'matched': 'SAMPLE SOLUTIONS GROUP, L.L.C.', 'doc': 'L00000000000'}, CO)
+    and V.REG['doc'] == 'L00000000000' and V.reg_line() == 'A Florida limited liability company · Document No. L00000000000')
+rec('registration omitted on a name mismatch',
+    not V.load_registration({'status': 'ACTIVE', 'matched': 'Other Solutions Group LLC', 'doc': 'L00000000000'}, CO)
+    and V.REG['doc'] == '' and 'different entity' in V.REG['why'] and V.reg_line() == '')
+rec('registration omitted when the record is not ACTIVE',
+    not V.load_registration({'status': 'INACTIVE', 'matched': CO + ' LLC', 'doc': 'L00000000000'}, CO)
+    and 'not ACTIVE' in V.REG['why'])
+rec('registration omitted when there is no document number or no record',
+    not V.load_registration({'status': 'ACTIVE', 'matched': CO + ' LLC'}, CO) and not V.load_registration({}, CO)
+    and not V.load_registration(None, CO) and V.REG['doc'] == '')
+V.load_contact(SND)
+_SR0 = V.sample_rows(TODAY)
+V.printed_variants(_SR0)
+nofoot = V.piece_html(_SR0[0], TODAY)
+rec('with no registration the footer carries no registration phrase',
+    'limited liability company' not in nofoot and 'Document No.' not in nofoot)
+try:
+    V.check_pieces([nofoot.replace('class="fl">', 'class="fl">Document No. L99999999999 &middot; ', 1)], [_SR0[0]])
+    rec('a registration the record does not back refuses the run', False)
+except V.DataError as e:
+    rec('a registration the record does not back refuses the run', 'registration claim' in str(e))
+V.load_registration({'status': 'ACTIVE', 'matched': CO + ' LLC', 'doc': 'L00000000000'}, CO)
+
 # ── the pieces ──
 SR = V.sample_rows(TODAY)
 V.printed_variants(SR)
@@ -283,16 +310,29 @@ rec('the signature block carries name, company, street address, phone, email and
                              PHONE, 'sample@example.com', 'example.com')) for g in sigs))
 rec('the block phone is the call line phone', all(PHONE in g and 'LLAME AHORA: %s<' % PHONE in t for g, t in zip(sigs, text)))
 fts = [t[t.index('class="ft"'):] for t in text]
-rec('the footer line carries company, address, phone and website, and keeps the Ref',
-    all('Sample Solutions Group &middot; 100 Example Blvd Ste 200, Miami, FL 33101 &middot; %s &middot; example.com' % PHONE in f
+rec('the footer carries company, the Florida registration, address, phone and website, and keeps the Ref',
+    all('Sample Solutions Group &middot; A Florida limited liability company &middot; Document No. L00000000000<br>'
+        '100 Example Blvd Ste 200, Miami, FL 33101 &middot; %s &middot; example.com</span>' % PHONE in f
         and 'Ref. %s' % r['case'] in f for r, f in zip(SR, fts)))
+rec('the footer is English only and has no box designator',
+    not any(re.search(r'compañía|sociedad|PMB|BOX|#\s*\d', f, re.I) for f in fts))
+try:
+    V.check_pieces([pieces[0].replace('Document No. L00000000000', 'Document No. L11111111111')], [SR[0]])
+    rec('a document number that is not the source number refuses the run', False)
+except V.DataError as e:
+    rec('a document number that is not the source number refuses the run', 'registration line' in str(e))
+try:
+    V.check_pieces([pieces[0].replace(' &middot; Document No. L00000000000', '')], [SR[0]])
+    rec('a footer missing the document number refuses the run', False)
+except V.DataError:
+    rec('a footer missing the document number refuses the run', True)
 rec("no box designator on any piece (outside the homeowner's own address)",
     not any(re.search(r'PMB|(?<!&)#\s*\d|9999', re.sub(r'<div class="to">.*?</div>', '', t, flags=re.S)) for t in text))
 V.load_contact({'addr': '', 'email': '', 'web': '', 'title': 'Housing Specialist'})
 bare = V.piece_html(SR[0], TODAY)
 rec('an absent field prints nothing and no placeholder; a title prints only when the data has one',
     'Housing Specialist' in bare and 'example.com' not in bare and 'None' not in bare
-    and 'Sample Solutions Group &middot; %s<' % PHONE in bare and 'Housing Specialist' not in pieces[0]
+    and '<br>%s</span>' % PHONE in bare and 'Housing Specialist' not in pieces[0]
     and '<br>Housing Specialist · Sample Solutions Group</div>' in bare)
 V.load_contact(SND)
 for tag, bad in (('PMB', 'Sam Sample</b>', ), ('# and digits', 'Sam Sample</b>')):

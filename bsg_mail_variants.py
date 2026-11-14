@@ -110,6 +110,43 @@ def load_contact(snd):
     return {k: bool(v) for k, v in CONTACT.items()}
 
 
+# The Florida registration on the footer line. Filled by load_registration() from the Sunbiz verdict
+# entity.status() returns (the record healthcheck's "entity claim" line prints). Never a literal.
+REG = {'doc': '', 'why': 'not loaded'}
+REG_PHRASE = 'A Florida limited liability company'
+
+
+def _entity_key(name):
+    """A company name for comparison: lower case, no punctuation, no LLC suffix."""
+    v = re.sub(r'[^a-z0-9 ]+', ' ', str(name or '').lower())
+    v = re.sub(r'\b(l\s*l\s*c|limited liability company)\b', ' ', v)
+    return re.sub(r'\s+', '', v)
+
+
+def load_registration(st, company):
+    """Set REG from a Sunbiz status record. The document number prints only when the record has
+    one, its status is ACTIVE, and its entity name is the company name on the piece. Anything else
+    leaves REG empty with the reason, and the whole registration phrase is left off."""
+    st = st if isinstance(st, dict) else {}
+    doc = str(st.get('doc') or '').strip()
+    REG['doc'] = ''
+    if not doc:
+        REG['why'] = 'no document number in the Sunbiz record'
+    elif str(st.get('status') or '').strip().upper() != 'ACTIVE':
+        REG['why'] = 'the Sunbiz record is not ACTIVE'
+    elif not _entity_key(company) or _entity_key(st.get('matched') or st.get('query')) != _entity_key(company):
+        REG['why'] = 'the Sunbiz record is for a different entity name'
+    elif not re.match(r'^[A-Za-z0-9]{6,20}$', doc):
+        REG['why'] = 'the document number is not a plain document number'
+    else:
+        REG['doc'], REG['why'] = doc, ''
+    return bool(REG['doc'])
+
+
+def reg_line():
+    return '%s · Document No. %s' % (REG_PHRASE, REG['doc']) if REG['doc'] else ''
+
+
 class DataError(Exception):
     """An input file is missing, half-written or not what it should be. Nothing is built."""
 
@@ -647,7 +684,7 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .src b{color:#333;font-weight:700}
 .cta{margin:.07in 0 .02in;font-weight:900;font-size:16pt;line-height:1.2;color:%(accent)s;text-align:center;letter-spacing:.02em}
 .sig{display:flex;justify-content:space-between;align-items:flex-end;margin-top:.02in}
-.sigline{width:2.9in;height:.38in;border-bottom:1px solid %(ink)s}
+.sigline{width:2.9in;height:.33in;border-bottom:1px solid %(ink)s}
 .sigwho{font-size:10.5pt;line-height:1.3;margin-top:.04in}
 .sigwho b{font-size:11.5pt}
 .sigc{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:9.5pt;line-height:1.38;color:%(dark)s;text-align:right;padding-left:.12in;border-right:3px solid %(accent)s;padding-right:.11in}
@@ -660,8 +697,10 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .qrb small{display:block;font-size:7.5pt;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:%(dark)s}
 .qrb span{display:block;font-size:8pt;line-height:1.3;color:#444}
 .qrb .code{font:700 13pt Consolas,"Courier New",monospace;letter-spacing:.06em;color:%(ink)s}
-.ft span:first-child{overflow:hidden;text-overflow:ellipsis;padding-right:.2in}
-.ft{position:absolute;left:.62in;right:.62in;bottom:.3in;font-size:7.5pt;color:#444;white-space:nowrap;display:flex;justify-content:space-between;border-top:1px solid #dcdde1;padding-top:.045in}
+.ft{position:absolute;left:.62in;right:.62in;bottom:.2in;font-size:7.5pt;line-height:1.3;color:#444;border-top:1px solid #dcdde1;padding-top:.04in;text-align:center;white-space:nowrap}
+.ft .fl{display:block;padding:0 1.25in;overflow:hidden;text-overflow:ellipsis}
+.ft .fr{position:absolute;right:0;bottom:0;color:#666}
+.cover .ft{text-align:left}
 .t1{font-size:10pt;line-height:1.31}
 .t1 .uhead{font-size:15.5pt}
 .t1 .uhead.es{font-size:13.5pt}
@@ -882,8 +921,13 @@ def sig_html(r, with_qr, base_url):
 
 
 def footer_line():
-    """Letterhead-style line across the bottom: company, street address, phone, website."""
-    return ' &middot; '.join(_e(x) for x in (_co(), CONTACT['addr'], M.contact_phone(), CONTACT['web']) if x)
+    """Letterhead-style footer, English on every piece (a letterhead line is not translated):
+    company, the Florida registration when it is substantiated, then address, phone, website.
+    Two short centred lines; one when there is no second line to print."""
+    top = ' &middot; '.join(_e(x) for x in (_co(), REG_PHRASE if REG['doc'] else '',
+                                           ('Document No. %s' % REG['doc']) if REG['doc'] else '') if x)
+    low = ' &middot; '.join(_e(x) for x in (CONTACT['addr'], M.contact_phone(), CONTACT['web']) if x)
+    return '<span class="fl">%s%s</span>' % (top, ('<br>' + low) if low else '')
 
 
 def piece_html(r, today, with_qr=False, base_url='', event=None):
@@ -901,7 +945,7 @@ def piece_html(r, today, with_qr=False, base_url='', event=None):
             '<div class="lh">%s<div class="lhr">%s<br>%s<div class="to">%s<br>%s<br>%s</div></div></div>'
             '%s%s%s'
             '%s</div>'
-            '<div class="ft"><span>%s</span><span>Ref. %s &middot; %s</span></div></section>'
+            '<div class="ft">%s<span class="fr">Ref. %s &middot; %s</span></div></section>'
             % (v.lower(), _e(r['case']), v, _band_pt(band[0], 13.5, .07), _e(band[0]),
                _band_pt(band[1], 10.5, .06), _e(band[1]),
                mark, _e(date_en(today)), _e(date_es(today)),
@@ -948,7 +992,7 @@ def cover_html(rows, today, info):
             '<li>Real stamp. No meter, no label.</li>'
             '<li>Do not change the wording. If someone says stop, tell Alex the same day.</li>'
             '</ul><div class="note">%s</div></div>'
-            '<div class="ft"><span>%s</span><span>Operator sheet</span></div></section>'
+            '<div class="ft">%s<span class="fr">Operator sheet</span></div></section>'
             % (n, _e(date_en(today)), n + 1, trs, n, n, M.STAMP, M.ENVELOPE, M.PAPER, M.PER_LETTER,
                n, cost, n + 1, _e(_co()), '<br>'.join(_e(x) for x in notes), _e(_co())))
 
@@ -983,6 +1027,15 @@ def check_pieces(pieces, rows, never=()):
             ours = ours.replace(own, '')
         if re.search(r'\bPMB\b|\bP\.?\s?O\.?\s+BOX\b', ours, re.I) or re.search(r'(?<!&)#\s*\d', ours):
             why.append('a box designator (PMB or # and digits)')
+        foot = text[text.index('class="ft"'):] if 'class="ft"' in text else ''
+        docs = set(re.findall(r'Document No\. ([A-Za-z0-9]+)', text))
+        if REG['doc']:
+            if docs != {REG['doc']} or _e(REG_PHRASE) not in foot or ('Document No. %s' % REG['doc']) not in foot:
+                why.append('the registration line (missing, or not the number in the Sunbiz record)')
+        elif docs or REG_PHRASE.lower() in text.lower():
+            why.append('a registration claim the Sunbiz record does not back')
+        if re.search(r'\bPMB\b|\bBOX\b|(?<!&)#\s*\d', foot, re.I):
+            why.append('a box designator in the footer')
         if CONTACT['addr'] and text.count(_e(CONTACT['addr'])) < 2:
             why.append('the company address (signature block and footer)')
         if any(s and s.strip() and s.strip().lower() in text.lower() for s in never):
@@ -1059,7 +1112,8 @@ def page_payload(r, today, voice=None):
                    'anything newer.') % fmt(today)),
                _e(head), ol, _e(close), _e(mars(lang)), _e(optout(lang)),
                _e(M.SENDER['name']),
-               ''.join('<br>%s' % _e(x) for x in contact_lines()[0] + contact_lines()[1])))
+               ''.join('<br>%s' % _e(x) for x in contact_lines()[0] + ([reg_line()] if reg_line() else [])
+                       + contact_lines()[1])))
     return out
 
 
@@ -1310,6 +1364,7 @@ def _signer_from(data_dir=None):
             M.SENDER['name'] = s['name'].strip()
         if not M.SENDER.get('phone') and (s.get('phone') or '').strip():
             M.SENDER['phone'] = s['phone'].strip()
+        load_registration(entity.status(), M.SENDER.get('co'))
         return load_contact(s)
     except Exception:
         return {}
@@ -1409,6 +1464,7 @@ def run(a):
         M.SENDER['phone'] = a.signer_phone or '(305) 555-0100'
         present = load_contact({'addr': '100 Example Blvd Ste 200, Miami, FL 33101',
                                 'email': 'sample@example.com', 'web': 'example.com'})
+        load_registration({'status': 'ACTIVE', 'matched': _co() + ' LLC', 'doc': 'L00000000000'}, _co())
     else:
         present = _signer_from(data_dir if a.data_dir else None)
         if a.signer_name:
@@ -1496,6 +1552,8 @@ def run(a):
         print('  dropped: ' + (', '.join('%s %d' % (k, v) for k, v in sorted(drops.items()) if v) or 'none'))
     print('  postage estimate: $%.2f at $%.2f a piece' % (len(rows) * M.PER_LETTER, M.PER_LETTER))
     print('  QR codes: %s' % ('printed' if a.with_qr else 'off (phone number on every piece)'))
+    print('  Florida registration on the footer: %s' % (
+        'printed on %d of %d' % (len(rows), len(rows)) if REG['doc'] else 'omitted (%s)' % REG['why']))
     print('  contact block fields present in the sender data: ' + ', '.join(
         '%s %s' % (k, 'yes' if present.get(k) else 'no') for k in ('addr', 'email', 'web', 'title')))
     print('wrote', p_html)
