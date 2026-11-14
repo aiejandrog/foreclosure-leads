@@ -6649,6 +6649,11 @@ function render(){
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
+  /* P is not empty here. `i` past its end means every lead left was stepped past with Next (which
+     writes nothing) or the pool shrank behind him: they are all still due, so go back to the first
+     one. "Queue clear" over a pool that still held leads stopped the dialing (F-site-02, 2026-11-13).
+     The branch below is kept as a backstop and is not reached while this line stands. */
+  if(i>=P.length){ i=0; try{ toast('Back to the first of '+P.length+' lead'+(P.length===1?'':'s')+' still in this list', {ms:2600}); }catch(e){} }
   if(i>=P.length){ _posSave(P, i); try{ WFT.pause('empty_queue'); }catch(e){}
     $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
       +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div><div class="sub">'
