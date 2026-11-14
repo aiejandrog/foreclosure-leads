@@ -45,7 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEEP_DAYS = 7          # queue files
 RETRY_DAYS = 14        # a lead the browser also missed is not queued again for this long
 LOG_LINES = 400
-DAILY_LIMIT = 25       # the worker's default batch: about a minute a lead in a real browser
+DAILY_LIMIT = 8        # the worker's default batch: a few minutes a lead when the rows are read off the page
 
 _PENDING = []          # filled by add() during one records_liens run, written by flush()
 
@@ -94,7 +94,7 @@ def _log(event, **counts):
 
 
 def _counts(q):
-    c = {'pending': 0, 'token': 0, 'done': 0, 'failed': 0, 'miss': 0}
+    c = {'pending': 0, 'reading': 0, 'token': 0, 'rows': 0, 'done': 0, 'failed': 0, 'miss': 0}
     for it in (q or {}).get('items', []):
         c[it.get('status', 'pending')] = c.get(it.get('status', 'pending'), 0) + 1
     c['total'] = len((q or {}).get('items', []))
@@ -219,7 +219,8 @@ def _set(case, **kw):
 def cmd_next(limit):
     q = _read(qpath(), {'items': []})
     rows = [{'case': it['case'], 'last': it['last'], 'first': it['first'], 'owner': it['owner']}
-            for it in q['items'] if it.get('status') == 'pending' and it.get('kind') != 'entity'][:limit]
+            for it in q['items'] if it.get('status') == 'pending' and it.get('kind') != 'entity'
+            and _norm_folio(it.get('folio'))][:limit]
     print(json.dumps(rows, indent=1))
 
 
@@ -250,15 +251,125 @@ def cmd_miss(case, why):
     return 0
 
 
+# ---- browser hand-off: Claude reads the search results off the page ------------------------------
+# 2026-11-13 (Alejandro chose "Claude reads the results off the page"). Measured the same day:
+#   * the browser tool will not return the county's search token (blocked), and returns only about
+#     a thousand characters per call;
+#   * the county page may not post to this computer (its Content-Security-Policy is default-src self);
+#   * a scripted Chrome window gets no token at all.
+# So the worker runs the search by hand in the real Chrome and runs the script `js` prints. That
+# script reads the results the page already loaded, keeps the rows that can belong to this parcel
+# (this folio, or no folio: the scraper's own folio_scope rule), trims them to the twelve fields the
+# parser reads, and returns them a few rows at a time with a checksum. `rows` refuses a chunk whose
+# checksum does not match, so a mis-copied digit cannot become a mortgage balance. `finish` then
+# runs the scraper's own analyze() on the stored rows (records_liens.py --models-file).
+FIELDS = ('doC_TYPE', 'foliO_NUMBER', 'seconD_PARTY', 'firsT_PARTY', 'reC_PAGE', 'reC_BOOK', 'reC_DATE',
+          'cfN_MASTER_ID', 'oriG_REC_PAGE', 'oriG_REC_BOOK', 'subdiV_NAME', 'reC_BOOKPAGE')
+CHUNK = 5              # rows per call: the browser tool cuts long answers
+MAX_ROWS = 90          # more than this after scoping to the parcel is not a job for hand-copying
+MOD = 1000000007
+
+JS = r"""const FOLIO = %(folio)s, K = %(chunk)d, F = %(fields)s, N = %(size)d, MAXR = %(maxr)d, MOD = %(mod)d;
+const q = new URLSearchParams(location.search).get('qs'); let out;
+if(!q){ out = JSON.stringify({err: 'no search results on this page: run the name search first'}); }
+else {
+  if(!window.__eqRows){
+    const j = await fetch('/officialrecords/api/SearchResults/getStandardRecords?qs=' + encodeURIComponent(q)).then(r => r.json());
+    const nf = v => String(v == null ? '' : v).replace(/\D/g, '').replace(/^0+/, '');
+    const all = j.recordingModels || [];
+    window.__eqAll = all.length;
+    window.__eqOnParcel = all.filter(r => nf(r.foliO_NUMBER) === FOLIO).length;
+    window.__eqRows = all.filter(r => !nf(r.foliO_NUMBER) || nf(r.foliO_NUMBER) === FOLIO)
+      .map(r => F.map(k => { const v = r[k]; return (typeof v === 'string') ? v.slice(0, 60) : (v == null ? null : v); }));
+  }
+  const rows = window.__eqRows, of = Math.ceil(rows.length / N);
+  if(rows.length > MAXR){ out = JSON.stringify({err: 'too many rows', scoped: rows.length, all: window.__eqAll}); }
+  else {
+    const part = rows.slice(K * N, K * N + N);
+    let s = 0; part.forEach(r => { const c = r.map(v => v == null ? '' : String(v)).join('|'); for(let i = 0; i < c.length; i++) s = (s * 31 + c.charCodeAt(i)) %% MOD; });
+    out = JSON.stringify({k: K, of: of, all: window.__eqAll, onParcel: window.__eqOnParcel, scoped: rows.length, sum: s, rows: part});
+  }
+}
+out"""
+
+
+def _norm_folio(s):
+    return ''.join(ch for ch in str(s or '') if ch.isdigit()).lstrip('0')
+
+
+def rows_path(case):
+    d = os.path.join(qdir(), 'rows')
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, ''.join(ch for ch in case if ch.isalnum() or ch == '-') + '.json')
+
+
+def checksum(rows):
+    s = 0
+    for r in rows:
+        c = '|'.join('' if v is None else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v)) for v in r)
+        for ch in c:
+            s = (s * 31 + ord(ch)) % MOD
+    return s
+
+
+def js_for(case, chunk=0):
+    q = _read(qpath(), {'items': []})
+    it = next((x for x in q['items'] if x['case'] == case), None)
+    if not it:
+        return None
+    return JS % {'folio': json.dumps(_norm_folio(it.get('folio'))), 'chunk': int(chunk),
+                 'fields': json.dumps(list(FIELDS)), 'size': CHUNK, 'maxr': MAX_ROWS, 'mod': MOD}
+
+
+def accept_chunk(case, payload):
+    """Store one chunk the page returned. -> (ok, message). Chunks arrive in order, 0 first."""
+    q = _read(qpath(), {'items': []})
+    it = next((x for x in q['items'] if x['case'] == case), None)
+    if not it or it.get('kind') == 'entity' or it.get('status') not in ('pending', 'reading'):
+        return False, 'case is not waiting on today\'s list'
+    if not _norm_folio(it.get('folio')):
+        return False, 'this lead has no folio, so its rows cannot be tied to the parcel'
+    try:
+        k, of, rows = int(payload['k']), int(payload['of']), payload['rows']
+        want = int(payload['sum'])
+    except Exception:
+        return False, 'chunk is missing k / of / sum / rows'
+    if not isinstance(rows, list) or len(rows) > CHUNK or any(
+            not isinstance(r, list) or len(r) != len(FIELDS) for r in rows):
+        return False, 'rows are not %d-field lists of at most %d' % (len(FIELDS), CHUNK)
+    if checksum(rows) != want:
+        return False, 'checksum mismatch: the rows were not copied exactly. Run the script for chunk %d again.' % k
+    path = rows_path(case)
+    cur = _read(path, None) if k else None
+    have = (cur or {}).get('chunks', 0)
+    if k != have:
+        return False, 'expected chunk %d next, got %d' % (have, k)
+    models = (cur or {}).get('recordingModels', []) + [dict(zip(FIELDS, r)) for r in rows]
+    if len(models) > MAX_ROWS:
+        return False, 'more than %d rows' % MAX_ROWS
+    done = (k + 1) >= max(1, of)
+    _write(path, {'case': case, 'chunks': k + 1, 'of': of, 'complete': done,
+                  'on_parcel': int(payload.get('onParcel') or 0), 'recordingModels': models})
+    _set(case, status='rows' if done else 'reading', rows=len(models))
+    return True, ('all %d row(s) stored' % len(models)) if done else ('chunk %d of %d stored; run chunk %d next' % (k + 1, of, k + 1))
+
+
 def cmd_finish():
     q = _read(qpath(), None)
     if not q:
         print('nothing queued today')
         clean()
         return 0
-    todo = [it for it in q['items'] if it.get('status') == 'token']
+    for it in q['items']:
+        if it.get('status') == 'reading':            # a half-copied lead is not read: it goes back to waiting
+            it['status'] = 'pending'
+    _write(qpath(), q)
+    todo = [it for it in q['items'] if it.get('status') in ('token', 'rows')]
     for it in todo:
-        p = subprocess.run([sys.executable, '-u', 'records_liens.py', '--case', it['case'], '--cached-only'],
+        argv = [sys.executable, '-u', 'records_liens.py', '--case', it['case'], '--cached-only']
+        if it.get('status') == 'rows':
+            argv += ['--models-file', rows_path(it['case'])]
+        p = subprocess.run(argv,
                            cwd=HERE, capture_output=True, text=True, timeout=600,
                            encoding='utf-8', errors='replace')
         # the scraper prints "  ok  <case>" only after it wrote the chain to records_liens.json
@@ -267,6 +378,8 @@ def cmd_finish():
              finished_at=dt.datetime.now().isoformat(timespec='seconds'))
         time.sleep(0.5)
     q = _read(qpath(), q)
+    import shutil
+    shutil.rmtree(os.path.join(qdir(), 'rows'), ignore_errors=True)      # raw rows are not kept once read
     removed = clean()
     c = _counts(q)
     _log('worker_finish', old_files_removed=removed, **c)
@@ -277,7 +390,9 @@ def cmd_finish():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('cmd', choices=['status', 'next', 'token', 'miss', 'finish', 'clean'])
+    ap.add_argument('cmd', choices=['status', 'next', 'js', 'rows', 'token', 'miss', 'finish', 'clean'])
+    ap.add_argument('--chunk', type=int, default=0)
+    ap.add_argument('--file', default='')
     ap.add_argument('--case', default='')
     ap.add_argument('--qs', default='')
     ap.add_argument('--why', default='')
@@ -295,6 +410,19 @@ def main():
         return cmd_miss(a.case, a.why)
     if a.cmd == 'finish':
         return cmd_finish()
+    if a.cmd == 'js':
+        s = js_for(a.case, a.chunk)
+        print(s if s else 'refused: unknown case for today')
+        return 0 if s else 1
+    if a.cmd == 'rows':
+        try:
+            payload = json.load(open(a.file, encoding='utf-8'))
+        except Exception as e:
+            print('refused: could not read --file as JSON (%s)' % str(e)[:60])
+            return 1
+        okk, msg = accept_chunk(a.case, payload)
+        print(('ok: ' if okk else 'refused: ') + msg)
+        return 0 if okk else 1
     print('removed %d old file(s)' % clean())
     return 0
 

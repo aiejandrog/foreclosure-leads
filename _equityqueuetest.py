@@ -50,18 +50,20 @@ rec('each row carries the case, the name parts, the folio, a reason and status p
     and all(i['status'] == 'pending' and i['last'] and i['folio'] and i['reason'] for i in q['items']), q)
 
 Q.add('2099-000001-CA-01', 'JANE EXAMPLE', 'EXAMPLE', 'JANE')
-Q.add('2099-000003-CA-01', 'ANA TESTER', 'TESTER', 'ANA')
+Q.add('2099-000003-CA-01', 'ANA TESTER', 'TESTER', 'ANA', '0100000000030')
+Q.add('2099-000004-CA-01', 'NO FOLIO', 'FOLIO', 'NO')
 Q.add('2099-000009-CA-01', 'EXAMPLE BANK N A', 'EXAMPLE BANK N A', '', kind='entity')
-rec('a second run the same day adds only the new leads', Q.flush() == 2
-    and len(json.load(open(Q.qpath(), encoding='utf-8'))['items']) == 4)
+rec('a second run the same day adds only the new leads', Q.flush() == 3
+    and len(json.load(open(Q.qpath(), encoding='utf-8'))['items']) == 5)
 import contextlib  # noqa: E402
 _b = io.StringIO()
 with contextlib.redirect_stdout(_b):
     Q.cmd_next(25)
 _nx = [x['case'] for x in json.loads(_b.getvalue())]
 rec('the browser job is never handed a bank/LLC/association row', '2099-000009-CA-01' not in _nx and len(_nx) == 3, _nx)
+rec('a lead with no folio is not handed out either: its rows could not be tied to the parcel', '2099-000004-CA-01' not in _nx)
 _c = Q._counts(json.load(open(Q.qpath(), encoding='utf-8')))
-rec('entity rows are counted apart from the ones waiting for the browser', _c['entity'] == 1 and _c['pending'] == 3, _c)
+rec('entity rows are counted apart from the ones waiting for the browser', _c['entity'] == 1 and _c['pending'] == 4, _c)
 
 # ---- worker side
 rec('token for a case not on today\'s list is refused', Q.cmd_token('2099-999999-CA-01', 'x' * 40) == 1)
@@ -70,13 +72,48 @@ rec('a token is stored in the scraper\'s own cache under the owner name', Q.cmd_
     and json.load(open(Q.P.records_qs(), encoding='utf-8')).get('JANE EXAMPLE') == 'q' * 60)
 rec('a browser miss is recorded', Q.cmd_miss('2099-000002-CA-01', 'no results for that name') == 0)
 st = {i['case']: i['status'] for i in json.load(open(Q.qpath(), encoding='utf-8'))['items']}
-st.pop('2099-000009-CA-01', None)
+st.pop('2099-000009-CA-01', None); st.pop('2099-000004-CA-01', None)
 rec('statuses moved: token, miss, pending', st == {'2099-000001-CA-01': 'token', '2099-000002-CA-01': 'miss',
                                                     '2099-000003-CA-01': 'pending'}, st)
 
 Q.add('2099-000002-CA-01', 'JOHN SAMPLE', 'SAMPLE', 'JOHN')
 os.remove(Q.qpath())
 rec('a lead the browser missed is not queued again the next run', Q.flush() == 0)
+
+# ---- reading rows off the page, in checksummed chunks
+Q.add('2099-000005-CA-01', 'RITA READER', 'READER', 'RITA', '01-0000-000-0050')
+Q.flush()
+js = Q.js_for('2099-000005-CA-01', 1)
+rec('the page script is built for the lead: its folio, the chunk asked for, the twelve fields, no token returned',
+    js and 'const FOLIO = "100000000050", K = 1,' in js and 'foliO_NUMBER' in js and "qs:" not in js
+    and 'out = JSON.stringify({k: K' in js, (js or '')[:200])
+rec('no script for a case that is not on today\'s list', Q.js_for('2099-999999-CA-01') is None)
+
+
+def row(i, folio=100000000050):
+    return ['MORTGAGE - MOR', folio, 'EXAMPLE BANK NA', 'READER RITA', 100 + i, 30000 + i,
+            '2019-0%d-01T00:00:00' % (i % 9 + 1), 20190000 + i, 0, 0, 'EXAMPLE SUB', '%d/%d' % (30000 + i, 100 + i)]
+
+
+c0 = [row(i) for i in range(Q.CHUNK)]
+c1 = [row(i) for i in range(Q.CHUNK, Q.CHUNK + 2)]
+bad_rows = [list(r) for r in c0]; bad_rows[0][5] += 1                 # one digit of a book number copied wrong
+rec('a chunk whose rows do not match the page checksum is refused',
+    Q.accept_chunk('2099-000005-CA-01', {'k': 0, 'of': 2, 'sum': Q.checksum(c0), 'rows': bad_rows})[0] is False)
+rec('chunk 1 before chunk 0 is refused',
+    Q.accept_chunk('2099-000005-CA-01', {'k': 1, 'of': 2, 'sum': Q.checksum(c1), 'rows': c1})[0] is False)
+rec('chunk 0 is stored and the lead reads as half done',
+    Q.accept_chunk('2099-000005-CA-01', {'k': 0, 'of': 2, 'sum': Q.checksum(c0), 'rows': c0, 'onParcel': 7})[0] is True
+    and Q._counts(json.load(open(Q.qpath(), encoding='utf-8')))['reading'] == 1)
+rec('the last chunk completes it: every row stored under the parser\'s own field names',
+    Q.accept_chunk('2099-000005-CA-01', {'k': 1, 'of': 2, 'sum': Q.checksum(c1), 'rows': c1})[0] is True
+    and len(json.load(open(Q.rows_path('2099-000005-CA-01'), encoding='utf-8'))['recordingModels']) == Q.CHUNK + 2
+    and json.load(open(Q.rows_path('2099-000005-CA-01'), encoding='utf-8'))['recordingModels'][0]['reC_BOOK'] == 30000)
+rec('rows for a bank-named lead or a lead with no folio are refused',
+    Q.accept_chunk('2099-000009-CA-01', {'k': 0, 'of': 1, 'sum': Q.checksum(c1), 'rows': c1})[0] is False
+    and Q.accept_chunk('2099-000004-CA-01', {'k': 0, 'of': 1, 'sum': Q.checksum(c1), 'rows': c1})[0] is False)
+rec('the python checksum is the one the page script computes (31-multiplier over the joined values)',
+    Q.checksum([['A', 1, None]]) == ((((ord('A') * 31 + ord('|')) * 31 + ord('1')) * 31 + ord('|')) % Q.MOD))
 
 # ---- finish, with the scraper stubbed
 Q.add('2099-000001-CA-01', 'JANE EXAMPLE', 'EXAMPLE', 'JANE')
@@ -95,17 +132,20 @@ class _P:
 def fake_run(argv, **k):
     calls.append(argv)
     case = argv[argv.index('--case') + 1]
-    return _P(0, '  ok  %s   X   1 open mtg\n' % case) if case.endswith('001-CA-01') else _P(0, 'DONE: 0 traced\n')
+    return _P(0, '  ok  %s   X   1 open mtg\n' % case) if case.endswith(('001-CA-01', '005-CA-01')) else _P(0, 'DONE: 0 traced\n')
 
 
 Q.subprocess.run = fake_run
 Q.time.sleep = lambda s: None
 rec('finish exits 0', Q.cmd_finish() == 0)
-rec('finish reads each token through the scraper\'s free cached-only path, one case at a time',
-    len(calls) == 2 and all('--cached-only' in c and 'records_liens.py' in c for c in calls), calls)
+rec('finish reads each lead through the scraper\'s free cached-only path, one case at a time',
+    len(calls) == 3 and all('--cached-only' in c and 'records_liens.py' in c for c in calls), calls)
+rec('a lead whose rows came off the page is analyzed from that file',
+    sum(1 for c in calls if '--models-file' in c) == 1, calls)
+rec('the raw rows are deleted once read', not os.path.isdir(os.path.join(Q.qdir(), 'rows')))
 st = {i['case']: i['status'] for i in json.load(open(Q.qpath(), encoding='utf-8'))['items']}
 rec('a chain the scraper saved is done; a token that read nothing is failed, not done',
-    st == {'2099-000001-CA-01': 'done', '2099-000003-CA-01': 'failed'}, st)
+    st.get('2099-000001-CA-01') == 'done' and st.get('2099-000003-CA-01') == 'failed' and st.get('2099-000005-CA-01') == 'done', st)
 
 # ---- self-cleaning
 old = (dt.date.today() - dt.timedelta(days=Q.KEEP_DAYS + 3)).isoformat()
