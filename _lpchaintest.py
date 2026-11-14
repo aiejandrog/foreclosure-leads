@@ -123,8 +123,12 @@ rec('phones exit 1 is NOT benign', 1 not in ok_phones,
 print('\n-- a machine with no loadable skip-trace key skips the step instead of dying on it --')
 rec('_trace_provider_ready() exists', 'def _trace_provider_ready' in SRC)
 rec('the phones step is guarded by it',
-    re.search(r'_provider = _trace_provider_ready\(\)\s*\n\s*if _provider:\s*\n\s*run\(', SRC)
+    re.search(r'_provider = _trace_provider_ready\(\)\s*\n[\s\S]{0,900}?\n\s*elif _provider:\s*\n\s*run\(', SRC)
     is not None, 'an unloadable key is a precondition, not a failure')
+# 2026-11-13 $0 rule: the paid trace runs only with DEALFLOW_PAID=1, and that skip is not a degradation
+rec('the phones step is off unless DEALFLOW_PAID=1, and that skip is not counted as degraded',
+    re.search(r"if os\.environ\.get\('DEALFLOW_PAID'\) != '1':\s*\n(?:\s*#.*\n)+\s*print\(", SRC) is not None
+    and SRC.count("DEGRADED.append('PHONES (LP fast lane)") == 1)
 rec('and the skip is still reported', re.search(r'else:\s*\n\s*DEGRADED\.append', SRC) is not None,
     'a silently skipped step is how this class of bug hides')
 
