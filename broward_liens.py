@@ -808,6 +808,122 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
             'case_type_unknown': (not ftype and bool(lc)) or None}
 
 
+# ---- equity queue (2026-11-13): the real-browser read of the WHOLE name search --------------------
+# equity_queue.py / equity_counties.py. A scheduled Claude session runs the name search in the real
+# Chrome and copies every row of every page; `--docs-file` analyzes that copy with analyze() above.
+# The nightly curl read stops at one 400-row page, and a lead whose owner is not known yet was never
+# searched at all: both now go to the queue instead of scrolling past.
+BROWSER_KEEP_DAYS = 14        # a lead the browser read is not queued again for this long
+
+
+def _queue_ok():
+    try:
+        import equity_counties as _EC
+        return _EC.live_ok(__file__, OUT, LEADS, 'broward_liens.json', 'broward_leads.json')
+    except Exception:
+        return False
+
+
+def _browser_fresh(h, today=None):
+    """A whole-search browser read saved recently: not queued again, and not written over by a
+    narrower read."""
+    h = h or {}
+    if not h.get('browser_read') or h.get('truncated'):
+        return False
+    try:
+        d = datetime.date.fromisoformat(str(h['browser_read']))
+    except ValueError:
+        return False
+    return ((today or datetime.date.today()) - d).days <= BROWSER_KEEP_DAYS
+
+
+def _queue_browser(r, reason, out=None):
+    """Queue one lead for the browser job. Never raises, never writes outside the engine checkout."""
+    try:
+        h = (out or {}).get(r.get('case') or '') or {}
+        if h.get('browser_read') and _browser_fresh(dict(h, truncated=False)):
+            return False                                   # read by the browser recently, whatever it found
+        import equity_counties as _EC
+        return _EC.queue_lead('BROWARD', r, reason)
+    except Exception:
+        return False
+
+
+def _queue_flush():
+    try:
+        import equity_queue as _EQ
+        n = _EQ.flush()
+        if n:
+            print(f"  equity queue: {n} Broward lead(s) queued for the browser job -> {_EQ.qpath()}")
+        return n
+    except Exception:
+        return 0
+
+
+def queue_candidates(leads, out):
+    """(lead, reason) for every Broward lead only the browser can read: the owner is not known yet (the
+    case's defendants are searched), or the saved chain was cut at the 400-row page."""
+    for r in leads:
+        case = r.get('case', '') or ''
+        owner = r.get('owners', '') or ''
+        if not case:
+            continue
+        h = out.get(case) or {}
+        if owner.startswith('(owner via') or not owner:
+            yield r, 'owner not known yet: searched by the people the case names'
+        elif h.get('truncated') and not h.get('browser_read'):
+            yield r, 'the nightly read was cut at 400 rows: the browser reads every page'
+
+
+def from_docs_file(a, leads, out):
+    """--docs-file: analyze a whole-search copy made in the real browser. No network unless the
+    recorder's link pages are read (the same free read the nightly makes). -> exit code."""
+    doc = json.load(open(a.docs_file, encoding='utf-8')) or {}
+    r = next((x for x in leads if (x.get('case') or '') == a.case), None)
+    if r is None:
+        print(f"  --  {a.case:18} not among the Broward leads; nothing written")
+        return 3
+    docs = []
+    for p in doc.get('parts') or []:
+        docs += p.get('rows') or []
+    owner = r.get('owners', '') or ''
+    assumed = str(doc.get('owner_as') or '')
+    if assumed:
+        owner = assumed                                    # owner not known: read as the defendant searched
+    elif owner.startswith('(owner via') or not _lf(owner)[0]:
+        print(f"  --  {a.case:18} no owner to read the chain as; nothing written")
+        return 3
+    full = bool(doc.get('full')) and not assumed
+    links, complete = {}, False
+    if not a.no_links and docs:
+        try:
+            if start_session():
+                cache = _load_links()
+                links, complete = link_chain(docs, owner, a.case, cache, run_budget=a.link_pages,
+                                             run_seconds=a.link_seconds)
+                _save_links(cache)
+        except Exception:
+            links, complete = {}, False
+    res = analyze(docs, owner, _num(r.get('judg')), ftype=_fc_type(a.case), lead_case=a.case, links=links)
+    mark_truncated(res, not full)                          # anything short of the whole search is never 'ok'
+    res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = r.get('owners', '') or ''
+    res['pv'] = PAIRING_VERSION if complete else 1
+    res['browser_read'] = time.strftime('%Y-%m-%d')
+    res['searched_as'] = str(doc.get('searched') or '')
+    res['n_raw'] = len(docs)
+    if assumed:
+        res['owner_assumed'] = 'a defendant: the owner is not known yet'
+    prev = out.get(a.case) or {}
+    if prev.get('conf') in ('ok', 'low') and not prev.get('truncated') and (res.get('truncated') or res['conf'] == 'none'):
+        print(f"  ..  {a.case:18} a full chain is already saved; the browser read is not written over it")
+        return 0
+    out[a.case] = res
+    json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+    print(f"  ok  {a.case:18} {res['nrec']:>3} recs of {len(docs)} raw, {res['open_count']} open mtg, conf {res['conf']}"
+          f"{'' if full else ' (not the whole search: truncated)'}")
+    return 0
+
+
 def _search_name(lead):
     """Build a 'LAST, FIRST' AcclaimWeb query from the lead's raw owner string. Use the FIRST given name only
     (drop the middle initial): AcclaimWeb narrows on the middle initial and misses records indexed without it
@@ -870,7 +986,21 @@ def main():
                     help='details pages this run may request in total (past it: name-only, queued for relink)')
     ap.add_argument('--link-seconds', type=int, default=LINK_RUN_SECONDS,
                     help='wall seconds this run may spend reading details pages (same fallback past it)')
+    ap.add_argument('--docs-file', default='',
+                    help='with --case: analyze a whole-search copy made in the real browser '
+                         '(equity_queue.py) instead of searching. No captcha, no spend.')
+    ap.add_argument('--queue-only', action='store_true',
+                    help='search nothing: put the leads only the browser can read on the equity queue')
+    ap.add_argument('--out', default='', help='with --docs-file: write here instead of broward_liens.json')
+    ap.add_argument('--leads', default='', help='with --docs-file: read the leads from here')
     a = ap.parse_args()
+    global OUT, LEADS
+    if a.docs_file:
+        if not a.case:
+            ap.error('--docs-file needs --case')
+        OUT, LEADS = (a.out or OUT), (a.leads or LEADS)
+    elif a.out or a.leads:
+        ap.error('--out / --leads only go with --docs-file')
 
     leads = json.load(open(LEADS, encoding='utf-8'))
     # LIS PENDENS leads live in their own file and were NEVER traced (2026-08-22). Broward fresh
@@ -890,6 +1020,18 @@ def main():
         except Exception:
             pass
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
+    if a.docs_file:
+        return from_docs_file(a, leads, out)
+    _qok = _queue_ok()
+    if _qok and not a.case:
+        for _r, _why in queue_candidates(leads, out):
+            _queue_browser(_r, _why, out)
+    if a.queue_only:
+        if not _qok:
+            print('  equity queue: not the engine checkout (or a scratch run); nothing queued')
+        else:
+            _queue_flush()
+        return 0
 
     picked, retries, relinks, skipped = [], [], [], {}
     for r in leads:
@@ -945,6 +1087,8 @@ def main():
         print(f"  skipped {len(names)} lead(s) — {why}: "
               + ', '.join(n[:34] for n in uniq[:3]) + (' ...' if len(uniq) > 3 else ''))
     if not picked:
+        if _qok:
+            _queue_flush()
         return
     # kimi: Cloudflare's block here is probabilistic and sticky for minutes once tripped — a single
     # attempt aborts the whole run (and the daily chain) for no reason. Retry with backoff ~6 min.
@@ -958,6 +1102,10 @@ def main():
         time.sleep(wait)
     if not sess:
         print("ABORT: could not establish an AcclaimWeb session (Cloudflare block / site down). Try again later.")
+        if _qok:
+            for _r in picked:                              # nothing was read: the browser job gets them
+                _queue_browser(_r, 'not read: no AcclaimWeb session (blocked)', out)
+            _queue_flush()
         # EXIT NON-ZERO (2026-08-26). This used to `return`, so the process exited 0 after six
         # backoff retries (20+40+60+80+100 = 300s) having traced NOTHING. A caller cannot tell that
         # apart from a clean run with no new leads, and one caller in particular has been fooled by
@@ -980,6 +1128,8 @@ def main():
         if docs is None:
             blocked += 1
             print(f"  --  {case:18} {owner[:26]:26} (blocked / no data)")
+            if _qok:
+                _queue_browser(r, 'not read: the search was blocked', out)
             if blocked >= 5 and blocked == done + blocked:          # session died early -> re-establish once
                 sess = start_session() or sess
             time.sleep(0.8); continue
@@ -989,6 +1139,12 @@ def main():
                                            run_seconds=a.link_seconds))
         res = analyze(docs, owner, judg, ftype=ftype, lead_case=case, links=links)
         mark_truncated(res, search_docs.last_truncated)
+        if _browser_fresh(out.get(case)) and (res.get('truncated') or res['conf'] == 'none'):
+            # the browser copied this name's whole search; a 400-row or empty curl read is narrower
+            print(f"  ..  {case:18} {owner[:26]:26} whole-search browser read kept; this read is narrower")
+            continue
+        if res.get('truncated') and _qok:
+            _queue_browser(r, 'the nightly read was cut at 400 rows: the browser reads every page', out)
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
         res['pv'] = PAIRING_VERSION if complete else 1      # an incomplete link read stays queued for relink
         out[case] = res
@@ -1016,6 +1172,8 @@ def main():
               f"traced name-only and are queued for relink.")
     elif not a.no_links:
         print(f"  links: {_link_spent[0]} details page(s) read in {_link_clock[0]:.0f}s")
+    if _qok:
+        _queue_flush()
     print(f"\nDONE: {done} traced ({hits} confident surviving-2nd, {blocked} blocked). -> broward_liens.json")
 
 
