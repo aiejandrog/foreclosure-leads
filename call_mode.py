@@ -6575,7 +6575,16 @@ function _posRestore(){
   i = 0;   // every lead left was stepped past today: show them, never a false "Queue clear"
   return true;
 }
-function _navHasBack(){ for(var k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane) return true; return false; }
+/* Is there a lead Back can actually reach? (2026-11-13, F-site-03) This used to say yes for any trail
+   entry in this lane, so after two outcomes the button sat at full strength while every lead behind
+   him had already left pool(): a tap only toasted. Same test as _navSeek, read-only:
+   an entry of this lane, other than the lead on screen, that is still in a fresh pool(). */
+function _navHasBack(){
+  var P=pool(), here=(cur && i<P.length) ? cur.c : null, at={}, k;
+  for(k=0;k<P.length;k++) at[P[k].c]=1;
+  for(k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane && _NAVB[k].c!==here && at[_NAVB[k].c]) return true;
+  return false;
+}
 function navBack(){
   _qvRestore();
   if(LKFROM && cur && cur.c === LKFROM){ return _lkReturn(); }
@@ -8083,7 +8092,7 @@ function screenRegistry(){
   var mine = 0, team = 0, me = caller();
   rows.forEach(function(x){ if(x.by && me && x.by !== me) team++; else mine++; });
   var list = rows.length ? rows.slice(0, 300).map(function(x){
-    return '<div class="regrow">'
+    return '<div class="regrow" data-regc="' + esc(x.c) + '" role="button" tabindex="0" style="cursor:pointer">'
       + '<div class="regtop"><b>' + esc(x.who || x.c) + '</b>'
       + '<span class="regago">' + agoTxt(x.ts) + '</span></div>'
       + (x.addr ? '<div class="regsub">' + esc(x.addr) + '</div>' : '')
@@ -8106,6 +8115,11 @@ function screenRegistry(){
     +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
   $('regback').onclick = function(){ SCREEN='lead'; render(); };
+  /* A row opens that case's read-only record (2026-11-13, F-site-03). Nothing is dialled, written or
+     re-queued from there, and its Back returns here. */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-regc]'), function(b){
+    b.onclick = function(){ screenRecord(b.getAttribute('data-regc'), 'reg'); };
+  });
 }
 /* EXPORT TODAY'S CALL STATS (2026-10-15). Read-only screen: counts from notes[].dials[], this seat
    only (same `by` filter as sessStrip), copy-paste text or a CSV download. Reachable from the top
@@ -10265,7 +10279,7 @@ function screenRecord(c, back){
     + '<button class="ghost" id="recback" style="margin-top:8px">&larr; Back</button>'
     + '</div><div class="sheetpad"></div>';
   $('recai').onclick = function(){ _copyOut(prospectPrompt(c), 'Copied: paste it into Claude or another AI'); };
-  $('recback').onclick = function(){ if(_RECBACK === 'routes') screenRoutes(); else { SCREEN = 'lead'; render(); } };
+  $('recback').onclick = function(){ if(_RECBACK === 'routes') screenRoutes(); else if(_RECBACK === 'reg') screenRegistry(); else { SCREEN = 'lead'; render(); } };
 }
 function _afterMail(r){
   if(!MAIL_OK) return '';
