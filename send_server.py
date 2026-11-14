@@ -51,6 +51,10 @@ import socket
 import ssl
 import sys
 import threading
+
+# Pages that may call the bridge from a browser (see Handler._auth). "null" is a local file page.
+_ALLOWED_ORIGINS = ('https://aiejandrog.github.io', 'null')
+_ATTACH_EXT = ('.pdf', '.png', '.jpg', '.jpeg', '.docx')
 import time
 import urllib.error
 import urllib.request
@@ -1995,6 +1999,21 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             ok, dev, why = False, '', 'the device-key check could not run (%s)' % str(e)[:80]
         self._device = dev
+        # WHO IS ASKING (2026-11-14 audit). A browser stamps every cross-site request with the page's
+        # Origin, and a page cannot forge it. Before this, any web page open in the operator's browser
+        # could POST /send (the loopback caller needs no key and CORS is *). Only our own pages may:
+        # the published site, and a local file page (the planner opens one; its Origin is "null").
+        # A caller with no Origin is not a web page (curl, python) and is judged by the key rule alone.
+        _origin = (self.headers.get('Origin') or '').strip().lower()
+        if _origin and _origin not in _ALLOWED_ORIGINS:
+            self._json(403, {'ok': False, 'blocked': 'origin', 'err': 'this page may not use the bridge'})
+            return False
+        # DNS rebinding: a hostile name pointed at 127.0.0.1 arrives keyless with ITS name in Host.
+        if ok and dev == 'local':
+            _host = (self.headers.get('Host') or '').strip().lower().rsplit(':', 1)[0]
+            if _host not in ('127.0.0.1', 'localhost', '[::1]'):
+                self._json(403, {'ok': False, 'blocked': 'host', 'err': 'unexpected Host header'})
+                return False
         if ok or open_ok:
             return ok
         self._json(401, {'ok': False, 'blocked': 'device_key', 'err': why})
@@ -2552,6 +2571,10 @@ class Handler(BaseHTTPRequestHandler):
             attach = [attach]
         if not isinstance(attach, list) or any(not isinstance(x, str) for x in attach):
             return self._json(400, {'ok': False, 'err': 'attach must be a string or list of file paths'})
+        # Documents only. A path is caller-supplied, so without this a request could mail out a key
+        # file, a ledger or a credential by naming it (2026-11-14 audit).
+        if any(os.path.splitext(x)[1].lower() not in _ATTACH_EXT for x in attach):
+            return self._json(400, {'ok': False, 'err': 'attach: only pdf, png, jpg, jpeg and docx files'})
 
         # ---- ON-FILE SEND (Call Mode one-tap, 2026-11-13) ------------------------------------
         # meta.onfile with no `to`: the page does not hold the lead's addresses, so it names the

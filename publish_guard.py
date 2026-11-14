@@ -135,6 +135,14 @@ def main():
     for p in (DOCS, os.path.join(HERE, 'docs', 'call', 'index.html')):
         if os.path.exists(p):
             bad += integrity(p)
+    # THE BOARD MUST BE ENCRYPTED. make_tracker writes owner names and addresses in the clear when
+    # site.codes is empty (the last code revoked, or a fresh clone). publish_site.py refuses that for
+    # the site repo; nothing refused it for THIS repo, which is public too. Same test as publish_site.
+    try:
+        if not re.search(r'(?m)^const RAW = \{"enc"', open(DOCS, encoding='utf-8', errors='replace').read()):
+            bad.append(f'{DOCS}: the board payload is NOT encrypted (site.codes empty at build time?)')
+    except Exception as e:
+        bad.append(f'{DOCS}: unreadable ({str(e)[:60]})')
     if bad:
         print('publish-guard: BLOCKED — the built page is CORRUPT, not merely poorer:')
         for b in bad:

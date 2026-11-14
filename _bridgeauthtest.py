@@ -154,6 +154,17 @@ try:
     chk('proxied keyless POST refused', c == 401)
     c, j, _ = req(P2, '/text/check', key=k1, method='POST', body={'case': 'X', 'to': '3055550101'}, headers={'X-Forwarded-For': '100.64.1.2'})
     chk('proxied POST with a key goes through', c == 200 and j.get('blocked') != 'device_key')
+    # 2026-11-14 audit: only our own pages may call the bridge from a browser
+    c, j, _ = req(P2, '/health', headers={'Origin': 'https://evil.example'})
+    chk('a foreign web page is refused (Origin)', c == 403 and j.get('blocked') == 'origin')
+    c, j, _ = req(P2, '/text/check', method='POST', body={'case': 'X', 'to': '3055550101'}, headers={'Origin': 'https://evil.example'})
+    chk('a foreign web page cannot POST', c == 403)
+    c, j, _ = req(P2, '/health', headers={'Origin': 'https://aiejandrog.github.io'})
+    chk('the published site is allowed', c == 200 and 'sent_today' in j)
+    c, j, _ = req(P2, '/health', headers={'Origin': 'null'})
+    chk('a local file page is allowed', c == 200)
+    c, j, _ = req(P2, '/health', headers={'Host': 'rebind.example:%d' % P2})
+    chk('a keyless caller with a foreign Host is refused (DNS rebinding)', c == 403 and j.get('blocked') == 'host')
 finally:
     s2.kill()
 
