@@ -85,7 +85,7 @@ Q.add('2099-000005-CA-01', 'RITA READER', 'READER', 'RITA', '01-0000-000-0050')
 Q.flush()
 js = Q.js_for('2099-000005-CA-01', 1)
 rec('the page script is built for the lead: its folio, the chunk asked for, the twelve fields, no token returned',
-    js and 'const FOLIO = "100000000050", K = 1,' in js and 'foliO_NUMBER' in js and "qs:" not in js
+    js and 'const FOLIO = "100000000050", K = 1,' in js and js.startswith('var out; {') and 'keep.add(r)' in js and 'foliO_NUMBER' in js and "qs:" not in js
     and 'out = JSON.stringify({k: K' in js, (js or '')[:200])
 rec('no script for a case that is not on today\'s list', Q.js_for('2099-999999-CA-01') is None)
 
@@ -173,6 +173,9 @@ rec('the Desktop note writes counts and a path, never a row field',
     "it['" not in body and "['case']" not in body and "['owner']" not in body and 'Leads the free scraper could not read' in body)
 
 rl = io.open(os.path.join(HERE, 'records_liens.py'), encoding='utf-8').read()
+rec('a chain read off the page is saved as truncated and never written over a full chain',
+    "res['truncated'] = True\n                res['browser_read']" in rl
+    and 'a full chain is already saved; the browser read is not written over it' in rl)
 rec('the lien scraper queues a spend-cap miss and flushes once at the end, both inside try/except',
     '_EQ.add(case, oc, _l, _f, folio,' in rl and '_n = _EQ.flush()' in rl)
 

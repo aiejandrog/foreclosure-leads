@@ -162,7 +162,8 @@ def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', rea
     search on it cannot find the homeowner's mortgages, so the browser job never takes those:
     they are listed apart as "owner not resolved yet" for the owner resolver."""
     try:
-        if case:
+        # 2099-... is this repo's invented-case convention: never queued outside a scratch DEALFLOW_DIR
+        if case and not (str(case).startswith('2099-') and not os.environ.get('DEALFLOW_DIR')):
             _PENDING.append({'case': str(case), 'owner': str(owner_clean or ''), 'last': str(last or ''),
                              'first': str(first or ''), 'folio': str(folio or ''), 'county': county,
                              'reason': str(reason or '')[:160], 'kind': 'entity' if kind == 'entity' else 'person',
@@ -258,19 +259,22 @@ def cmd_miss(case, why):
 #   * the county page may not post to this computer (its Content-Security-Policy is default-src self);
 #   * a scripted Chrome window gets no token at all.
 # So the worker runs the search by hand in the real Chrome and runs the script `js` prints. That
-# script reads the results the page already loaded, keeps the rows that can belong to this parcel
-# (this folio, or no folio: the scraper's own folio_scope rule), trims them to the twelve fields the
-# parser reads, and returns them a few rows at a time with a checksum. `rows` refuses a chunk whose
+# script reads the results the page already loaded and keeps the rows tied to this parcel: this
+# folio; no folio but the parcel's subdivision; a satisfaction, assignment or release whose original
+# book/page is one of those; and the owner's liens, judgments and tax liens. That is narrower than
+# the nightly search (a name returns about a hundred rows and most carry no folio), so a chain
+# read this way is saved as TRUNCATED: shown, never a clear and never a priced fact. It trims the
+# rows to the twelve fields the parser reads and returns them a few at a time with a checksum. `rows` refuses a chunk whose
 # checksum does not match, so a mis-copied digit cannot become a mortgage balance. `finish` then
 # runs the scraper's own analyze() on the stored rows (records_liens.py --models-file).
 FIELDS = ('doC_TYPE', 'foliO_NUMBER', 'seconD_PARTY', 'firsT_PARTY', 'reC_PAGE', 'reC_BOOK', 'reC_DATE',
           'cfN_MASTER_ID', 'oriG_REC_PAGE', 'oriG_REC_BOOK', 'subdiV_NAME', 'reC_BOOKPAGE')
 CHUNK = 5              # rows per call: the browser tool cuts long answers
-MAX_ROWS = 90          # more than this after scoping to the parcel is not a job for hand-copying
+MAX_ROWS = 60          # more than this after scoping to the parcel is not a job for hand-copying
 MOD = 1000000007
 
-JS = r"""const FOLIO = %(folio)s, K = %(chunk)d, F = %(fields)s, N = %(size)d, MAXR = %(maxr)d, MOD = %(mod)d;
-const q = new URLSearchParams(location.search).get('qs'); let out;
+JS = r"""var out; { const FOLIO = %(folio)s, K = %(chunk)d, F = %(fields)s, N = %(size)d, MAXR = %(maxr)d, MOD = %(mod)d;
+const q = new URLSearchParams(location.search).get('qs');
 if(!q){ out = JSON.stringify({err: 'no search results on this page: run the name search first'}); }
 else {
   if(!window.__eqRows){
@@ -279,7 +283,14 @@ else {
     const all = j.recordingModels || [];
     window.__eqAll = all.length;
     window.__eqOnParcel = all.filter(r => nf(r.foliO_NUMBER) === FOLIO).length;
-    window.__eqRows = all.filter(r => !nf(r.foliO_NUMBER) || nf(r.foliO_NUMBER) === FOLIO)
+    const sub = r => String(r.subdiV_NAME || '').trim(), bp = (b, p) => (Number(b) || 0) + '/' + (Number(p) || 0);
+    const on = all.filter(r => nf(r.foliO_NUMBER) === FOLIO), subs = {}; on.forEach(r => { if(sub(r)) subs[sub(r)] = 1; });
+    const blank = all.filter(r => !nf(r.foliO_NUMBER));
+    const keep = new Set(on); blank.forEach(r => { if(sub(r) && subs[sub(r)]) keep.add(r); });
+    for(let pass = 0; pass < 2; pass++){ const have = {}; keep.forEach(r => { have[bp(r.reC_BOOK, r.reC_PAGE)] = 1; });
+      blank.forEach(r => { if(Number(r.oriG_REC_BOOK) && have[bp(r.oriG_REC_BOOK, r.oriG_REC_PAGE)]) keep.add(r); }); }
+    blank.forEach(r => { if(!sub(r) && /LIEN|JUDG|LIS PENDENS|TAX/i.test(String(r.doC_TYPE || ''))) keep.add(r); });
+    window.__eqRows = all.filter(r => keep.has(r))
       .map(r => F.map(k => { const v = r[k]; return (typeof v === 'string') ? v.slice(0, 60) : (v == null ? null : v); }));
   }
   const rows = window.__eqRows, of = Math.ceil(rows.length / N);
@@ -289,7 +300,7 @@ else {
     let s = 0; part.forEach(r => { const c = r.map(v => v == null ? '' : String(v)).join('|'); for(let i = 0; i < c.length; i++) s = (s * 31 + c.charCodeAt(i)) %% MOD; });
     out = JSON.stringify({k: K, of: of, all: window.__eqAll, onParcel: window.__eqOnParcel, scoped: rows.length, sum: s, rows: part});
   }
-}
+} }
 out"""
 
 
@@ -420,7 +431,15 @@ def main():
         except Exception as e:
             print('refused: could not read --file as JSON (%s)' % str(e)[:60])
             return 1
-        okk, msg = accept_chunk(a.case, payload)
+        okk, msg = True, 'no chunks in the file'
+        for ch in (payload if isinstance(payload, list) else [payload]):     # one chunk, or the lead's chunks in order
+            okk, msg = accept_chunk(a.case, ch)
+            if not okk:
+                break
+        try:
+            os.remove(a.file)                                              # the hand-off file is not kept
+        except OSError:
+            pass
         print(('ok: ' if okk else 'refused: ') + msg)
         return 0 if okk else 1
     print('removed %d old file(s)' % clean())
