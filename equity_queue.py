@@ -100,6 +100,7 @@ def _counts(q):
     c['total'] = len((q or {}).get('items', []))
     c['entity'] = sum(1 for it in (q or {}).get('items', []) if it.get('kind') == 'entity')
     c['verified'] = sum(1 for it in (q or {}).get('items', []) if it.get('status') == 'done' and it.get('full'))
+    c['needs_human_captcha'] = c.get('needs_human_captcha', 0)
     return c
 
 
@@ -120,10 +121,27 @@ def _desktop_note(q):
                     fh.write('  read and saved              : %d  (whole search copied, counts as verified: %d)\n' % (c['done'], c['verified']))
                     fh.write('  browser found nothing       : %d\n' % c['miss'])
                     fh.write('  token did not read          : %d\n' % c['failed'])
+                    if c['needs_human_captcha']:
+                        fh.write('  Palm Beach, waiting for you to tick the county\'s checkbox: %d\n' % c['needs_human_captcha'])
+                    _by = {}
+                    for _it in (q or {}).get('items', []):
+                        _k = _C().norm(_it.get('county'))
+                        _by.setdefault(_k, [0, 0])
+                        _by[_k][0] += 1
+                        _by[_k][1] += 1 if _it.get('status') == 'done' else 0
+                    if len(_by) > 1 or (_by and 'MIAMI-DADE' not in _by):
+                        fh.write('\nBy county (on the list / read and saved):\n')
+                        for _k in sorted(_by):
+                            fh.write('  %-11s %d / %d\n' % (_k, _by[_k][0], _by[_k][1]))
                     fh.write('\nDetails (names, cases): %s\n' % qpath((q or {}).get('date')))
             except OSError:
                 pass
             return
+
+
+def _C():
+    import equity_counties
+    return equity_counties
 
 
 def clean():
@@ -154,7 +172,7 @@ def clean():
 
 # ---- scraper side -----------------------------------------------------------------------------
 def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', reason='', kind='person',
-        names=None, address=''):
+        names=None, address='', searches=None, owner_known=True):
     """Called by records_liens.py for a lead it could not read. Never raises.
 
     names = every (LAST, FIRST) worth searching, in order: the owner when it is a person, then the
@@ -179,6 +197,10 @@ def add(case, owner_clean, last='', first='', folio='', county='MIAMI-DADE', rea
                              'first': str(first or ''), 'folio': str(folio or ''), 'county': county,
                              'reason': str(reason or '')[:160], 'kind': 'entity' if kind == 'entity' else 'person',
                              'names': nm[:6], 'address': str(address or '')[:160], 'status': 'pending'})
+            if searches:
+                # Broward / Palm Beach (equity_counties.py): what to type into that county's search
+                _PENDING[-1]['searches'] = [{'kind': str(x['kind']), 'q': str(x['q'])} for x in searches][:6]
+                _PENDING[-1]['owner_known'] = bool(owner_known)
     except Exception:
         pass
 
@@ -232,12 +254,24 @@ def _names(it):
     return it.get('names') or [[it.get('last') or it.get('owner') or '', it.get('first') or '']]
 
 
-def cmd_next(limit):
+def cmd_next(limit, county='', human=False):
     """Every pending lead, nothing skipped. A lead with no folio carries its address so the worker
-    can find the folio on the Property Appraiser site first."""
+    can find the folio on the Property Appraiser site first.
+
+    county: '' = Miami-Dade only (what `next` has always printed); BROWARD / PALM BEACH = that
+    county's leads, each with the searches to run. human=True also hands out the Palm Beach leads
+    parked as needs_human_captcha, for a session where a person ticks the county's checkbox."""
     q = _read(qpath(), {'items': []})
     rows = []
+    C = _C()
+    want = C.norm(county)
     for it in q['items']:
+        if C.norm(it.get('county')) != want:
+            continue
+        if C.handled(it):
+            if it.get('status') == 'pending' or (human and it.get('status') == C.HUMAN):
+                rows.append(C.next_row(it))
+            continue
         if it.get('status') != 'pending':
             continue
         row = {'case': it['case'], 'names': _names(it), 'has_folio': bool(_norm_folio(it.get('folio')))}
@@ -372,6 +406,9 @@ def js_for(case, chunk=-1):
     q = _read(qpath(), {'items': []})
     if not any(x['case'] == case for x in q['items']):
         return None
+    _it = next(x for x in q['items'] if x['case'] == case)
+    if _C().handled(_it):
+        return _C().js_for(_it, chunk)                  # Broward / Palm Beach: that county's page script
     return JS % {'chunk': int(chunk), 'budget': BUDGET, 'mod': MOD, 'sfx': json.dumps(DATE_SFX)}
 
 
@@ -396,6 +433,8 @@ def accept_search(case, payload, name_index=0):
     -> (ok, message). All or nothing: a search with a bad chunk stores no rows."""
     q = _read(qpath(), {'items': []})
     it = next((x for x in q['items'] if x['case'] == case), None)
+    if it and _C().handled(it):
+        return _C().accept_search(case, payload, name_index)   # Broward / Palm Beach rows
     if not it or it.get('status') not in ('pending', 'rows'):
         return False, 'case is not waiting on today\'s list'
     names = _names(it)
@@ -472,7 +511,11 @@ def cmd_finish():
     for it in todo:
         argv = [sys.executable, '-u', 'records_liens.py', '--case', it['case'], '--cached-only']
         full = None
-        if it.get('status') == 'rows':
+        if _C().handled(it):
+            # Broward / Palm Beach: the county's own scraper reads the stored searches
+            mf, full = _C().docs_file(it)
+            argv = _C().finish_argv(it, mf)
+        elif it.get('status') == 'rows':
             mf, full = _models_file(it)
             argv += ['--models-file', mf]
             if it.get('folio_src') == 'browser':
@@ -492,13 +535,17 @@ def cmd_finish():
     c = _counts(q)
     _log('worker_finish', old_files_removed=removed, **c)
     _desktop_note(q)
-    print('finish: %(done)d read, %(failed)d token did not read, %(miss)d browser miss, %(pending)d still waiting' % c)
+    print('finish: %(done)d read, %(failed)d token did not read, %(miss)d browser miss, %(pending)d still waiting' % c
+          + (', %d waiting for a person to tick the Palm Beach checkbox' % c['needs_human_captcha'] if c['needs_human_captcha'] else ''))
     return 0
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('cmd', choices=['status', 'next', 'js', 'rows', 'folio', 'token', 'miss', 'finish', 'clean'])
+    ap.add_argument('cmd', choices=['status', 'next', 'js', 'rows', 'folio', 'token', 'miss', 'finish', 'clean', 'captcha'])
+    ap.add_argument('--county', default='', help="next / captcha: BROWARD or 'PALM BEACH' (default: Miami-Dade)")
+    ap.add_argument('--human', action='store_true',
+                    help='next: also hand out Palm Beach leads waiting for a person to tick the checkbox')
     ap.add_argument('--chunk', type=int, default=-1, help='-1 = the header, 0.. = a data chunk')
     ap.add_argument('--name-index', type=int, default=0)
     ap.add_argument('--folio', default='')
@@ -513,7 +560,14 @@ def main():
         print(json.dumps(dict(date=q.get('date'), **_counts(q))))
         return 0
     if a.cmd == 'next':
-        return cmd_next(a.limit) or 0
+        return cmd_next(a.limit, a.county, a.human) or 0
+    if a.cmd == 'captcha':
+        if not (a.case or a.county):
+            print('refused: say which county (--county "PALM BEACH") or which case')
+            return 1
+        n = _C().mark_human(a.county, a.case, a.why)
+        print('ok: %d lead(s) now wait for a person to tick the county\'s checkbox; none was read as "no liens"' % n)
+        return 0
     if a.cmd == 'token':
         return cmd_token(a.case, a.qs)
     if a.cmd == 'miss':

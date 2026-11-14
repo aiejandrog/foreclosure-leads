@@ -574,6 +574,71 @@ def _or_events(docs, limit=20, lead_case=''):
 
 
 # ---- headed bootstrap (human clicks ONE checkbox; we harvest the token) --------------------------
+# ---- equity queue (2026-11-13): leads the $0 run could not read go to the browser job -------------
+# equity_queue.py / equity_counties.py. Landmark puts a reCAPTCHA v2 checkbox in front of every
+# search. The browser job never ticks it: it parks those leads as needs_human_captcha, and reads
+# them in a session where a person ticks the box. `--docs-file` analyzes what that session copied.
+def _queue_ok():
+    try:
+        import equity_counties as _EC
+        return _EC.live_ok(__file__, OUT, LEADS, 'palmbeach_liens.json', 'palmbeach_leads.json')
+    except Exception:
+        return False
+
+
+def _queue_unread(picked, out, reason):
+    """Every picked lead with no saved chain goes to the queue. Never raises. -> how many were new."""
+    try:
+        import equity_counties as _EC
+        import equity_queue as _EQ
+        for r in picked:
+            if (r.get('case') or '') not in out:
+                _EC.queue_lead('PALM BEACH', r, reason)
+        n = _EQ.flush()
+        if n:
+            print(f"  equity queue: {n} Palm Beach lead(s) queued for the browser job -> {_EQ.qpath()}")
+        return n
+    except Exception:
+        return 0
+
+
+def from_docs_file(a, leads, out):
+    """--docs-file: analyze the searches a person-attended browser session copied off Landmark.
+    No network, no captcha, no spend. -> exit code."""
+    doc = json.load(open(a.docs_file, encoding='utf-8')) or {}
+    r = next((x for x in leads if (x.get('case') or '') == a.case), None)
+    if r is None:
+        print(f"  --  {a.case:24} not among the Palm Beach leads; nothing written")
+        return 3
+    groups = [gsr_rows_to_docs(p.get('rows') or []) for p in (doc.get('parts') or [])]
+    docs = _merge_docs(*groups)
+    owner = (r.get('owners') or '').strip()
+    full = bool(doc.get('full'))
+    ftype = r.get('ftype') or _fc_type_plaintiff(r.get('plaintiff', '')) or ''
+    res = analyze(docs, owner, _num(r.get('judg')), ftype=ftype, lead_case=a.case, county='palmbeach')
+    res = pb_chain_truth(res, docs)
+    res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
+    res['or_events'] = _or_events(docs, lead_case=a.case)
+    res['n_raw'] = len(docs)
+    res['captcha'] = 'browser'
+    res['browser_read'] = time.strftime('%Y-%m-%d')
+    res['searched_as'] = str(doc.get('searched') or '')
+    if not full:
+        res['truncated'] = True                            # not every search on the lead was copied whole
+        if res.get('conf') == 'ok':
+            res['conf'] = 'low'
+    prev = out.get(a.case) or {}
+    if (prev.get('conf') in ('ok', 'low', 'unpriced') and not prev.get('truncated')
+            and (res.get('truncated') or res.get('conf') == 'none')):
+        print(f"  ..  {a.case:24} a full chain is already saved; the browser read is not written over it")
+        return 0
+    out[a.case] = res
+    json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+    print(f"  ok  {a.case:24} {res['nrec']:>3} recs/{res['n_raw']} raw (conf {res['conf']})"
+          f"{'' if full else ' (not the whole search: truncated)'}")
+    return 0
+
+
 def harvest_token(timeout=120):
     """Open a visible browser on the search page; return the solved g-recaptcha-response the
     operator produces by clicking the checkbox once, or '' on timeout."""
@@ -667,7 +732,23 @@ def main():
                     help='concurrent 2Captcha solvers (default 1 = the original serial behaviour). '
                          '>1 keeps N solves in flight so the scrape is not waiting 60-180s per '
                          'one-shot token. The scrape itself stays single-threaded.')
+    ap.add_argument('--docs-file', default='',
+                    help='with --case: analyze the searches copied in the real browser (equity_queue.py) '
+                         'instead of searching. No captcha, no spend.')
+    ap.add_argument('--queue-only', action='store_true',
+                    help='search nothing: put every unread lead on the equity queue for the browser job')
+    ap.add_argument('--out', default='', help='with --docs-file: write here instead of palmbeach_liens.json')
+    ap.add_argument('--leads', default='', help='with --docs-file: read the leads from here')
     a = ap.parse_args()
+    global OUT, LEADS
+    if a.docs_file:
+        if not a.case:
+            ap.error('--docs-file needs --case')
+        OUT, LEADS = (a.out or OUT), (a.leads or LEADS)
+        return from_docs_file(a, json.load(open(LEADS, encoding='utf-8')),
+                              json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {})
+    if a.out or a.leads:
+        ap.error('--out / --leads only go with --docs-file')
 
     if a.parse_dump:
         raw = open(DUMP, encoding='utf-8', errors='replace').read() if os.path.exists(DUMP) else ''
@@ -712,11 +793,19 @@ def main():
         uniq = sorted(set(names))
         print(f"  skipped {len(names)} lead(s) — {why}: "
               + ', '.join(n[:34] for n in uniq[:3]) + (' ...' if len(uniq) > 3 else ''))
+    if a.queue_only:
+        if not _queue_ok():
+            print('  equity queue: not the engine checkout (or a scratch run); nothing queued')
+        else:
+            _queue_unread(picked, out, 'not read: Landmark asks for a checkbox on every search')
+        return
     if not picked:
         return
 
     if not start_session():
         print('ABORT: no Landmark session (site down / fingerprint block). Try again later.')
+        if _queue_ok():
+            _queue_unread(picked, out, 'not read: no Landmark session')
         return
 
     global POOL
@@ -739,6 +828,9 @@ def main():
     finally:
         if POOL is not None:
             POOL.close()
+        if _queue_ok():
+            # whatever this run left unread (the checkbox, no token, an unparsed grid) is queued
+            _queue_unread(picked, out, 'not read: captcha-gated or unparsed')
 
 
 def _trace(a, picked, out):
