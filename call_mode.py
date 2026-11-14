@@ -9296,8 +9296,8 @@ function screenOutcome(){
         + r.d + ' day' + (r.d===1?'':'s') + '</b>');
     }
   }
-  if(r.dd || r.bd || r.sf) addRef('Property type', esc([r.dd || '', (r.bd ? r.bd + 'BR' : ''),
-      (r.ba ? r.ba + 'BA' : ''), (r.sf ? r.sf + ' sf' : '')].filter(Boolean).join(' &middot; ')));
+  if(r.dd || r.bd || r.sf) addRef('Property type', [r.dd || '', (r.bd ? r.bd + 'BR' : ''),
+      (r.ba ? r.ba + 'BA' : ''), (r.sf ? r.sf + ' sf' : '')].filter(Boolean).map(function(x){ return esc(x); }).join(' &middot; '));
   if(r.pl) addRef('Foreclosing', esc(r.pl));
   addRef('Case', esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : ''));
   if(r.p && r.p.length > 1) addRef('Their numbers',
