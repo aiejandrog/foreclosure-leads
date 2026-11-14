@@ -42,7 +42,7 @@ const u = CW.union(mk(inp.a), mk(inp.b));
 console.log(JSON.stringify({canon: inp.a.map(CW.canon), events: Object.keys(u.byId).sort(),
   conflicts: Object.keys(u.conflicts).sort(), unsupported: Object.keys(u.unsupported).sort()}));
 """
-r = subprocess.run(['node', '-e', JS], input=json.dumps({'a': a + [future, bad], 'b': b}), capture_output=True, text=True, cwd=HERE)
+r = subprocess.run(['node', '-e', JS], input=json.dumps({'a': a + [future, bad], 'b': b}), capture_output=True, text=True, encoding='utf-8', cwd=HERE)
 rec('node runs', r.returncode == 0, r.stderr)
 js = json.loads(r.stdout) if r.returncode == 0 else {}
 
@@ -80,7 +80,7 @@ for banned in ('optouts', 'bounced_emails', 'touches', 'dials', 'worker_notes', 
 tricky = [{'a': 1.0, 'b': 2.5, 'c': [1.0, {'k': True}]}, {'\U0001F600': 1, '\uffff': 2, 'z': 3}, E('t1', schema_version=True), E('t2', schema_version=2.0), E('t3', schema_version=2)]
 JS2 = "const CW=require('./call_workflow.js');const i=JSON.parse(require('fs').readFileSync(0,'utf8'));" \
       "console.log(JSON.stringify({c:i.map(CW.canon),v:i.slice(2).map(e=>{const r=CW.validate(e);return [r.ok,r.unsupported]})}));"
-r2 = subprocess.run(['node', '-e', JS2], input=json.dumps(tricky), capture_output=True, text=True, cwd=HERE)
+r2 = subprocess.run(['node', '-e', JS2], input=json.dumps(tricky), capture_output=True, text=True, encoding='utf-8', cwd=HERE)
 j2 = json.loads(r2.stdout) if r2.returncode == 0 else {}
 rec('canonical bytes match JS for integral floats, astral keys and booleans', j2.get('c') == [P.canon(x) for x in tricky], (j2.get('c'), [P.canon(x) for x in tricky]))
 rec('schema_version true is malformed in both', P.shape_ok(tricky[2]) == (False, False) and j2['v'][0] == [False, False], j2.get('v'))

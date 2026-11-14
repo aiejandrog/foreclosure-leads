@@ -1,6 +1,7 @@
 """judgment_pass: the plan reads state from disk and prices only unread amount pages. Synthetic data."""
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from datetime import date
@@ -10,6 +11,15 @@ from unittest import mock
 import judgment_pass as JP
 
 CASE = '2025-000001-CA-01'
+
+
+class _PosixOs:
+    """judgment_pass's own view of `os`, reporting a non-Windows host. Patching the real
+    os.name instead makes pathlib refuse to build a path when the suite runs on Windows."""
+    name = 'posix'
+
+    def __getattr__(self, attr):
+        return getattr(os, attr)
 
 
 def _row(base, entry, text, name, total_page=True):
@@ -662,7 +672,7 @@ class Assess(unittest.TestCase):
         self.assertEqual(got['state'], 'judgment_without_amount_page')
 
     def test_pass_refuses_off_windows(self):
-        with mock.patch.object(JP.os, 'name', 'posix'), \
+        with mock.patch.object(JP, 'os', _PosixOs()), \
                 mock.patch.object(JP, 'load_entries', return_value=[]), \
                 mock.patch('case_review.output_path', return_value=str(self.base / 'jp' / '.keep')):
             with self.assertRaises(SystemExit):

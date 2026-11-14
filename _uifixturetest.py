@@ -9,9 +9,9 @@ class UIFixtureTests(unittest.TestCase):
         import ui_fixture as U
         with tempfile.TemporaryDirectory() as d:
             board, call = U.build(d)
-            self.assertIn('SYNTHETIC-UI-1', board.read_text())
-            self.assertNotIn('__DATA__', board.read_text())
-            self.assertIn('Call Mode', call.read_text())
+            self.assertIn('SYNTHETIC-UI-1', board.read_text(encoding='utf-8'))
+            self.assertNotIn('__DATA__', board.read_text(encoding='utf-8'))
+            self.assertIn('Call Mode', call.read_text(encoding='utf-8'))
             self.assertEqual({p.name for p in Path(d).iterdir()}, {'board.html', 'call.html'})
             self.assertTrue(all(not row['emails'] for row in U.leads()))
 

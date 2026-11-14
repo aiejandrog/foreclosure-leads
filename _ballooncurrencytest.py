@@ -7,7 +7,7 @@ from foreclosure_leads import _money
 
 
 def tax_merge(row):
-    tree = ast.parse(Path(__file__).with_name('foreclosure_leads.py').read_text())
+    tree = ast.parse(Path(__file__).with_name('foreclosure_leads.py').read_text(encoding='utf-8'))
     block = next(n for n in ast.walk(tree) if isinstance(n, ast.If)
                  and "_d.get('etax')" in ast.unparse(n.test))
     env = {'_d': row, '_money': _money}
