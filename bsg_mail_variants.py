@@ -34,6 +34,7 @@ Usage:
   python bsg_mail_variants.py --trigger-days 7          # only leads with a case event in the last 7 days
   python bsg_mail_variants.py --with-qr --page-base-url https://example.org/p/
   python bsg_mail_variants.py --sample                  # invented people, BSG_Mail_Variants_SAMPLE.pdf
+  python bsg_mail_variants.py --from-ledger PATH        # rebuild exactly the cases a ledger marks in_print_file
 """
 import argparse
 import base64
@@ -1409,6 +1410,34 @@ def select(days, data_dir, today, trigger_days=0):
     return out, drops, eligible, counts
 
 
+def from_ledger_rows(path, data_dir, today):
+    """(rows, drops, wanted, held). Rebuild exactly the cases a ledger marks `in_print_file: true`:
+    the recorded arm, printed variant, page code and page slug, no freshness cut and no re-deal.
+    Every suppression still runs today (pool(): opt-out ledger, stay check, entities, estates, low
+    confidence), so a case that has since opted out or been held is left out and counted, never
+    printed because a ledger said so."""
+    src = load_ledger(path)
+    want = {c: v for c, v in src.items() if isinstance(v, dict) and v.get('in_print_file') is True
+            and v.get('assigned') in VARIANTS and v.get('variant') in VARIANTS and v.get('code') and v.get('page')}
+    if not want:
+        raise DataError('REFUSED: %s marks no case in_print_file. Nothing was built.' % os.path.basename(path))
+    rows, drops, _eligible, _counts = select(10 ** 6, data_dir, today)
+    out = []
+    for r in rows:
+        e = want.get(r['case'])
+        if not e:
+            continue
+        if e['variant'] == 'B' and not r['facts'].get('sale'):
+            continue                                  # the recorded calendar page has no date to circle now
+        r['assigned'], r['variant'] = e['assigned'], e['variant']
+        r['fallback'] = e.get('fallback') or ''
+        r['code'], r['slug'] = e['code'], e['page']
+        out.append(r)
+    order = {c: n for n, c in enumerate(want)}
+    out.sort(key=lambda r: order[r['case']])
+    return out, drops, len(want), len(want) - len(out)
+
+
 def sample_rows(today):
     """Invented people only. Three plain pieces, three with the QR and the court-event strip (the
     fullest each layout gets), and one calendar assignment with no sale date, which falls back."""
@@ -1456,7 +1485,8 @@ def sample_rows(today):
 def run(a):
     today = dt.date.today()
     sample = bool(a.sample)
-    tag = 'SAMPLE' if sample else today.isoformat()
+    from_ledger = bool(getattr(a, 'from_ledger', ''))
+    tag = 'SAMPLE' if sample else today.isoformat() + ('_from_ledger' if from_ledger else '')
     data_dir = os.path.abspath(a.data_dir) if a.data_dir else M.data_dir()
 
     if sample:
@@ -1488,6 +1518,15 @@ def run(a):
             rows, drops, counts = sample_rows(today), {}, {}
             info['eligible'] = len(rows)
             ledger = {}
+        elif from_ledger:
+            rows, drops, wanted, held = from_ledger_rows(a.from_ledger, data_dir, today)
+            counts, ledger = {}, {}
+            info['eligible'] = wanted
+            info['ledger'] = os.path.basename(a.from_ledger)
+            print("from ledger: %d marked in_print_file, %d built, %d left out by today's checks"
+                  % (wanted, len(rows), held))
+            if not rows:
+                return 0
         else:
             ledger = load_ledger(ledger_path)
             rows, drops, eligible, counts = select(a.days, data_dir, today, a.trigger_days)
@@ -1507,7 +1546,8 @@ def run(a):
         info['trigger_counts'] = ', '.join(
             '%s %d' % (k, sum(1 for r in rows if r.get('event') == k)) for k in EVENTS
             if any(r.get('event') == k for r in rows))
-        printed_variants(rows)
+        if not from_ledger:
+            printed_variants(rows)
         if a.with_qr and not qr_svg('https://example.invalid/'):
             print('WARNING: --with-qr asked for but no QR library is importable (segno). Pieces carry '
                   'the phone number instead.')
@@ -1525,12 +1565,17 @@ def run(a):
             pdf_note = '%s (%.0f KB, %s pages%s)' % (
                 p_pdf, size / 1024.0, pages if pages else '?',
                 ', %d set in smaller type to fit' % small if small else '')
-        for r in rows:
-            ledger[r['case']] = {'assigned': r['assigned'], 'variant': r['variant'],
-                                 'date': today.isoformat(), 'code': r['code'], 'page': r['slug'],
-                                 **({'fallback': r['fallback']} if r['fallback'] else {}),
-                                 **({'event': r['event']} if isinstance(r.get('event'), str) else {})}
-        save_ledger(ledger_path, ledger)
+        if not from_ledger:                       # a rebuild from a ledger never rewrites one
+            for r in rows:
+                old = ledger.get(r['case']) if isinstance(ledger.get(r['case']), dict) else {}
+                # marks added afterwards (in_print_file, print_file, superseded) are kept
+                keep = {k: v for k, v in old.items() if k not in ('assigned', 'variant', 'date', 'code',
+                                                                    'page', 'fallback', 'event')}
+                ledger[r['case']] = {**keep, 'assigned': r['assigned'], 'variant': r['variant'],
+                                     'date': today.isoformat(), 'code': r['code'], 'page': r['slug'],
+                                     **({'fallback': r['fallback']} if r['fallback'] else {}),
+                                     **({'event': r['event']} if isinstance(r.get('event'), str) else {})}
+            save_ledger(ledger_path, ledger)
     except DataError as e:
         print(str(e))
         return 2
@@ -1538,7 +1583,7 @@ def run(a):
     printed = {v: sum(1 for r in rows if r['variant'] == v) for v in VARIANTS}
     assigned = {v: sum(1 for r in rows if r['assigned'] == v) for v in VARIANTS}
     print('%d pieces (of %d eligible%s)' % (len(rows), info['eligible'],
-                                            '' if sample else ', filed within %dd' % a.days))
+                                            '' if sample or from_ledger else ', filed within %dd' % a.days))
     print('  assigned: ' + '  '.join('%s %d' % (v, assigned[v]) for v in VARIANTS))
     print('  printed : ' + '  '.join('%s %d' % (v, printed[v]) for v in VARIANTS))
     fell = sum(1 for r in rows if r['fallback'])
@@ -1560,7 +1605,10 @@ def run(a):
     print('wrote', pdf_note)
     if not a.no_pages:
         print('wrote %d private pages under %s (not published)' % (len(rows), pages_dir))
-    print('wrote', ledger_path, '(assignment only; nothing is marked as mailed)')
+    if from_ledger:
+        print('ledger not rewritten (--from-ledger only reads it)')
+    else:
+        print('wrote', ledger_path, '(assignment only; nothing is marked as mailed)')
     return 0
 
 
@@ -1582,6 +1630,8 @@ def main(argv=None):
     ap.add_argument('--voice-es', default='', help='recording played on the Spanish page')
     ap.add_argument('--no-pages', action='store_true', help='skip the private pages')
     ap.add_argument('--no-pdf', action='store_true', help='write the HTML only')
+    ap.add_argument('--from-ledger', default='',
+                    help='rebuild exactly the cases this ledger marks in_print_file (same arms, codes, pages)')
     ap.add_argument('--sample', action='store_true', help='invented people; BSG_Mail_Variants_SAMPLE.pdf')
     return run(ap.parse_args(argv))
 

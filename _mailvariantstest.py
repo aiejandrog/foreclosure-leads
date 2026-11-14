@@ -439,6 +439,48 @@ led2 = json.load(open(led_p, encoding='utf-8'))
 rec('a rerun keeps every arm, page and code',
     {c: (v['assigned'], v['variant'], v['code'], v['page']) for c, v in led['cases'].items()}
     == {c: (v['assigned'], v['variant'], v['code'], v['page']) for c, v in led2['cases'].items()})
+# ── --from-ledger: the recorded set, nothing else ──
+picked = sorted(led2['cases'])[:2]
+marked = json.loads(json.dumps(led2))
+for c, v in marked['cases'].items():
+    v['in_print_file'] = c in picked
+marked['cases']['T-26-OPTOUT'] = {'assigned': 'A', 'variant': 'A', 'date': TODAY.isoformat(), 'code': 'ABCDEFGH',
+                                  'page': 'optoutpage01', 'in_print_file': True}
+fl_p = os.path.join(TMP, 'frozen.json')
+with open(fl_p, 'w', encoding='utf-8') as fh:
+    json.dump(marked, fh)
+stamp = open(led_p, encoding='utf-8').read()
+FL = ['--data-dir', DD, '--signer-name', 'Sam Sample', '--signer-phone', PHONE, '--no-pdf', '--no-pages']
+buf = io.StringIO()
+with redirect_stdout(buf):
+    rc = V.main(['--from-ledger', fl_p] + FL)
+fl_html = open(os.path.join(TMP, 'BSG_Mail_Variants_%s_from_ledger.html' % TODAY.isoformat()), encoding='utf-8').read()
+built = dict(re.findall(r'<section class="pc p[abc]" data-case="([^"]+)" data-variant="([ABC])"', fl_html))
+rec('--from-ledger builds exactly the cases marked in_print_file, with their recorded variants',
+    rc == 0 and built == {c: led2['cases'][c]['variant'] for c in picked}, built)
+rec('--from-ledger still leaves out a marked case that is on the opt-out ledger',
+    'T-26-OPTOUT' not in built and '3 marked in_print_file, 2 built, 1 left out' in buf.getvalue(), buf.getvalue()[:200])
+rec('--from-ledger rewrites neither ledger',
+    open(led_p, encoding='utf-8').read() == stamp and json.load(open(fl_p, encoding='utf-8')) == marked)
+none_p = os.path.join(TMP, 'none.json')
+with open(none_p, 'w', encoding='utf-8') as fh:
+    json.dump({'cases': {c: dict(v, in_print_file=False) for c, v in led2['cases'].items()}}, fh)
+buf = io.StringIO()
+with redirect_stdout(buf):
+    rc = V.main(['--from-ledger', none_p] + FL)
+rec('--from-ledger with nothing marked refuses', rc == 2 and 'marks no case' in buf.getvalue())
+hand = json.loads(stamp)
+for v in hand['cases'].values():
+    v['in_print_file'], v['print_file'] = True, 'frozen.pdf'
+with open(led_p, 'w', encoding='utf-8') as fh:
+    json.dump(hand, fh)
+with redirect_stdout(io.StringIO()):
+    V.main(args)
+led3 = json.load(open(led_p, encoding='utf-8'))
+rec('a normal run keeps the print-file marks on a ledger entry and its arm, code and page',
+    all(v.get('in_print_file') is True and v.get('print_file') == 'frozen.pdf' for v in led3['cases'].values())
+    and all((led3['cases'][c]['assigned'], led3['cases'][c]['code'], led3['cases'][c]['page'])
+            == (v['assigned'], v['code'], v['page']) for c, v in led2['cases'].items()))
 with open(led_p, 'w', encoding='utf-8') as fh:
     fh.write('{"cases": [')
 buf = io.StringIO()
