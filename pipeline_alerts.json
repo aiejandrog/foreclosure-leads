@@ -1,37 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-11-14T15:18:13-05:00",
+   "at": "2026-11-14T17:55:21-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-14T15:18:13-05:00",
+   "at": "2026-11-14T17:55:21-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-13 21:09): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) last result failed (DealFlow Daily Routes, DealFlow Replies, DealFlow Weekly Analyst); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 21h ago."
   },
   {
-   "at": "2026-11-14T15:18:13-05:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync did not run on 2026-11-14 (last recorded 2026-11-13)."
-  },
-  {
-   "at": "2026-11-14T15:18:13-05:00",
+   "at": "2026-11-14T17:55:21-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-14T15:18:13-05:00",
+   "at": "2026-11-14T17:55:21-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-14T15:18:13-05:00",
+ "published_at": "2026-11-14T17:55:21-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -45,7 +39,7 @@
    "match_s": 1,
    "needing_search": 3069,
    "provider": "courtlistener",
-   "pull_age_h": 0.66,
+   "pull_age_h": 3.28,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
@@ -138,12 +132,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-13",
+   "date": "2026-11-14",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1794602862,
+   "started_at": 1794696890,
    "state": "finished"
   },
   "paid_reads": {
