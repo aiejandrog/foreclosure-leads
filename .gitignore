@@ -15,6 +15,7 @@ _*.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
+!_mailvariantstest.py
 !_lookupstaytest.py
 !_optoutgapstest.py
 !_siblingoptouttest.py
@@ -877,3 +878,7 @@ call_sessions/
 !_agentguardtest.py
 # Claude Code per-machine settings (the agent_guard hook is registered here by the audit-loop setup paste)
 .claude/settings.local.json
+# bsg_mail_variants writes these under DEALFLOW_DIR; never in the checkout
+mail_variants*.json
+mail_pages*/
+BSG_Mail_Variants_*
