@@ -6577,12 +6577,29 @@ function _posRestore(){
 }
 /* Is there a lead Back can actually reach? (2026-11-13, F-site-03) This used to say yes for any trail
    entry in this lane, so after two outcomes the button sat at full strength while every lead behind
-   him had already left pool(): a tap only toasted. Same test as _navSeek, read-only:
-   an entry of this lane, other than the lead on screen, that is still in a fresh pool(). */
-function _navHasBack(){
-  var P=pool(), here=(cur && i<P.length) ? cur.c : null, at={}, k;
+   him had already left pool(): a tap only toasted. Same test as navBack() + _navSeek, read-only:
+   an entry of the lane Back seeks in, other than the lead on screen, that is still in that pool.
+   ONE-OFF (2026-11-14): navBack() runs _qvRestore() before it seeks, so while a lead opened on purpose
+   is up the answer comes from the view and lane it will put back, not the one on screen. That costs
+   one more pool() pass, and only then; the view on screen is rebuilt right after so every counter
+   pool() leaves behind is the one head() expects. Nothing is restored here: view, lane, place and
+   _QVBACK stay as they were.
+   P0 is a pool() the caller built this paint (Queue clear). _NAVP hands the one built here to the
+   count line under the nav row, so a lead paint builds the pool twice, as before, not three times. */
+var _NAVP = null;
+function _navHasBack(P0){
+  var b=_QVBACK, P, L, here, at={}, k;
+  if(b){
+    var v0=QVIEW, l0=lane;
+    try{ QVIEW=b.v; lane=b.l; P=pool(); L=lane; }finally{ QVIEW=v0; lane=l0; }
+    _NAVP=pool();
+    here=(cur && P.length) ? cur.c : null;
+  } else {
+    P=_NAVP=P0||pool(); L=lane;
+    here=(cur && i<P.length) ? cur.c : null;
+  }
   for(k=0;k<P.length;k++) at[P[k].c]=1;
-  for(k=0;k<_NAVB.length;k++) if(_NAVB[k].l===lane && _NAVB[k].c!==here && at[_NAVB[k].c]) return true;
+  for(k=0;k<_NAVB.length;k++) if(_NAVB[k].l===L && _NAVB[k].c!==here && at[_NAVB[k].c]) return true;
   return false;
 }
 function navBack(){
@@ -6604,6 +6621,7 @@ function navNext(){
   SCREEN='lead'; i=k; render();
 }
 function _navRow(){
+  _NAVP = null;   // never a pool from an earlier paint
   if(LKFROM && cur && cur.c === LKFROM)
     return '<div style="display:flex;gap:10px">'
       + '<button class="big" id="navback" style="flex:1;background:#2a3f6b">&lsaquo; Back to Find a number</button>'
@@ -6662,7 +6680,7 @@ function render(){
     $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
       +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session.</div><div class="sub">'
       +viewEmptyHtml().replace(/^<b>[^<]*<\/b>/,'')+'</div>'
-      +(_navHasBack()?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
+      +(_navHasBack(P)?'<button class="big" id="navback" style="background:#2a3f6b">&lsaquo; Back</button>':'')+'</div>'
       +'<div class="sheetpad"></div>'; if($('navback')) $('navback').onclick=navBack; wire(); return; }
   /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
      landing while he reads the card on number 2) must not snap him back to number 1. */
@@ -8119,6 +8137,8 @@ function screenRegistry(){
      re-queued from there, and its Back returns here. */
   Array.prototype.forEach.call(document.querySelectorAll('[data-regc]'), function(b){
     b.onclick = function(){ screenRecord(b.getAttribute('data-regc'), 'reg'); };
+    /* the row says role=button, so Enter and Space open it too */
+    b.onkeydown = function(ev){ if(ev && (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar')){ ev.preventDefault(); b.onclick(); } };
   });
 }
 /* EXPORT TODAY'S CALL STATS (2026-10-15). Read-only screen: counts from notes[].dials[], this seat
@@ -8874,7 +8894,7 @@ function screenLead(){
     +   '<div class="stepl">DONE WITH THIS LEAD?</div>'
     +   _navRow()
     + '</div>'
-    + '<div class="sub">'+(i+1)+' of '+pool().length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
+    + '<div class="sub">'+(i+1)+' of '+(_NAVP||pool()).length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
     + '<div class="sheetpad"></div>';
   // Render the outcome screen SYNCHRONOUSLY on tap and let the tel: navigation proceed. iOS
   // backgrounds the tab the instant the dialer opens; painting after would never happen.

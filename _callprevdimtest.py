@@ -71,9 +71,9 @@ def node(js):
 
 
 # ---------------------------------------------------------------- (a) Previous lead dims
-NAV = ''.join(grab_fn(n) for n in ('_navPush', '_navSeek', '_navHasBack', 'navBack', '_navRow'))
-NAVJS = 'var _NAVB=[], _NAVF=[], _qvRestore = function(){}, LKFROM = null, _lkReturn = function(){};\n' + NAV + r"""
-var SCREEN = 'lead', lane = 'soon', i = 0, cur = null, toasts = [];
+NAV = ''.join(grab_fn(n) for n in ('_qvRestore', '_navPush', '_navSeek', '_navHasBack', 'navBack', '_navRow'))
+NAVJS = 'var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, _lkReturn = function(){};\n' + NAV + r"""
+var SCREEN = 'lead', lane = 'soon', QVIEW = 'untouched', i = 0, cur = null, toasts = [];
 var ALL = [{c:'A'}, {c:'B'}, {c:'C'}], GONE = {};
 function pool(){ return ALL.filter(function(r){ return !GONE[r.c]; }); }
 function render(){ var P = pool(); cur = i < P.length ? P[i] : cur; }
@@ -124,6 +124,98 @@ for bad in ('saveNotes', 'queueSync', 'logOutcome', '_WORKED', 'notes[', 'dials'
     rec('_navHasBack never touches ' + bad, bad not in hb)
 rec('the 6 hour pending hold is unchanged', SRC.count('var PENDING_HOLD_H = 6;') == 1)
 
+# ---------------------------------------------------------------- (a2) one-off view, Queue clear, pool passes
+# QA r1: with a lead opened on purpose (_openCase) the view on screen is not the view navBack() seeks in,
+# because navBack() runs _qvRestore() first. This harness uses the REAL _qvRestore, _openCase and render,
+# and a pool() that depends on lane and QVIEW.
+OO = ''.join(grab_fn(n) for n in ('_qvRestore', '_navPush', '_navSeek', '_navHasBack', 'navBack', '_navRow',
+                                  '_openCase', 'render'))
+OOJS = 'var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, BLANE = null;\nfunction _lkReturn(){}\n' + OO + r"""
+var SCREEN = 'lead', lane = 'soon', QVIEW = 'untouched', i = 0, cur = null, phIdx = 0, toasts = [], _WORKED = [];
+var ROWS = [{c:'A', v:'untouched', ln:'soon', p:['x']}, {c:'B', v:'untouched', ln:'soon', p:['x']},
+            {c:'C', v:'untouched', ln:'soon', p:['x']}, {c:'R', v:'retries', ln:'soon', p:['x']},
+            {c:'X', v:'retries', ln:'lp', p:['x']}];
+var LANES = [{k:'soon', pred:function(r){ return r.ln === 'soon'; }}, {k:'lp', pred:function(r){ return r.ln === 'lp'; }}];
+var GONE = {}, POOLN = 0, LASTPOOL = '';
+function _viewOf(r){ return r.v; }
+function pool(){ POOLN++; LASTPOOL = lane + '/' + QVIEW;
+  return ROWS.filter(function(r){ return r.ln === lane && !GONE[r.c] && r.v === QVIEW; }); }
+function _clmOwner(){ return null; }
+function toast(t){ toasts.push(t); }
+function promoteLookups(){} function applyPasted(){} function logErr(){}
+function head(){ return '<div id="hd"></div>'; } function wire(){}
+function viewEmptyHtml(){ return '<b>None.</b><div class="sub">x</div>'; }
+function _posSave(){} var WFT = {pause:function(){}};
+function nextLivePh(){ return 0; } function _clmTake(){} function wfResume(){}
+var _els = {}, app = {_h:''};
+Object.defineProperty(app, 'innerHTML', {get:function(){ return this._h; }, set:function(h){ this._h = String(h); _els = {}; }});
+function $(id){ if(id === 'app') return app; if(app._h.indexOf('id="' + id + '"') < 0) return null; return _els[id] || (_els[id] = {}); }
+/* the two lines of screenLead() this ticket touches, in the order the page evaluates them */
+function screenLead(){ app.innerHTML = _navRow() + '<div class="sub">' + (i+1) + ' of ' + (_NAVP||pool()).length + '</div>'; }
+function dim(){ var m = /id="navback" style="([^"]*)"/.exec(app._h); return m ? (/opacity:\s*\.45/.test(m[1]) ? 'dim' : 'full') : 'missing'; }
+function reset(){ GONE = {}; _NAVB = []; _NAVF = []; _QVBACK = null; QVIEW = 'untouched'; lane = 'soon'; i = 0; SCREEN = 'lead'; toasts = []; render(); }
+function stepPastA(){ _navPush('A'); i = 1; render(); }      // Next / Skip log nothing: A is on the trail and still in the pool
+var o = {};
+try{
+  /* a plain lead paint builds the pool twice, as it did before this ticket */
+  reset(); stepPastA(); o.plain = cur.c + ':' + dim();
+  POOLN = 0; render(); o.plain_passes = POOLN;
+  /* SAME-LANE ONE-OFF: a Reached-out lead of this lane opened on purpose */
+  _openCase('R');
+  o.oneoff = cur.c + ':' + dim() + ':' + QVIEW + ':' + lane + ':' + JSON.stringify(_QVBACK);
+  var snap = function(){ return JSON.stringify([QVIEW, lane, i, _QVBACK, _NAVB, _NAVF, cur && cur.c]); };
+  var s0 = snap(); _navRow(); _navRow(); o.oneoff_readonly = snap() === s0;
+  o.oneoff_counters = LASTPOOL;                       // pool()'s counters are left for the view on screen
+  POOLN = 0; render(); o.oneoff_passes = POOLN;
+  toasts = []; navBack(); o.oneoff_tap = cur.c + '|' + QVIEW + '|' + lane + '|' + toasts.length + '|' + (_QVBACK === null);
+  /* one-off, but the only trail lead has left the pool Back uses: dim, and the tap only toasts */
+  reset(); _navPush('A'); GONE.A = 1; i = 0; render(); _openCase('R');
+  o.oneoff_gone = cur.c + ':' + dim();
+  toasts = []; navBack(); o.oneoff_gone_tap = cur.c + '|' + toasts.length;
+  /* one-off that lands in ANOTHER lane: Back still seeks in the lane he came from */
+  reset(); stepPastA(); _openCase('X');
+  o.other = cur.c + ':' + lane + ':' + dim();
+  toasts = []; navBack(); o.other_tap = cur.c + '|' + lane + '|' + QVIEW + '|' + toasts.length;
+  /* QUEUE CLEAR: the Back button is drawn only when Back can reach a lead */
+  reset(); _NAVB = [{c:'A', l:'soon'}]; GONE = {A:1}; i = 9; render();
+  o.qc_gone = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback');
+  reset(); _NAVB = [{c:'A', l:'soon'}]; i = 9; POOLN = 0; render();
+  o.qc_live = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback') + '|' + (!!$('navback') && $('navback').onclick === navBack);
+  o.qc_passes = POOLN;
+  toasts = []; navBack(); o.qc_tap = cur.c + '|' + toasts.length;
+  /* Queue clear while a one-off is open: answered for the view Back restores */
+  reset(); stepPastA(); _openCase('R'); i = 9; render();
+  o.qc_oneoff = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback') + '|' + QVIEW;
+  toasts = []; navBack(); o.qc_oneoff_tap = cur.c + '|' + QVIEW + '|' + toasts.length;
+}catch(e){ o.err = String(e && e.stack || e).slice(0, 400); }
+console.log(JSON.stringify(o));
+"""
+rc, so, se = node(OOJS)
+rec('one-off harness runs', rc == 0, se[-600:])
+c = json.loads(so.strip().splitlines()[-1]) if rc == 0 and so.strip() else {}
+rec('one-off: no exception in the walk', not c.get('err'), c.get('err'))
+rec('a stepped-past lead keeps the button at full strength (real render)', c.get('plain') == 'B:full', c)
+rec('a plain lead paint builds the pool 2 times, not 3', c.get('plain_passes') == 2, c)
+rec('same-lane one-off: Previous lead is at full strength (a trail lead is in the pool Back uses)',
+    c.get('oneoff') == 'R:full:retries:soon:{"v":"untouched","l":"soon","c":"B"}', c)
+rec('same-lane one-off: the tap moves to the stepped-past lead and puts the view back',
+    c.get('oneoff_tap') == 'A|untouched|soon|0|true', c)
+rec('one-off: drawing the button changes no view, lane, place, one-off or trail', c.get('oneoff_readonly') is True, c)
+rec('one-off: pool() was last run for the view on screen', c.get('oneoff_counters') == 'soon/retries', c)
+rec('one-off: one more pool pass, and only then (3)', c.get('oneoff_passes') == 3, c)
+rec('one-off with no reachable trail lead: dim, and the tap only toasts',
+    c.get('oneoff_gone') == 'R:dim' and c.get('oneoff_gone_tap') == 'R|1', c)
+rec('one-off into another lane: full strength, and the tap returns to the lane he came from',
+    c.get('other') == 'X:lp:full' and c.get('other_tap') == 'A|soon|untouched|0', c)
+rec('Queue clear: no Back button when no trail lead is in the pool', c.get('qc_gone') == 'true|false', c)
+rec('Queue clear: Back button drawn and wired when a trail lead is in the pool', c.get('qc_live') == 'true|true|true', c)
+rec('Queue clear: that Back tap opens the lead', c.get('qc_tap') == 'A|0', c)
+rec('Queue clear: the paint builds the pool once', c.get('qc_passes') == 1, c)
+rec('Queue clear in a one-off: Back button drawn, view on screen untouched, and the tap moves',
+    c.get('qc_oneoff') == 'true|true|retries' and c.get('qc_oneoff_tap') == 'A|untouched|0', c)
+rec('the lead card counts from the pool the nav row built',
+    "' of '+(_NAVP||pool()).length+'" in SRC and "' of '+pool().length+'" not in SRC)
+
 # ---------------------------------------------------------------- (b) call log row -> record
 TODAY = datetime.date.today()
 
@@ -138,9 +230,9 @@ ROWS = [
     {'c': 'W1', 'o': 'Ana Gomez Ruiz', 'on': 'Ana Gomez Ruiz', 'a': '100 NW 1st Ave, MIAMI, FL 33128', 'ct': 'MI', 'x': mdy(25),
      'eqc': EQ, 'p': ['3055550101'], 'e': ['ana@example.com']},
     {'c': 'W2', 'o': 'Ben Lee', 'on': 'Ben Lee', 'a': '200 SW 2nd St, MIAMI, FL 33130', 'ct': 'MI', 'x': mdy(30),
-     'eqc': EQ, 'p': ['3055550201']},
+     'eqc': EQ, 'p': ['3055550102']},
     {'c': 'N3', 'o': 'Cal Diaz', 'on': 'Cal Diaz', 'a': '300 NE 3rd Ct, MIAMI, FL 33137', 'ct': 'MI', 'x': mdy(40),
-     'eqc': EQ, 'p': ['3055550301']},
+     'eqc': EQ, 'p': ['3055550103']},
 ]
 FNS = ('isBalloon', 'liveDays', 'isEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
        'routeBlock', 'esc', '_lkDigits', 'wpmNums', 'wprList', 'relKindNum', 'lkAsDial', '_eqUsd', '_tele24n',
@@ -189,9 +281,9 @@ var NOW = Date.now(), DAYMS = 86400000;
 /* WORK 2 LEADS (W1, W2). N3 was never called. T9 was logged by a teammate and is not on this seat's list. */
 var notes = {
   W1: {status:'', note:'', dials:[{d:today(), tsu:NOW - 60000, oc:'noanswer', ph4:'0101', by:'Carlos'}]},
-  W2: {status:'', note:'', dials:[{d:today(), tsu:NOW - 30000, oc:'voicemail', ph4:'0201', by:'Carlos'}]},
+  W2: {status:'', note:'', dials:[{d:today(), tsu:NOW - 30000, oc:'voicemail', ph4:'0102', by:'Carlos'}]},
   N3: {status:'', note:''},
-  T9: {status:'', note:'', owner:'Dee Fox', dials:[{d:today(), tsu:NOW - 90000, oc:'talked', ph4:'0901', by:'Alejandro'}]}
+  T9: {status:'', note:'', owner:'Dee Fox', dials:[{d:today(), tsu:NOW - 90000, oc:'talked', ph4:'0104', by:'Alejandro'}]}
 };
 var before = JSON.stringify(notes), o = {};
 function clickable(){ return _found.filter(function(e){ return typeof e.onclick === 'function'; }); }
@@ -214,7 +306,7 @@ try{
     o.rec_has_case = appEl._h.indexOf('Case W1') > -1;
     o.rec_timeline = appEl._h.indexOf('No answer, number ...0101') > -1;
     o.rec_links = links(appEl._h);
-    o.rec_full_phone = /3055550101|\(305\) 555-0101/.test(appEl._h);
+    o.rec_full_phone = /305555010\d|\(305\) 555-010\d/.test(appEl._h);
     o.rec_email = appEl._h.indexOf('ana@example.com') > -1;
     o.rec_buttons = (appEl._h.match(/<button[^>]*id="([^"]*)"/g) || []).map(function(b){ return /id="([^"]*)"/.exec(b)[1]; }).sort();
     /* Back on the record returns to the log, not to the dial card */
@@ -225,6 +317,13 @@ try{
     screenRecord(_RECC);
     $('recback').onclick(); o.repaint_back = SCREEN;
   }
+  /* KEYBOARD: the row says role=button, so Enter and Space open it and other keys do not */
+  screenRegistry();
+  var kd = function(key){ var pd = 0, e = pick('W2'); if(!e || typeof e.onkeydown !== 'function') return 'nohandler';
+    SCREEN = 'reg'; e.onkeydown({key:key, preventDefault:function(){ pd++; }}); return SCREEN + '|' + pd; };
+  o.key_other = kd('a'); o.key_tab = kd('Tab'); o.key_enter = kd('Enter');
+  screenRegistry(); o.key_space = kd(' ');
+  screenRegistry(); o.key_handlers = clickable().filter(function(e){ return typeof e.onkeydown === 'function'; }).length;
   /* a teammate's row, not on this seat's list: the record still opens, and says it is off the list */
   screenRegistry();
   var t9 = pick('T9');
@@ -253,6 +352,10 @@ rec('the record shows no full phone number and no email address', b.get('rec_ful
 rec('the record has only Copy for AI and Back', b.get('rec_buttons') == ['recai', 'recback'], b)
 rec('Back on the record returns to the call log', b.get('back_screen') == 'reg' and b.get('back_is_log') is True and b.get('back_renders') == 0, b)
 rec('a repaint of the record keeps Back pointed at the log', b.get('repaint_back') == 'reg', b)
+rec('Enter on a focused call log row opens the record', b.get('key_enter') == 'record|1', b)
+rec('Space on a focused call log row opens the record', b.get('key_space') == 'record|1', b)
+rec('any other key on a row does nothing', b.get('key_other') == 'reg|0' and b.get('key_tab') == 'reg|0', b)
+rec('every row has the key handler', b.get('key_handlers') == 3, b)
 rec('a teammate\'s row off this list opens a record with no link', b.get('t9') == 'record|T9|true|0', b)
 rec('record opened from the dial card still goes back to it', b.get('from_lead') == 'lead', b)
 rec('record opened from Mail and knock still goes back there', b.get('from_routes') == 'routes|1', b)
