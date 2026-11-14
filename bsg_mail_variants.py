@@ -71,8 +71,11 @@ INK = '#1b1f27'
 VOICE_EXT = ('.mp3', '.m4a', '.wav', '.ogg')
 CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'      # no I, L, O, 0, 1: read off paper, typed on a phone
 
-# Lead files read from the data folder. The first three are the pool's own inputs and must be there.
-REQUIRED_INPUTS = ('lp_addresses.json', 'lis_pendens.json', 'optouts.json')
+# Lead files read from the data folder. These and the opt-out ledger are the pool's own inputs and must
+# be there. The ledger is read in place and never copied: only the opt-out pipeline may write a file by
+# that name (_ledgerownertest.py), a temp copy included.
+REQUIRED_INPUTS = ('lp_addresses.json', 'lis_pendens.json')
+OPTOUT_LEDGER = 'optouts.json'
 OPTIONAL_INPUTS = ('sale_history_cache.json', 'pacer_stay_cache.json', 'pacer_newfiler_hits.json',
                    'leads_final.json', 'judgment_dates.json')
 _SKIP_LEADS = ('leads_raw.json', 'balloon_leads.json')
@@ -196,9 +199,9 @@ def snapshot(data_dir, tries=3, wait=2.0):
     """Copy the inputs to a private temp folder and return it. Caller deletes it."""
     if not os.path.isdir(data_dir):
         raise DataError('data folder %r does not exist' % (data_dir,))
-    for name in REQUIRED_INPUTS:
-        if not os.path.exists(os.path.join(data_dir, name)):
-            raise DataError('%s is missing from %s. Nothing was built.' % (name, data_dir))
+    for need in REQUIRED_INPUTS + (OPTOUT_LEDGER,):
+        if not os.path.exists(os.path.join(data_dir, need)):
+            raise DataError('%s is missing from %s. Nothing was built.' % (need, data_dir))
     snap = tempfile.mkdtemp(prefix='mailvariants_')
     try:
         for name in list(REQUIRED_INPUTS) + list(OPTIONAL_INPUTS) + lead_files(data_dir):
@@ -1377,11 +1380,16 @@ def select(days, data_dir, today, trigger_days=0):
     """(rows, drops, eligible, event_counts). The handwrite book's pool(), read from a stable copy of
     the data folder, with each row's verified facts attached."""
     snap = snapshot(data_dir)
+    prev = M.set_data_dir(data_dir)
+    try:
+        opt = M._optout_keys()          # the live ledger, read in place (unreadable reads as empty)
+    finally:
+        M.set_data_dir(prev)
+    if not opt:
+        shutil.rmtree(snap, ignore_errors=True)
+        raise DataError('REFUSED: the opt-out ledger is missing or empty. Nothing was built.')
     prev = M.set_data_dir(snap)
     try:
-        opt = M._optout_keys()
-        if not opt:
-            raise DataError('REFUSED: the opt-out ledger is missing or empty. Nothing was built.')
         rows, drops = M.pool(days, opt)
         idx = facts_index(snap)
     finally:
