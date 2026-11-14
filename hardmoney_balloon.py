@@ -238,6 +238,37 @@ def candidates(months=24, min_months=0, report=False):
     return uniq
 
 
+def _published_copy(doc):
+    """The site copy of the book, from the full one. A pure string transform: writes nothing."""
+    # THE PUBLISHED COPY IS REDACTED. This repo is PUBLIC (verified 2026-08-12: raw.githubusercontent
+    # serves its data files with HTTP 200), and GitHub Pages serves docs/ to the world, so the
+    # "unguessable folder" convention borrowed from Carlos's door books is obscurity with a public
+    # file tree behind it — i.e. no protection at all. docs/index.html solves this by ENCRYPTING its
+    # payload; this book has no such gate.
+    # So the site copy carries only corporate public record — LLC, lender, loan, LTV, verdict — and
+    # the "Human behind the LLC" column (Sunbiz officer names and phones) is stripped. That column is
+    # the calling detail; it stays on Alejandro's machine and out of a search index. The local and
+    # Desktop copies below are the FULL book.
+    pub = re.sub(r'<th>Human behind the LLC</th>', '<th>Human</th>', doc)
+    pub = re.sub(r'(<tr>(?:<td[^>]*>.*?</td>){8})<td>.*?</td></tr>',
+                 r'\1<td><span class="mut">on file</span></td></tr>', pub)
+    pub = pub.replace('<div class="kpi"><div class="n">{human_n}</div>'.format(human_n=''), '')
+    # Ask search engines not to index it: the same tag the board (tracker_template.html:3) and
+    # Call Mode carry. It is a request, not a gate; the redaction above is the protection.
+    pub = pub.replace('<meta charset="utf-8">',
+                      '<meta charset="utf-8">\n<meta name="robots" content="noindex">', 1)
+    # The page strip (dealflow_nav.py), on the PUBLISHED copy only: its links are relative to
+    # docs/hm-balloon-q7v3n8/, and the local copies below live in folders with no board beside them.
+    # Before 2026-10-26 the book was the one surface in the strip with no way back to the others.
+    try:
+        import dealflow_nav as _nav
+        pub = pub.replace('</style>', _nav.CSS_LIGHT + '\n</style>', 1)
+        pub = pub.replace('<body>\n', '<body>\n' + _nav.strip('balloon', 1, target_blank=()) + '\n', 1)
+    except Exception as _e:
+        print('balloon book: page strip skipped (%s)' % str(_e)[:80])
+    return pub
+
+
 def _write_report(full, hits, lenders, lo, hi, months):
     # KPIs count the WHOLE universe; the table shows the balloon-zone display slice (`hits`).
     swept = [h for h in full if h.get('source') == 'countywide']
@@ -346,28 +377,7 @@ calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first ca
                                                                                   'NOFOLIO', 'NOVALUE')),
                          nlend=len(lenders), human_n=sum(1 for h in zone_all if h.get('agent')),
                          lend_rows=lend_rows or '<li class="mut">none in this window</li>', rows=rows)
-    # THE PUBLISHED COPY IS REDACTED. This repo is PUBLIC (verified 2026-08-12: raw.githubusercontent
-    # serves its data files with HTTP 200), and GitHub Pages serves docs/ to the world, so the
-    # "unguessable folder" convention borrowed from Carlos's door books is obscurity with a public
-    # file tree behind it — i.e. no protection at all. docs/index.html solves this by ENCRYPTING its
-    # payload; this book has no such gate.
-    # So the site copy carries only corporate public record — LLC, lender, loan, LTV, verdict — and
-    # the "Human behind the LLC" column (Sunbiz officer names and phones) is stripped. That column is
-    # the calling detail; it stays on Alejandro's machine and out of a search index. The local and
-    # Desktop copies below are the FULL book.
-    pub = re.sub(r'<th>Human behind the LLC</th>', '<th>Human</th>', doc)
-    pub = re.sub(r'(<tr>(?:<td[^>]*>.*?</td>){8})<td>.*?</td></tr>',
-                 r'\1<td><span class="mut">on file</span></td></tr>', pub)
-    pub = pub.replace('<div class="kpi"><div class="n">{human_n}</div>'.format(human_n=''), '')
-    # The page strip (dealflow_nav.py), on the PUBLISHED copy only: its links are relative to
-    # docs/hm-balloon-q7v3n8/, and the local copies below live in folders with no board beside them.
-    # Before 2026-10-26 the book was the one surface in the strip with no way back to the others.
-    try:
-        import dealflow_nav as _nav
-        pub = pub.replace('</style>', _nav.CSS_LIGHT + '\n</style>', 1)
-        pub = pub.replace('<body>\n', '<body>\n' + _nav.strip('balloon', 1, target_blank=()) + '\n', 1)
-    except Exception as _e:
-        print('balloon book: page strip skipped (%s)' % str(_e)[:80])
+    pub = _published_copy(doc)
     docs_out = os.path.join(HERE, 'docs', 'hm-balloon-q7v3n8', 'index.html')
     os.makedirs(os.path.dirname(docs_out), exist_ok=True)
     open(docs_out, 'w', encoding='utf-8').write(pub)
