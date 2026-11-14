@@ -424,11 +424,16 @@ rem  CONTACTABLE ONLY 2026-10-18: before --limit and the 40/run and 80/day call 
 rem  drops a §362 stay, an outreach hold (Broward/Palm Beach, broward_or_feed, #206), a closed /
 rem  dismissed / disposed / passed / sold case, and a Do Not Contact or opt-out. One log line
 rem  has the counts. python skiptrace.py --all --report prints them and does not call Tracerfy.
-python -u skiptrace.py --all --limit 100 --county-first MIAMI-DADE >> "%LOG%" 2>&1
+rem  $0 RULE 2026-11-13 (Alejandro: "I don't want to pay anything else"): this paid step runs only
+rem  when DEALFLOW_PAID=1 is set on the machine. Unset = skipped. Numbers come from his manual
+rem  Whitepages lookups typed into Call Mode; lien reads stay on the free Camoufox path.
+if "%DEALFLOW_PAID%"=="1" python -u skiptrace.py --all --limit 100 --county-first MIAMI-DADE >> "%LOG%" 2>&1
+if not "%DEALFLOW_PAID%"=="1" echo     paid skip trace OFF ^($0 rule^) - numbers come from Call Mode lookups.>> "%LOG%"
 rem  3-DAY lane (Jesse, 2026-09-16): sales within 3 business days with face equity and a 2024+ case get
 rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesday leads had no phone),
 rem  and the morning list lands in %USERPROFILE%\DEALFLOW\3DAY-<date>.md for Jesse.
-python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
+if "%DEALFLOW_PAID%"=="1" python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
+if not "%DEALFLOW_PAID%"=="1" python -u three_day.py >> "%LOG%" 2>&1
 
 
 :rebuild
@@ -446,7 +451,8 @@ rem  Phone line status - Twilio Lookup, $0.007 a number, TWILIO_VALIDATE_DAILY_C
 rem  Disconnected numbers leave the Call Mode queue and unreachable ones are dialled last.
 rem  No DEALFLOW\twilio.key = skipped. Exit 2 = Twilio refused the key; the run carries on.
 rem  After :rebuild so it runs with or without tracerfy.key.
-python -u phone_validate.py >> "%LOG%" 2>&1
+rem  $0 RULE 2026-11-13: Twilio line checks only with DEALFLOW_PAID=1.
+if "%DEALFLOW_PAID%"=="1" python -u phone_validate.py >> "%LOG%" 2>&1
 python -u refresh_progress.py step 3b-photos
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
 python -u property_photos.py --zillow >> "%LOG%" 2>&1
@@ -518,7 +524,9 @@ rem  provider_check() degrades to free-tier-only on any key/credit/network failu
 rem  docstring -- so a dead key never breaks this step, it just stops buying anything.
 python -u refresh_progress.py step 3i
 echo [3i/5] Verifying fresh addresses before they enter the sendable pool...
-python -u verify_emails.py --api --limit 150 >> "%LOG%" 2>&1
+rem  $0 RULE 2026-11-13: --api (ZeroBounce, paid) only with DEALFLOW_PAID=1; otherwise the free checks.
+if "%DEALFLOW_PAID%"=="1" python -u verify_emails.py --api --limit 150 >> "%LOG%" 2>&1
+if not "%DEALFLOW_PAID%"=="1" python -u verify_emails.py --limit 150 >> "%LOG%" 2>&1
 
 rem  ENTITY GATE. Re-verify the company against Sunbiz BEFORE the board is built, so a filing
 rem  that has just indexed starts printing its " LLC" on this run instead of the next one --

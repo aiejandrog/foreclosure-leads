@@ -139,7 +139,13 @@ def untraceable_owner(clean):
 
 
 # ---- fetch the owner's recorded documents -----------------------------------------------------
+FILE_QS = '__models_file__'      # --models-file: the records come from disk, not from the clerk
+_FILE_MODELS = []
+
+
 def records_by_qs(qs):
+    if qs == FILE_QS:
+        return list(_FILE_MODELS)
     try:
         r = S.get(OR_BASE + 'api/SearchResults/getStandardRecords?qs=' + qs, timeout=30)
         if r.status_code != 200:
@@ -1623,6 +1629,10 @@ def main():
                     help="JSON file that makes --max-spend a total across runs (what earlier runs "
                          "spent is subtracted; the total in the file can be lowered, never raised). "
                          "--repull also records each chain it paid to search, so none is paid for twice")
+    ap.add_argument('--models-file', default='',
+                    help="with --case: analyze the search results stored in this JSON file ({'recordingModels': [...]}, "
+                         "written by equity_queue.py from a real-browser search) instead of asking the clerk. "
+                         "No browser, no token, no spend.")
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
                          "(escape hatch for the day the county stops issuing tokens to it)")
@@ -1728,6 +1738,12 @@ def _run(a, ap):
         print('  ! LP fold-in skipped: %s' % _e)
     qs_cache = json.load(open(QS_CACHE, encoding='utf-8')) if os.path.exists(QS_CACHE) else {}
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
+    if a.models_file:
+        if not a.case:
+            ap.error('--models-file needs --case')
+        a.cached_only = True                                  # nothing is fetched or bought on this path
+        _FILE_MODELS[:] = (json.load(open(a.models_file, encoding='utf-8')) or {}).get('recordingModels') or []
+        qs_cache = dict(qs_cache)                             # a copy: the marker below is never saved
 
     picked = []
     md_retries = []          # previously-failed traces, retried within the run's budget
@@ -1739,6 +1755,8 @@ def _run(a, ap):
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         oc = (r.get('owner_clean', '') or '').strip()
         if not oc: continue                                        # kimi: companies traced too (folio-isolated)
+        if a.models_file:
+            qs_cache[oc] = FILE_QS
         # Government bodies and bare street addresses cost a mint every run and return nothing.
         # --case overrides, so a human can still force one if they have a reason.
         if not a.case:
@@ -1875,6 +1893,8 @@ def _run(a, ap):
             if oc in qs_cache and not _wider:
                 models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
                 _src = 'cache'
+                if a.models_file:
+                    _src = 'browser'
                 if not models and not a.cached_only:
                     # An expired token comes back EMPTY rather than failing. Read as "no cached
                     # answer", so the search runs afresh (Camoufox first, then paid) instead of
@@ -2006,6 +2026,14 @@ def _run(a, ap):
                 if _SPEND['stopped'] and not a.cached_only:
                     capped += 1
                     print(f"  $$  {case:22} {oc:26} not pulled: spend cap ({_SPEND['stopped']})")
+                    try:                                      # logged for the browser job, never just scrolled past
+                        import equity_queue as _EQ
+                        _l, _f = (split_owner(oc) or ('', ''))[:2] if oc else ('', '')
+                        _EQ.add(case, oc, _l, _f, folio,
+                                reason='free search missed; paid search refused: ' + str(_SPEND['stopped']),
+                                kind='entity' if COMPANY_RE.search(oc or '') else 'person')
+                    except Exception:
+                        pass
                 elif (a.repull and case in out and paid > _paid0 and not _def_blocked and not _free_miss):
                     # every name was asked the paid way and answered, and none reached this parcel (an
                     # owner name too short to search leaves only the defendants): marked, never paid
@@ -2107,6 +2135,13 @@ def _run(a, ap):
             except Exception:
                 pass
 
+    try:
+        import equity_queue as _EQ
+        _n = _EQ.flush()
+        if _n:
+            print(f"  equity queue: {_n} lead(s) the free search missed are queued for the browser job -> {_EQ.qpath()}")
+    except Exception:
+        pass
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
     if a.repull:
         print(f"     --repull: {done} chain(s) re-read, {merged} narrower than the earlier search (earlier "

@@ -97,15 +97,19 @@ finally:
 out = buf.getvalue()
 st = json.load(open(C.STATE))
 tos = [t for t, _f in sent]
-rec('cadence: an address with no delivery evidence is HELD, not mailed', 'unverified@example.com' not in tos, sent)
-rec('cadence: the held step is NOT consumed (stays at step 0)', st['2099-000201-CA-01']['step'] == 0, st['2099-000201-CA-01'])
-rec('cadence: the run log says HELD and why', 'HELD step 1/4 -> unverified@example.com' in out, out[-600:])
-rec('cadence: a first touch leaves from the warm-up sender', ('valid1@example.com', 'ft2@warm-b.example') in sent, sent)
-rec('cadence: the warm-up first-touch cap (1) holds the second first touch for tomorrow',
-    'valid2@example.com' not in tos and st['2099-000203-CA-01']['step'] == 0, (sent, st['2099-000203-CA-01']))
+# 2026-11-13: verified-only removed. An address with no delivery evidence is a normal first touch:
+# it sends, from the warm-up sender, and consumes its step. A known-dead address is still held
+# (_gatesremovedtest, _firsttouchtest). The warm-up sender's own cap (1 here) is what holds the rest.
+rec('cadence: an address with no delivery evidence is mailed as a first touch, from the warm-up sender',
+    ('unverified@example.com', 'ft2@warm-b.example') in sent and 'HELD step 1/4 -> unverified@example.com' not in out, sent)
+rec('cadence: the step it sent is consumed (step 1)', st['2099-000201-CA-01']['step'] == 1, st['2099-000201-CA-01'])
+rec('cadence: the warm-up first-touch cap (1) holds the next two first touches for tomorrow',
+    'valid1@example.com' not in tos and 'valid2@example.com' not in tos
+    and st['2099-000202-CA-01']['step'] == 0 and st['2099-000203-CA-01']['step'] == 0,
+    (sent, st['2099-000202-CA-01'], st['2099-000203-CA-01']))
 rec('cadence: a follow-up to a proven address still sends', 'followup@example.com' in tos, sent)
 L = json.load(open(S.SENT_LEDGER))
-ft_rows = [r for r in L if r.get('to') == 'valid1@example.com']
+ft_rows = [r for r in L if r.get('to') == 'unverified@example.com']
 rec('cadence: the first touch is ledgered touch=first (the bridge meters it)', ft_rows and ft_rows[0].get('touch') == 'first', L)
 rec('cadence: the slot was released once the ledger counted it', not S._FT_SLOTS, S._FT_SLOTS)
 rec('cadence: exit 0', rc == 0, rc)

@@ -1,5 +1,33 @@
 # Operating rules from 2026-11-07 (machine migration freeze)
 
+> ## FREEZE LIFTED 2026-11-13 (rules 1 and 2) — by Alex, in writing
+>
+> Alex was asked four questions by name: start the bridge on 8823 and keep it starting at logon;
+> re-enable the 07:15 opt-out sync task; merge, rebuild and publish; the other scheduled tasks off
+> or on. His answer: **"switch everything on and yes for all lets go"**.
+>
+> **The operator machine is the laptop, LAPTOP-VNS1OPT1** (`engine.id` = `laptop`). State as of
+> 2026-11-13 16:00 ET, read on the machine:
+> - All ten DealFlow scheduled tasks are **Enabled** (Refresh 04:30, Daily Routes 05:30, Opt-out
+>   Sync 07:15, Replies 07:45, SendServerDaily 07:45, Morning Worker 08:00, Phones 08:30, Sheets
+>   CRM, Evening Readiness, Weekly Analyst). `DealFlow Cadence` is not registered on this machine.
+> - `send_server.py` runs on 127.0.0.1:8823 and starts at logon (Startup folder launcher).
+> - Refresh, publish and owner sends run again under the normal rules in CLAUDE.md.
+>
+> **Rule 1 and rule 2 below no longer apply on the laptop.** They still apply to every OTHER
+> machine: the desktop stays disarmed and never gets an `engine.id`. Two armed machines is the
+> failure this file's neighbours document.
+>
+> **Still in force, because he was not asked about them and did not lift them:** rule 3
+> (`DEALFLOW_FOLLOWUPS_ON`), rule 4 ($0 paid calls, spend caps unchanged), rule 5 (vendor keys),
+> and the merge and branch rules 7 to 9. Rule 6 is back to its ordinary meaning: a merge is
+> visible after the next publish, and publishes run again.
+>
+> Also changed on 2026-11-13 by his decision: the paid Whitepages API is retired, and the
+> first-email gates (bounce pause, verified-only, the 10-a-day unverified cap) are removed. The
+> opt-out ledger, its freshness and same-day sync check, the bankruptcy stay gate, `mail_guard`
+> and the daily caps still refuse sends.
+
 Every agent, team and Claude session on this repo reads this file before it starts, after CLAUDE.md
 and before PATTERNS.md. Where this file is stricter than an older brief, this file wins. It stands
 until Alex lifts it in writing.
