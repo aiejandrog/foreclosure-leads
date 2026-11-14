@@ -204,7 +204,13 @@ def main():
     # provider it would pick and whether that key loads, so the preflight cannot disagree with the
     # process it is gating.
     _provider = _trace_provider_ready()
-    if _provider:
+    if os.environ.get('DEALFLOW_PAID') != '1':
+        # $0 RULE 2026-11-13 (Alejandro: "I don't want to pay anything else"). The same switch that
+        # gates the paid steps in refresh-dealflow.bat. Not a degradation: numbers come from his own
+        # Whitepages lookups typed into Call Mode's Find a number list.
+        print('\n===== PHONES (LP fast lane) =====\n(skipped: paid skip trace is off - set DEALFLOW_PAID=1 '
+              'to turn it on. Fresh filings ship without phones and land under Find a number.)', flush=True)
+    elif _provider:
         run('PHONES (LP fast lane)', ['skiptrace.py', '--lp-fresh', '45', '--limit', '25'],
             ok=(0, 2, 3, 4, 5))
     else:
