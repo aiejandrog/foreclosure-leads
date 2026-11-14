@@ -1,92 +1,90 @@
 {
  "alerts": [
   {
-   "at": "2026-11-04T21:33:40-05:00",
-   "key": "bounce-rate",
-   "severity": "fail",
-   "text": "First-touch bounce 20.0% (2 of 10 sent on 2026-11-01): 2 hard bounces in that day, over the 5% ceiling. Post-cutoff first touches: 20.0% (2 of 10 bounced). Rule: paused (hard_bounces). First-touch sends are paused."
-  },
-  {
-   "at": "2026-11-04T21:33:40-05:00",
+   "at": "2026-11-13T21:09:48-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-04T21:33:40-05:00",
+   "at": "2026-11-13T21:09:48-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-04 21:14): 1 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-13 21:09): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) last result failed (DealFlow Daily Routes, DealFlow Replies, DealFlow Weekly Analyst); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-04T21:33:40-05:00",
+   "at": "2026-11-13T21:09:48-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-04T21:33:40-05:00",
+   "at": "2026-11-13T21:09:48-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-04T21:33:40-05:00",
+ "published_at": "2026-11-13T21:09:48-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
-   "filings": 2667,
-   "holds": 598,
+   "errors": 2,
+   "filings": 3096,
+   "holds": 639,
    "last_http_status": 0,
-   "leads_checked": 3,
-   "match_s": 2,
-   "needing_search": 4279,
+   "leads_checked": 37,
+   "match_s": 1,
+   "needing_search": 3096,
    "provider": "courtlistener",
-   "pull_age_h": 0.32,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 115,
-   "searched_this_run": 3,
+   "requests_used": 100,
+   "searched_this_run": 37,
    "starved_runs": 0,
-   "truncated": 1
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
-   "day_blocked": true,
+   "day_blocked": false,
    "day_ceiling": 0.05,
-   "day_date": "2026-11-01",
-   "day_dead": 2,
+   "day_date": "",
+   "day_dead": 0,
    "day_min": 20,
-   "day_rate": 0.2,
-   "day_sent": 10,
-   "dead": 2,
+   "day_rate": 0.0,
+   "day_sent": 0,
+   "dead": 0,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
-   "ft_dead": 2,
+   "ft_dead": 0,
    "ft_hard_bounces": 2,
    "ft_hard_min": 10,
-   "ft_rate": 0.2,
+   "ft_rate": 0.0,
    "ft_restart_cap": 10,
-   "ft_rule": "paused",
-   "ft_sent": 10,
-   "ft_why": "hard_bounces",
+   "ft_rule": "clear",
+   "ft_sent": 0,
+   "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.05668094798069332,
-   "mailed": 10,
-   "post_dead": 2,
-   "post_lb": 0.05668094798069332,
-   "post_mailed": 10,
-   "post_rate": 0.2,
+   "lb": 0.0,
+   "mailed": 1,
+   "measured_day_blocked": false,
+   "measured_post_trailing_blocked": false,
+   "measured_rule": "slow_restart",
+   "measured_why": "slow_restart",
+   "post_dead": 0,
+   "post_lb": 0.0,
+   "post_mailed": 1,
+   "post_rate": 0.0,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.2,
+   "rate": 0.0,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
@@ -112,28 +110,20 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-04",
-   "eligible": 29,
+   "date": "2026-11-13",
+   "eligible": 51,
    "judged": true,
-   "paused": true,
+   "paused": false,
    "readable": true,
    "scheduled": false,
    "sent": 0,
    "worker_run": {
-    "ev": {
-     "autostart_countdown": 1,
-     "autostart_run": 1,
-     "run_paused": 19,
-     "send_answer": 19,
-     "worker_loaded": 1
-    },
+    "ev": {},
     "no_email": {},
-    "queued": 21,
+    "queued": 0,
     "readable": true,
-    "refused": {
-     "optout_stale": 19
-    },
-    "rows": 41,
+    "refused": {},
+    "rows": 0,
     "skipped": {}
    }
   },
@@ -142,12 +132,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-04",
+   "date": "2026-11-13",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1793829440,
+   "started_at": 1794602862,
    "state": "finished"
   },
   "paid_reads": {
@@ -157,16 +147,20 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-11-04T21:14:32-05:00",
+   "at": "2026-11-13T21:09:48-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
    "degraded_names": [],
-   "disabled": 0,
-   "disabled_names": [],
-   "failed": 1,
+   "disabled": 1,
+   "disabled_names": [
+    "DEALFLOW Phones"
+   ],
+   "failed": 3,
    "failed_names": [
-    "DealFlow Opt-out Sync"
+    "DealFlow Daily Routes",
+    "DealFlow Replies",
+    "DealFlow Weekly Analyst"
    ],
    "interactive": 3,
    "interactive_names": [
