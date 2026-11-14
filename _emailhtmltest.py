@@ -37,7 +37,7 @@ def html_text(h):
 
 bodies = {
     'long': OC.email_body('Maria', '2026-11-04', sig_block='Alejandro Gonzalez\nBiscayne Solutions Group\n'
-                          '(305) 555-0100\n8400 NW 33rd St, Ste 310, PMB 2008, Doral, FL 33122'),
+                          '(305) 555-0100\n8400 NW 33rd St, Ste 310, Doral, FL 33122'),
     'short': OC.email_body_short('Maria', '2026-11-04'),
     'tricky': 'Hi <Ann> & Co,\n\nSee https://example.com/a?b=1&c=2, or mail a.b@bsgflorida.com.\n'
               'Call (305) 555-0100.\n\n  • one\n  • two\n\n' + OC.OPTOUT_LINE_EN + '\n' + OC.OPTOUT_LINE_ES,
