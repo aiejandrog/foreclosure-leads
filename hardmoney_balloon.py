@@ -368,8 +368,6 @@ calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first ca
         pub = pub.replace('<body>\n', '<body>\n' + _nav.strip('balloon', 1, target_blank=()) + '\n', 1)
     except Exception as _e:
         print('balloon book: page strip skipped (%s)' % str(_e)[:80])
-    # Company public record only, but still not a page a search engine should list.
-    pub = pub.replace('<head>', '<head><meta name="robots" content="noindex,nofollow">', 1)
     docs_out = os.path.join(HERE, 'docs', 'hm-balloon-q7v3n8', 'index.html')
     os.makedirs(os.path.dirname(docs_out), exist_ok=True)
     open(docs_out, 'w', encoding='utf-8').write(pub)

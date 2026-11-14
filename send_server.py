@@ -53,7 +53,8 @@ import sys
 import threading
 
 # Pages that may call the bridge from a browser (see Handler._auth). "null" is a local file page.
-_ALLOWED_ORIGINS = ('https://aiejandrog.github.io', 'null')
+import board_url as _BU
+_ALLOWED_ORIGINS = ('/'.join(_BU.BOARD_URL.split('/')[:3]).lower(), 'null')
 _ATTACH_EXT = ('.pdf', '.png', '.jpg', '.jpeg', '.docx')
 import time
 import urllib.error
