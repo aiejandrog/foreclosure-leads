@@ -87,6 +87,11 @@ def lead_card(r):
         "tier": r.get("tier"),
         "score": r.get("score"),
         "homestead": r.get("homestead"),
+        # What the coach may say about money. eqstate is stamped by equity_state.apply();
+        # a lead without it reads as NOT verified on the page, and no number is offered.
+        "eqstate": r.get("eqstate"),
+        "judgment_unknown": bool(r.get("judgment_unknown")),
+        "sale_bk_active": bool(r.get("sale_bk_active")),
     }
 
 
@@ -198,6 +203,8 @@ def end_session(sid, payload):
     m["stages_visited"] = payload.get("stages_visited")
     m["objections_fired"] = payload.get("objections_fired")
     m["redflags_fired"] = payload.get("redflags_fired")
+    # one row per coach prompt: which intent, partial or final words, ms held, ms the words ran behind
+    m["coach_fires"] = payload.get("coach_fires")
     m["consent_ack"] = payload.get("consent_ack")
     m["outcome"] = payload.get("outcome")
     _write_json(mp, m)

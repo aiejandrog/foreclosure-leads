@@ -77,7 +77,7 @@ code{color:var(--accent)}
 #sayline .tag{display:block;font-size:10px;letter-spacing:.1em;color:var(--dim);margin-top:10px;text-transform:uppercase}
 #saynote{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.6}
 
-#objection{display:none;margin-top:16px;background:#241a08;border:1px solid #5c4410;border-left:4px solid var(--warn);border-radius:0 10px 10px 0;padding:14px 16px;position:relative}
+#objection{display:none;margin:0 0 14px;background:#241a08;border:1px solid #5c4410;border-left:4px solid var(--warn);border-radius:0 10px 10px 0;padding:14px 16px;position:relative}
 #objection.on{display:block}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
 #objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
@@ -100,6 +100,35 @@ code{color:var(--accent)}
 .hit{padding:7px 10px;border:1px solid var(--line);border-radius:7px;margin-bottom:5px;cursor:pointer;font-size:12.5px;background:#101519}
 .hit:hover{background:#1a222b;border-color:var(--accent)} .hit b{color:var(--accent)} .hit span{color:var(--dim)}
 #pickcard{width:100%;margin-top:14px}
+
+/* ---------------- fast coach (transcript-driven card, facts, health) ---------------- */
+#health{font-size:11px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+#health.ok{color:#5fd99a;border-color:#1d5c38}
+#health.bad{color:#fff;background:#8a1f1f;border-color:var(--hot);font-weight:700}
+#lagpill{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+#coach{display:none;margin:0 0 14px;background:#0d1f2e;border:1px solid #1d4a6b;border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:12px 16px 14px;min-height:92px}
+#coach.on{display:block}
+#coach.pop{animation:coachpop .9s} @keyframes coachpop{0%{background:#12456b}100%{background:#0d1f2e}}
+#coach.stale{opacity:.55}
+#coach.stop{background:#3a0d0d;border-color:#7a2222;border-left-color:var(--hot)}
+#coach.stop.pop{animation:none}
+#coach.cb{border-left-color:var(--warn)}
+#coach .cl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:9px 0 3px}
+#coach .cl:first-of-type{margin-top:0}
+#cmeta{float:right;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+#cheard{font-size:13px;color:#c9d4e0;font-style:italic}
+#csay{font-size:20px;line-height:1.4}
+#cask{font-size:17px;line-height:1.4;color:#9fd6ff}
+#cact{display:none;font-weight:700;color:#ffd0d0;font-size:14px;margin-top:10px}
+#coach.cb #cact{color:#f3d08a}
+#coach .cbtn{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#coach .cbtn button{padding:5px 11px;font-size:12px}
+#clisten{display:none;font-size:12px;color:var(--dim);margin:0 0 10px;font-style:italic}
+#clisten.on{display:block}
+#leadbox .src{font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:8px}
+#leadbox .src.ok{background:#0d2b1a;color:#5fd99a;border:1px solid #1d5c38}
+#leadbox .src.no{background:#2b1d0d;color:#e6b35c;border:1px solid #5c4410}
+#leadbox .hold{color:#ffb3b3;font-weight:700}
 
 /* overlays: idle warning + outcome picker */
 .overlay{position:fixed;inset:0;background:rgba(5,8,11,.82);display:none;align-items:center;justify-content:center;z-index:50}
@@ -159,11 +188,15 @@ code{color:var(--accent)}
     <span class="t" id="clock">00:00</span>
     <span class="t" id="words">0 words</span>
     <span id="eng"></span>
+    <span id="health" title="Is the microphone hearing sound, and are words arriving?">mic</span>
+    <span id="lagpill" title="Transcript lag: sound heard to first word on screen. Coach: trigger words on screen to the card."></span>
     <select id="lang" onchange="Coach.setLang(this.value)">
       <option value="en-US">English</option>
       <option value="es-US">Espa&ntilde;ol</option>
     </select>
     <span class="sp"></span>
+    <button id="pausebtn" title="Hide the coach card and stop new prompts (P)" onclick="Coach.pauseCoach()">Pause coach (P)</button>
+    <button title="The last things they said (C)" onclick="Coach.catchUp()">Catch me up (C)</button>
     <button onclick="Coach.back()">&larr; Back (B)</button>
     <button onclick="Coach.next()">Next stage (N)</button>
     <button style="border-color:var(--hot);color:#ffb3b3" onclick="Coach.stop()">Stop &amp; save (Esc)</button>
@@ -190,11 +223,22 @@ code{color:var(--accent)}
       <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="Coach.fill()"></div>
     </div>
 
-    <div id="chips"></div>
-
-    <div id="nowstage"></div>
-    <div id="sayline"><span id="saytext"></span><span class="tag" id="saytag">say this</span></div>
-    <div id="saynote"></div>
+    <!-- FAST COACH: one card, always in this spot. Driven by the transcript, partial words included. -->
+    <div id="clisten">Listening&hellip; they are still mid-thought</div>
+    <div id="coach">
+      <span id="cmeta"></span>
+      <div class="cl">They said &middot; as transcribed, may be misheard</div>
+      <div id="cheard"></div>
+      <div class="cl" id="csayl">Say this</div>
+      <div id="csay"></div>
+      <div class="cl" id="caskl">Ask next</div>
+      <div id="cask"></div>
+      <div id="cact"></div>
+      <div class="cbtn">
+        <button id="cmore" onclick="Coach.coachMore()">Another question</button>
+        <button onclick="Coach.coachHide()">Hide (H)</button>
+      </div>
+    </div>
 
     <div id="objection">
       <button class="x" title="dismiss (D)" onclick="Coach.dismissObjection()">&times;</button>
@@ -202,6 +246,12 @@ code{color:var(--accent)}
       <div class="back">&#8617; say this back</div>
       <div class="body" id="objbody"></div>
     </div>
+
+    <div id="chips"></div>
+
+    <div id="nowstage"></div>
+    <div id="sayline"><span id="saytext"></span><span class="tag" id="saytag">say this</span></div>
+    <div id="saynote"></div>
 
     <div id="probes">
       <p class="h" style="margin-top:0">Probing loop &mdash; when they get vague</p>
@@ -437,7 +487,7 @@ var FLAGS = [
  {re:/save your (home|house)/i,                       why:'FS 501.1377 language — say “options,” never “save your home.”'},
  {re:/\b(sign|transfer)\b.{0,30}\b(deed|title)\b/i,   why:'Core 501.1377 red flag — deed/title is attorney-only territory.'},
  {re:/quit\s?claim/i,                                 why:'Deed instrument — never on a money-side call.'},
- {re:/our attorneys?/i,                               why:'Guardrail: say “our senior advisor,” never “our attorneys.”'},
+ {re:/\bour attorneys?/i,                               why:'Guardrail: say “our senior advisor,” never “our attorneys.”'},
  {re:/my supervisor/i,                                why:'Guardrail: say “our senior advisor, 30+ years.”'},
  {re:/my clients?\b/i,                                why:'Guardrail: never “my clients.”'},
  {re:/(up\s?front|advance) fee/i,                     why:'No money up front, ever (MARS + FS 501.1377).'},
@@ -461,7 +511,9 @@ var S = {
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
   lead:null, hits:[], debounce:null, clockTimer:null,
-  lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null
+  lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null,
+  fc:{paused:false, card:null, list:null, cool:{}, fires:[], holdT:null, heldSince:0, askI:0,
+      lastWord:0, lastSound:0, soundMs:0, onset:0, txLag:null, an:null, anT:null, ctx:null}
 };
 function $(id){ return document.getElementById(id); }
 function now(){ return Date.now(); }
@@ -476,6 +528,255 @@ function norm(s){
 }
 CARDS.forEach(function(c){ c.nm=c.m.map(norm); });
 Object.keys(TRIG).forEach(function(k){ TRIG[k]=TRIG[k].map(norm); });
+
+/* FASTCOACH-BEGIN ============================================================================
+   The transcript drives the coach. Every partial result from the recognizer is matched here, so
+   the card shows while they are still finishing the sentence, not after the recognizer's ~1 s
+   end-of-speech pause. No model and no network: a phrase table, so the answer costs 0 ms and $0.
+   PURE: nothing in this block touches the DOM (node-tested by _fastcoachtest.py).
+
+   An intent fires when one of its `m` phrases is on the line (and one of `also`, when it has
+   that list), and at least one of those phrases is in the NEWEST words. Highest `pri` wins,
+   then the longest phrase. kind: stop | callback | fact | ask | sit.
+   WHAT THE COACH MAY SAY ABOUT MONEY comes from fcFactSay() only: the court's sale date, the
+   recorded judgment (never called a payoff), and equity only when the lead carries a verified
+   state. Anything else is said to be not verified. It never fills in a number. */
+var INTENTS = [
+ {id:'cb_window', kind:'callback', pri:10,
+  m:['dont call me at work','do not call me at work','dont call me this late','dont call me this early',
+     'dont call me at night','dont call me during','no me llame al trabajo','no me llame tan tarde'],
+  heard:'not at this time / place',
+  say:'Understood, my apologies. What day and time is best? I’ll call you right at that time.',
+  es:'Entendido, disculpe. ¿Qué día y a qué hora le queda mejor? Lo llamo a esa hora exacta.',
+  act:'Repeat the day + time back (Eastern). Then log Callback in Call Mode with that exact time.'},
+ {id:'stop', kind:'stop', pri:9,
+  m:['stop calling','dont call me again','do not call me again','dont call here','do not call','dont ever call',
+     'dont call me anymore','take me off','remove my number','remove me from','lose my number',
+     'no me llame','no me llamen','no llame mas','quiteme de','no vuelva a llamar'],
+  heard:'asked you to stop',
+  say:'Understood. I’m taking you off our list right now. Sorry to have bothered you.',
+  es:'Entendido. Lo saco de nuestra lista ahora mismo. Disculpe la molestia.',
+  act:'End the call. Log DO NOT CONTACT in Call Mode now. That is what stops every channel.'},
+ {id:'callback', kind:'callback', pri:7,
+  m:['call me back','call me later','call back later','call me tomorrow','call me tonight','call me after',
+     'call me next week','call me another time','im at work','i am at work','im driving','i am driving',
+     'bad time','not a good time','busy right now','in a meeting','do not have time','dont have time','have no time',
+     'no time for this','no time right now','no tengo tiempo',
+     'llameme despues','llameme mas tarde','llameme manana','estoy trabajando','estoy manejando','ahora no puedo'],
+  heard:'wants a call back / no time now', card:'busy',
+  say:'No problem at all. What day and time is best? I’ll call you right at that time.',
+  es:'Claro que sí. ¿Qué día y a qué hora le queda mejor? Lo llamo a esa hora exacta.',
+  act:'Repeat the day + time back (Eastern). Then log Callback in Call Mode with that exact time.'},
+ {id:'owe', kind:'fact', fact:'owe', pri:6,
+  m:['how much do i owe','what do i owe','how much is owed','how much they want','how much does the bank want',
+     'what is the balance','whats the balance','the payoff','my payoff','how much is the judgment',
+     'cuanto debo','cuanto se debe','cuanto quieren'],
+  heard:'asked what is owed'},
+ {id:'equity', kind:'fact', fact:'equity', pri:6,
+  m:['how much equity','my equity','any equity','whats it worth','what is it worth','what is my house worth',
+     'whats my house worth','how much is it worth','how much is my house worth',
+     'cuanto vale','cuanta equidad','cuanto capital'],
+  heard:'asked about equity / value'},
+ {id:'sale', kind:'fact', fact:'sale', pri:6,
+  m:['when is the sale','when is the auction','whens the sale','whens the auction','what date is the sale',
+     'what is the sale date','is there a sale date','when do they sell','when are they selling',
+     'how much time do i have','how long do i have','cuando es la subasta','cuando es la venta','cuanto tiempo tengo'],
+  heard:'asked about the sale date / time left'},
+ {id:'atty_silent', kind:'ask', pri:6,
+  m:['my attorney','my lawyer','have an attorney','have a lawyer','mi abogado'],
+  also:['hasnt called','has not called','doesnt call','wont call','doesnt answer','not answering','hasnt explained',
+        'hasnt told me','has not told me','dont hear from','havent heard from',
+        'no me contesta','no me llama','no me ha dicho','no me explica'],
+  heard:'has an attorney who is not communicating',
+  say:'That sounds frustrating, not hearing back while the clock is running.',
+  es:'Eso suena frustrante, no saber nada mientras el tiempo corre.',
+  ask:['What has your attorney told you about the next step?','When was the last time you actually heard from them?'],
+  askEs:['¿Qué le ha dicho su abogado sobre el próximo paso?','¿Cuándo fue la última vez que supo de él?']},
+ {id:'need_atty', kind:'ask', pri:6,
+  m:['need an attorney','need a lawyer','cant afford an attorney','cant afford a lawyer','looking for an attorney',
+     'looking for a lawyer','necesito un abogado','no puedo pagar un abogado'],
+  heard:'does not have an attorney yet',
+  say:'I’m not an attorney and I can’t give legal advice. What I can do is have our senior advisor lay out your options, free, five minutes.',
+  es:'No soy abogado y no puedo dar consejo legal. Lo que sí puedo es que nuestro asesor principal le explique sus opciones, gratis, en cinco minutos.',
+  ask:['Have you been able to talk to anybody about your options yet?'],
+  askEs:['¿Ha podido hablar con alguien sobre sus opciones?']},
+ {id:'confused_bank', kind:'ask', pri:5,
+  m:['dont know what they want','dont know what the bank wants','keep asking for','they keep asking','already sent',
+     'i sent them everything','nobody tells me','no one tells me','dont understand what',
+     'no entiendo que','siguen pidiendo','ya les mande'],
+  heard:'unsure what the lender needs',
+  say:'That’s more common than you’d think. They ask for the same thing three times.',
+  es:'Eso pasa más de lo que uno cree. Piden lo mismo tres veces.',
+  ask:['What did they ask you to send?','Do you have their last letter in front of you?'],
+  askEs:['¿Qué le pidieron que mandara?','¿Tiene la última carta a la mano?']},
+ {id:'didnt_know', kind:'ask', pri:5,
+  m:['didnt know','did not know','i had no idea','nobody told me','first time im hearing','first im hearing',
+     'no sabia','nadie me dijo'],
+  heard:'this is news to them',
+  say:'I’m sorry to be the one bringing it up. The case is in the public court record, and that’s the only reason I have it.',
+  es:'Lamento ser yo quien se lo menciona. El caso está en el registro público de la corte, y solo por eso lo tengo.',
+  ask:['Has anything come in the mail from the court or the lender?'],
+  askEs:['¿Le ha llegado algo por correo de la corte o del prestamista?']},
+ {id:'keep', kind:'ask', pri:5,
+  m:['want to keep','i want to stay','keep my house','keep the house','keep my home','not selling','dont want to sell',
+     'quiero quedarme','no quiero vender','quedarme con la casa'],
+  heard:'wants to keep the house',
+  say:'Good. That’s exactly what I need to know.',
+  es:'Bien. Eso es justo lo que necesito saber.',
+  ask:['What have you tried so far to get caught up?','Has the lender offered you anything in writing?'],
+  askEs:['¿Qué ha intentado hasta ahora para ponerse al día?','¿El prestamista le ha ofrecido algo por escrito?']},
+ {id:'sell', kind:'ask', pri:5,
+  m:['want to sell','just want out','ready to sell','thinking of selling','quiero vender','quiero salir de'],
+  heard:'open to selling',
+  say:'Understood. Before anything else, it helps to know your real numbers.',
+  es:'Entendido. Antes que nada, conviene conocer sus números reales.',
+  ask:['Has anyone shown you what you’d walk away with after the lender is paid?'],
+  askEs:['¿Alguien le ha mostrado con cuánto se quedaría después de pagarle al prestamista?']}
+];
+/* The ordinary openers (SIT) ride the same fast path, below every intent above. */
+SIT.forEach(function(s,i){ INTENTS.push({id:'sit'+i, kind:'sit', pri:2, m:s.m, heard:s.tag, say:s.say}); });
+/* Phrases the first real recorded call (2026-11-15) said and no card heard. Added to the cards'
+   own lists, so the card that answers is still the script's. */
+var FC_EXTRA = {
+  notint:['no thanks','no thank you','were good','we are good','im good','dont need it','dont need anything','no gracias','no me interesa'],
+  busy:['do not have time','dont have time','have no time','no time for this','no time right now','no tengo tiempo'],
+  plan:['got it handled','we got it','its handled','already handled','taken care of','under control','got it covered','lo tengo resuelto','ya esta resuelto'],
+  talked:['so many people calling','people calling us','people calling me','people like you calling','everybody is calling',
+          'everyone is calling','so many calls','calls every day','keep calling me','keep calling us','todos me llaman','muchos llamando']
+};
+var FC_TRIGX = {
+  2:['our lawyer','got a lawyer','got an attorney','have a lawyer','have an attorney','lawyer is the best','tengo abogado','nuestro abogado'],
+  7:FC_EXTRA.talked
+};
+CARDS.forEach(function(c){ (FC_EXTRA[c.id]||[]).forEach(function(p){ c.nm.push(norm(p)); }); });
+Object.keys(FC_TRIGX).forEach(function(k){ FC_TRIGX[k].forEach(function(p){ TRIG[k].push(norm(p)); }); });
+
+/* A phrase of 3+ words also matches with up to two extra words between its words, so
+   "I literally do not have time" and "people like you keep calling me" still land. */
+function fcCompile(np){
+  var w=String(np||'').split(' ').filter(Boolean);
+  if(!w.length) return null;
+  return {n:np.length, re:new RegExp('(?:^| )'+w.join(w.length>=3?'(?: [a-z0-9]+){0,2} ':' ')+'(?= |$)','g')};
+}
+INTENTS.forEach(function(t){
+  t.cm=t.m.map(norm).map(fcCompile).filter(Boolean); t.ca=(t.also||[]).map(norm).map(fcCompile).filter(Boolean);
+});
+/* An objection card as an intent: same matcher, same partial-word speed, amber panel on screen. */
+function fcCardIntent(c){
+  return {id:'obj:'+c.id, kind:'obj', pri:(c.s>=3?4.5:4), cm:(c.nm||[]).map(fcCompile).filter(Boolean), ca:[], card:c};
+}
+function fcList(cards){ return INTENTS.concat((cards||[]).filter(function(c){ return c.nm&&c.nm.length; }).map(fcCardIntent)); }
+
+/* A partial that ends on one of these is mid-thought ("I have an attorney, but"): wait for it. */
+var FC_TAIL = {};
+'but and because cause so or if except although though however um uh pero y porque aunque o'.split(' ')
+  .forEach(function(w){ FC_TAIL[w]=1; });
+function fcOpen(ncur){ var w=String(ncur||'').split(' '); return !!FC_TAIL[w[w.length-1]]; }
+
+/* Best phrase of `list` found in `win`: {len, fresh}. fresh = it ends inside the newest words. */
+function fcFind(win, list, newStart){
+  var best=null;
+  for(var i=0;i<list.length;i++){
+    var c=list[i], m, end=-1; c.re.lastIndex=0;
+    while((m=c.re.exec(win))){ end=m.index+m[0].length; if(c.re.lastIndex===m.index) c.re.lastIndex++; }
+    if(end<0) continue;
+    var h={len:c.n, fresh:end>newStart};
+    if(!best||(h.fresh&&!best.fresh)||(h.fresh===best.fresh&&h.len>best.len)) best=h;
+  }
+  return best;
+}
+/* list: fcList(cards). win: normalized recent words (older finals + the current line). newLen: how
+   many of its last characters are the current line. cool: {id: epoch ms that intent stays quiet until}. */
+function fcMatch(list, win, newLen, nowMs, cool){
+  var newStart=Math.max(0, win.length-newLen), best=null, bestScore=-1;
+  for(var i=0;i<list.length;i++){
+    var t=list[i];
+    if(cool&&cool[t.id]&&nowMs<cool[t.id]) continue;
+    var a=fcFind(win, t.cm, newStart); if(!a) continue;
+    var b=null;
+    if(t.ca.length){ b=fcFind(win, t.ca, newStart); if(!b) continue; }
+    if(!(a.fresh||(b&&b.fresh))) continue;
+    var score=t.pri*1000+a.len+(b?b.len:0);
+    if(score>bestScore){ bestScore=score; best=t; }
+  }
+  return best;
+}
+/* Which stage did the caller just read? A line mostly made of stage k's words means k is done:
+   returns the stage to show next, or -1. Only moves forward, never past the last stage. */
+function fcStageAfter(nline, stageTexts, cur){
+  var toks=String(nline||'').split(' ').filter(function(w){ return w.length>3; });
+  if(toks.length<4) return -1;
+  var best=-1, bestR=0;
+  for(var k=cur;k<stageTexts.length;k++){
+    var ref=' '+stageTexts[k]+' ', hit=0;
+    for(var i=0;i<toks.length;i++) if(ref.indexOf(' '+toks[i]+' ')>=0) hit++;
+    var r=hit/toks.length;
+    if(r>=0.6&&r>bestR){ bestR=r; best=k; }
+  }
+  return best<0?-1:Math.min(best+1, stageTexts.length-1);
+}
+function fcMoney(v){
+  if(v==null||v==='') return '';
+  var n=(typeof v==='number')?v:parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+  if(!isFinite(n)||n<=0) return '';
+  return '$'+Math.round(n).toLocaleString('en-US');
+}
+/* What is known about this lead, each line with where it came from. ok=false means NOT verified. */
+function fcFacts(lead){
+  lead=lead||{};
+  var j=lead.judgment_unknown?'':fcMoney(lead.judgment);
+  var eqOk=(lead.eqstate==='clear'||lead.eqstate==='priced')&&lead.equity!=null&&isFinite(+lead.equity);
+  return {
+    sale:lead.auction?{v:String(lead.auction)+(lead.days!=null?' · '+lead.days+' days':''), ok:true, src:'court calendar'}
+                     :{v:'Not posted', ok:false, src:'no date on the court calendar'},
+    judgment:j?{v:j, ok:true, src:'recorded judgment, not a payoff'}:{v:'Not posted', ok:false, src:'none in the court file'},
+    payoff:{v:'Not verified', ok:false, src:'only the lender has it'},
+    equity:eqOk?{v:fcMoney(lead.equity)||'$0', ok:true, src:'recorded chain traced'}:{v:'Not verified', ok:false, src:'do not quote a number'},
+    bk:!!lead.sale_bk_active
+  };
+}
+/* The answer to a money / date question, built only from fcFacts(). */
+function fcFactSay(kind, lead, es){
+  var f=fcFacts(lead), L=lead||{};
+  if(kind==='owe'){
+    if(f.judgment.ok) return es
+      ?{say:'El expediente de la corte muestra una sentencia final de '+f.judgment.v+'. Esa es la cifra registrada, no el saldo de hoy. El saldo exacto solo lo da su prestamista, y es lo primero que nuestro asesor principal le consigue.',
+        ask:['¿Alguien le ha mostrado el saldo por escrito?']}
+      :{say:'The court file shows a final judgment of '+f.judgment.v+'. That’s the recorded number, not today’s payoff. The exact payoff only comes from your lender, and it’s the first thing our senior advisor gets for you.',
+        ask:['Has anyone shown you the payoff in writing?']};
+    return es
+      ?{say:'No tengo una cifra verificada para usted. Todavía no hay sentencia en el expediente, y el saldo exacto solo lo da su prestamista. Es lo primero que nuestro asesor principal le consigue.',
+        ask:['¿Alguien le ha mostrado el saldo por escrito?']}
+      :{say:'I don’t have a verified number for you. No judgment amount is posted in the court file yet, and the exact payoff only comes from your lender. It’s the first thing our senior advisor gets for you.',
+        ask:['Has anyone shown you the payoff in writing?']};
+  }
+  if(kind==='equity'){
+    if(f.equity.ok) return es
+      ?{say:'Según los documentos registrados, hay aproximadamente '+f.equity.v+' entre lo que aparece contra la propiedad y su valor. El asesor lo repasa con usted línea por línea.',
+        ask:['¿Sabe más o menos cuánto se debe todavía?']}
+      :{say:'From the recorded documents, there’s roughly '+f.equity.v+' between what’s recorded against the property and its value. The advisor goes through that with you line by line.',
+        ask:['Do you know roughly what’s still owed on it?']};
+    return es
+      ?{say:'Todavía no tengo una cifra de equidad verificada, y no voy a adivinarla. El asesor la repasa con usted línea por línea, gratis, en cinco minutos.',
+        ask:['¿Sabe más o menos cuánto se debe todavía?']}
+      :{say:'I don’t have a verified equity number yet, and I’m not going to guess at it. The advisor goes through it with you line by line, free, five minutes.',
+        ask:['Do you know roughly what’s still owed on it?']};
+  }
+  if(L.auction){
+    var d=(L.days!=null&&L.days>=0)?L.days:null;
+    return es
+      ?{say:'El calendario de la corte muestra la subasta para el '+L.auction+(d!=null?', o sea '+d+' días a partir de hoy.':'.'),
+        ask:['¿Alguien le ha explicado qué opciones tiene antes de esa fecha?']}
+      :{say:'The court calendar shows the sale set for '+L.auction+(d!=null?', which is '+d+' days from today.':'.'),
+        ask:['Has anyone walked you through your options before that date?']};
+  }
+  return es
+    ?{say:'Todavía no hay fecha de subasta en el calendario de la corte. El caso está presentado, pero no hay nada programado.',
+      ask:['¿Le ha llegado algo por correo de la corte?']}
+    :{say:'There’s no sale date on the court calendar yet. The case has been filed, but nothing is scheduled.',
+      ask:['Has anything come in the mail from the court?']};
+}
+/* FASTCOACH-END */
 
 /* ============================== MERGE ============================== */
 function merged(t){
@@ -539,14 +840,16 @@ function pick(i){
   $('leadhits').innerHTML='';
   $('q').value=m.address||m.case||'';
   var soon=(m.days!=null&&m.days<=14);
+  var F=fcFacts(m);
+  var fr=function(k,f,hot){ return '<div><span class="k">'+k+'</span><span class="v'+(hot?' soon':'')+'">'+esc(f.v)+'</span>'
+    +'<span class="src '+(f.ok?'ok':'no')+'">'+esc(f.src)+'</span></div>'; };
   $('leadbox').style.display='block';
   $('leadbox').innerHTML=
     '<div><span class="k">Case</span><span class="v">'+esc(m.case||'')+'</span></div>'
    +'<div><span class="k">Address</span><span class="v">'+esc(m.address||'')+'</span></div>'
    +'<div><span class="k">Owner</span><span class="v">'+esc(m.owners||'')+'</span></div>'
-   +'<div><span class="k">Sale</span><span class="v'+(soon?' soon':'')+'">'+esc(m.auction||'?')+(m.days!=null?' · '+m.days+' days':'')+'</span></div>'
-   +'<div><span class="k">Judgment</span><span class="v">'+esc(m.judgment||'?')+'</span></div>'
-   +'<div><span class="k">Equity</span><span class="v">'+esc(m.equity!=null?('$'+Math.round(m.equity).toLocaleString()):'?')+'</span></div>'
+   +(F.bk?'<div class="hold">Bankruptcy on record · sale stayed</div>':'')
+   +fr('Sale',F.sale,soon)+fr('Judgment',F.judgment)+fr('Payoff',F.payoff)+fr('Equity',F.equity)
    +'<div><span class="k">Tier/score</span><span class="v">'+esc(m.tier||'?')+' · '+esc(m.score!=null?m.score:'?')+(m.homestead?' · homestead':'')+'</span></div>';
   /* County rolls write "LAST, FIRST": the first name is AFTER the comma (taking the first token
      greeted people by their surname). A company / trust owner gets no first name. */
@@ -569,43 +872,131 @@ function cardBody(c){
   }
   return c.body;
 }
-function scanObjections(){
-  var win=norm(S.finals+' '+S.interim).slice(-240);
-  var last80=win.slice(-80);
-  var best=null,bestScore=0;
-  S.autoCards.forEach(function(c){
-    if(!c.nm.length) return;
-    if(S.cooldown[c.id]&&now()<S.cooldown[c.id]) return;
-    var hits=0,rec=0;
-    c.nm.forEach(function(p){ if(p&&win.indexOf(p)>=0){ hits++; if(last80.indexOf(p)>=0) rec=2; } });
-    if(!hits) return;
-    var score=hits*c.s+rec;
-    if(score>bestScore){ bestScore=score; best=c; }
-  });
-  if(best&&bestScore>=3&&best.id!==S.lastCard){
-    if(S.lastCard===best.id&&now()-S.lastCardAt<20000) return false;
-    showCard('heard on the line · '+best.who,merged(cardBody(best)));
-    S.lastCard=best.id; S.lastCardAt=now();
-    S.objFired.push({id:best.id,at:mmss(now()-S.t0),score:bestScore});
-    return true;
-  }
-  return false;
+/* ===================== FAST COACH (screen side) =====================
+   fcHear() runs on EVERY recognizer result, partial or final. A match shows at once; a partial
+   that ends mid-thought waits up to 900 ms for the rest. Objection cards keep their amber panel;
+   everything else lands in the one coach card, which goes dim once the conversation moves on. */
+function fcEs(){ return S.lang==='es-US'; }
+function fcRefreshList(){ S.fc.list=fcList(S.autoCards); }
+function fcStageTexts(){ return STAGES.map(function(st){ return norm(merged(st.say)); }); }
+function fcCardById(id){ for(var i=0;i<S.autoCards.length;i++) if(S.autoCards[i].id===id) return S.autoCards[i]; return null; }
+function fcListen(on){ $('clisten').className=on?'on':''; }
+function fcLagPill(){
+  var x=S.fc.txLag;
+  $('lagpill').textContent=(x!=null&&x>=0&&x<20000)?('words '+(x/1000).toFixed(1)+'s behind'):'';
 }
-/* The prospect said an ordinary thing with one right answer — swap the green line to it NOW. */
-function sitRespond(nline){
-  var best=null,bestN=0;
-  SIT.forEach(function(s){
-    if(S.sitCool&&S.sitCool[s.tag]&&now()<S.sitCool[s.tag]) return;
-    var hits=0;
-    s.nm.forEach(function(p){ if(p&&nline.indexOf(p)>=0) hits++; });
-    if(hits>bestN){ bestN=hits; best=s; }
-  });
-  if(!best) return false;
-  S.sitCool=S.sitCool||{}; S.sitCool[best.tag]=now()+15000;
-  $('saytext').textContent=merged(best.say);
-  $('saytag').textContent='they spoke → '+best.tag;
-  var sl=$('sayline'); sl.classList.remove('pop'); void sl.offsetWidth; sl.classList.add('pop');
+function fcHear(cur, isFinal, spk){
+  var t=now();
+  S.fc.lastWord=t; S.fc.soundMs=0;
+  if(S.fc.txLag===null&&S.fc.onset){ S.fc.txLag=t-S.fc.onset; fcLagPill(); }
+  clearTimeout(S.fc.holdT); S.fc.holdT=null;
+  var ncur=norm(cur);
+  if(!ncur||spk==='you'||spk==='you?'){ fcListen(false); return false; }
+  if(!S.fc.list) fcRefreshList();
+  var tail=norm(S.finals.slice(-200));
+  var hit=fcMatch(S.fc.list, (tail?tail+' ':'')+ncur, ncur.length, t, S.fc.cool);
+  if(!hit||(S.fc.paused&&hit.kind!=='stop')){ fcListen(false); S.fc.heldSince=0; return false; }
+  if(!isFinal&&hit.kind!=='stop'&&fcOpen(ncur)){
+    if(!S.fc.heldSince) S.fc.heldSince=t;
+    fcListen(true);
+    S.fc.holdT=setTimeout(function(){ fcHear(cur,true,spk); },900);
+    return false;
+  }
+  fcFire(hit, cur, isFinal);
   return true;
+}
+function fcFire(hit, cur, isFinal){
+  var t=now(), held=S.fc.heldSince?t-S.fc.heldSince:0;
+  S.fc.heldSince=0; fcListen(false);
+  S.fc.cool[hit.id]=t+12000;
+  var rec={id:hit.id, at:mmss(t-S.t0), partial:!isFinal, held_ms:held, words_lag_ms:S.fc.txLag};
+  S.fc.fires.push(rec);
+  if(hit.kind==='obj'){
+    var c=hit.card;
+    showCard('heard on the line · '+c.who, merged(cardBody(c)));
+    S.lastCard=c.id; S.lastCardAt=t;
+    S.objFired.push({id:c.id, at:rec.at, partial:!isFinal});
+    return;
+  }
+  /* a stronger read of the same sentence replaces the card its first half fired */
+  if(hit.pri>=5&&S.lastCard&&t-S.lastCardAt<6000){ $('objection').className=''; S.lastCard=null; }
+  var es=fcEs(), say, ask=[];
+  if(hit.kind==='fact'){ var f=fcFactSay(hit.fact, S.lead, es); say=f.say; ask=f.ask; }
+  else {
+    say=(es&&hit.es)?hit.es:hit.say;
+    ask=((es&&hit.askEs)?hit.askEs:hit.ask)||[];
+    if(hit.card&&!es){ var bc=fcCardById(hit.card); if(bc) say=cardBody(bc).split('\n\n')[0]; }
+  }
+  S.fc.card={id:hit.id, kind:hit.kind, at:t, heard:String(cur).trim(), label:hit.heard, say:merged(say),
+             ask:ask.map(merged), act:hit.act||'', newer:0, hidden:false};
+  S.fc.askI=0;
+  fcRender(true);
+}
+function fcRender(pop){
+  var c=S.fc.card, el=$('coach');
+  if(!c||c.hidden||(S.fc.paused&&c.kind!=='stop')){ el.className=''; return; }
+  var recap=c.kind==='recap';
+  $('cheard').textContent=recap?c.label:('“'+c.heard+'” · '+c.label);
+  $('csayl').textContent=recap?'What was just said':'Say this';
+  $('csay').style.whiteSpace=recap?'pre-wrap':'';
+  $('csay').textContent=c.say;
+  var has=c.ask.length>0;
+  $('caskl').style.display=has?'':'none'; $('cask').style.display=has?'':'none';
+  $('cask').textContent=has?c.ask[S.fc.askI%c.ask.length]:'';
+  $('cmore').style.display=c.ask.length>1?'':'none';
+  $('cact').style.display=c.act?'block':'none'; $('cact').textContent=c.act;
+  var age=Math.round((now()-c.at)/1000);
+  var stale=c.kind!=='stop'&&(c.newer>=2||age>25);
+  $('cmeta').textContent=(stale?'earlier · the conversation moved on · ':'')+(age<3?'just now':age+'s ago');
+  var cls='on'+(c.kind==='stop'?' stop':'')+(c.kind==='callback'?' cb':'')+(stale?' stale':'');
+  if(pop){ el.className=cls; void el.offsetWidth; el.className=cls+' pop'; }
+  else if(el.className.replace(' pop','')!==cls) el.className=cls;
+}
+function coachMore(){ if(S.fc.card){ S.fc.askI++; fcRender(false); } }
+function coachHide(){ if(S.fc.card){ S.fc.card.hidden=true; fcRender(false); } }
+function pauseCoach(){
+  S.fc.paused=!S.fc.paused;
+  $('pausebtn').textContent=S.fc.paused?'Resume coach (P)':'Pause coach (P)';
+  if(S.fc.paused){ $('objection').className=''; fcListen(false); }
+  fcRender(false);
+}
+/* The last things said that were not clearly you, word for word as transcribed. */
+function catchUp(){
+  var L=S.lines.filter(function(l){ return l.spk!=='you'&&l.spk!=='you?'; }).slice(-3);
+  if(!L.length) return;
+  S.fc.card={id:'recap', kind:'recap', at:now(), heard:'', label:'last '+L.length+' line'+(L.length===1?'':'s')+' heard, as transcribed',
+             say:L.map(function(l){ return '['+l.t+'] '+l.text; }).join('\n'), ask:[], act:'', newer:0, hidden:false};
+  fcRender(true);
+}
+/* Twice a second: age the card, and say plainly whether the mic and the transcript are alive. */
+function fcTick(){
+  if(S.fc.card&&!S.fc.card.hidden) fcRender(false);
+  var h=$('health');
+  if(S.plain||!S.fc.an){ h.textContent=S.plain?'no mic':'mic'; h.className=''; return; }
+  if(S.fc.soundMs>=6000){ h.textContent='TRANSCRIPT STALLED · read the script'; h.className='bad'; }
+  else if(now()-S.fc.lastSound<1200){ h.textContent='● hearing'; h.className='ok'; }
+  else { h.textContent='quiet'; h.className=''; }
+}
+/* Mic level, 10 times a second. Sound with no words for 6 s = the transcript has stalled. The
+   moment sound starts after a pause is the clock the "words behind" figure is measured from. */
+function fcMeter(stream){
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    var ctx=new AC(), an=ctx.createAnalyser();
+    an.fftSize=512; ctx.createMediaStreamSource(stream).connect(an);
+    S.fc.an=an; S.fc.ctx=ctx;
+    var buf=new Uint8Array(an.fftSize);
+    S.fc.anT=setInterval(function(){
+      an.getByteTimeDomainData(buf);
+      var sum=0; for(var i=0;i<buf.length;i++){ var v=(buf[i]-128)/128; sum+=v*v; }
+      if(Math.sqrt(sum/buf.length)>0.02){
+        var t=now();
+        if(t-S.fc.lastSound>700){ S.fc.onset=t; S.fc.txLag=null; }
+        S.fc.lastSound=t;
+        if(t-S.fc.lastWord>1500) S.fc.soundMs+=100;
+      }
+    },100);
+  }catch(e){}
 }
 function lineHitsTrigger(nline){
   for(var i=0;i<S.autoCards.length;i++){
@@ -621,7 +1012,7 @@ function showCard(who,body){
 }
 function dismissObjection(){
   $('objection').className='';
-  if(S.lastCard) S.cooldown[S.lastCard]=now()+45000;
+  if(S.lastCard) S.fc.cool['obj:'+S.lastCard]=now()+45000;
   S.lastCard=null;
 }
 function manualCard(n){
@@ -650,6 +1041,7 @@ function loadCards(){
       auto.push({id:'v'+c.n, who:c.t+' — “'+String(c.say||'').slice(0,70)+'…”', s:2, nm:trig, vault:c});
     });
     S.autoCards=auto;
+    fcRefreshList();
   }).catch(function(){ /* vault route unreachable: stand-ins keep full coverage */ });
 }
 
@@ -683,6 +1075,7 @@ function guessSpeaker(nline){
   // their objection triggers, and the situational asks.
   for(var j=0;j<THEM_PAT.length;j++) if(THEM_PAT[j]&&nline.indexOf(THEM_PAT[j])>=0) return 'them?';
   if(lineHitsTrigger(nline)) return 'them?';
+  if(fcMatch(S.fc.list||fcList(S.autoCards), nline, nline.length, 0, null)) return 'them?';
   for(var k=0;k<SIT.length;k++) for(var p=0;p<SIT[k].nm.length;p++)
     if(SIT[k].nm[p]&&nline.indexOf(SIT[k].nm[p])>=0) return 'them?';
   // Fall back to script overlap: a line mostly made of the words you're supposed to be
@@ -702,15 +1095,19 @@ function pushFinal(text,spk){
   if(!text) return;
   var nline=norm(text);
   var tag=spk||guessSpeaker(nline);
+  // Before the line joins S.finals, so it is still "the newest words". Usually the card is
+  // already up from the partial; this catches what only the final wording matched.
+  var fired=fcHear(text,true,tag);
   S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
   S.finals+=' '+text;
   S.lastSpeech=now();
-  scanFlags(text);
-  // Every prospect line gets an answer: objection cards win (amber panel); otherwise the
-  // situational engine swaps the green line to the right response and flashes it. Lines not
-  // clearly yours are treated as possibly-theirs, so an unlabeled line still gets coached.
-  var fired=scanObjections();
-  if(!fired&&tag!=='you'&&tag!=='you?') sitRespond(nline);
+  if(tag!=='them'&&tag!=='them?') scanFlags(text);    // the guardrails are about YOUR words
+  // You read a stage line: move the script to the next one without a key press.
+  if(tag!=='them'&&tag!=='them?'&&!fired){
+    var nx=fcStageAfter(nline, fcStageTexts(), S.stage);
+    if(nx>S.stage) jump(nx);
+  }
+  if(S.fc.card&&!fired&&tag!=='you'&&tag!=='you?') S.fc.card.newer++;
   renderTranscript();
 }
 function renderTranscript(){
@@ -739,7 +1136,7 @@ function startSR(){
       else interim+=t;
     }
     S.interim=interim;
-    if(interim){ S.lastSpeech=now(); scanObjections(); }
+    if(interim){ S.lastSpeech=now(); fcHear(interim,false,''); }
     renderTranscript();
   };
   r.onend=function(){ if(S.srOn){ try{ r.start(); }catch(e){ setTimeout(function(){ if(S.srOn) try{r.start();}catch(_){} },400); } } };
@@ -788,7 +1185,7 @@ function startDG(stream,key){
         S.interim='';
         pushFinal(txt,spk);
       } else {
-        S.interim=txt; S.lastSpeech=now(); scanObjections(); renderTranscript();
+        S.interim=txt; S.lastSpeech=now(); fcHear(txt,false,''); renderTranscript();
       }
     };
     ws.onerror=function(){ ws.close(); };
@@ -867,7 +1264,7 @@ function enterApp(){
   $('gate').style.display='none';
   $('app').className='on';
   S.t0=now(); S.lastSpeech=now();
-  S.clockTimer=setInterval(function(){ $('clock').textContent=mmss(now()-S.t0); idleTick(); },500);
+  S.clockTimer=setInterval(function(){ $('clock').textContent=mmss(now()-S.t0); idleTick(); fcTick(); },500);
   S.stage=S.plain?1:0;
   renderStage(); renderTranscript(); loadCards();
   var c=new URLSearchParams(location.search).get('case');
@@ -879,6 +1276,9 @@ function enterApp(){
     else if(k==='b') back();
     else if(k==='escape') stop();
     else if(k==='d') dismissObjection();
+    else if(k==='h') coachHide();
+    else if(k==='p') pauseCoach();
+    else if(k==='c') catchUp();
     else if(/^[1-9]$/.test(ev.key)) jump(+ev.key);
   });
 }
@@ -894,6 +1294,7 @@ function start(){
       $('dot').textContent='● REC'; $('dot').className='rec';
       startRecorder(stream);
       enterApp();
+      fcMeter(stream);
       var k=dgKey();
       if(!k||!startDG(stream,k)) startSR();
     }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); stream.getTracks().forEach(function(t){t.stop();}); });
@@ -911,6 +1312,7 @@ function stop(){
 }
 function finish(outcome){
   $('outcome').className='overlay';
+  clearInterval(S.fc.anT); clearTimeout(S.fc.holdT); try{ if(S.fc.ctx) S.fc.ctx.close(); }catch(e){}
   S.srOn=false; if(S.sr){ try{S.sr.stop();}catch(e){} }
   S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
   if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
@@ -922,7 +1324,7 @@ function finish(outcome){
       body:JSON.stringify({lines:S.lines})});
     })
     .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,consent_ack:true,outcome:outcome||null})}); })
+      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null})}); })
     .then(function(r){return r.json();})
     .then(function(j){
       alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0)
@@ -938,14 +1340,16 @@ function finish(outcome){
 }
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
-var _test={ say:function(t){ pushFinal(t,''); },
+var _test={ say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
+            card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 
 return {start:start,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
-        setKey:setKey,keepGoing:keepGoing,_test:_test};
+        setKey:setKey,keepGoing:keepGoing,
+        coachMore:coachMore,coachHide:coachHide,pauseCoach:pauseCoach,catchUp:catchUp,_test:_test};
 })();
 </script>
 </body>
