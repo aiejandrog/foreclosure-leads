@@ -79,3 +79,23 @@ Easiest, safest flow — you review the exact list in the UI and the opt-outs co
 ~$0.70–$1.10 per single-page first-class B&W letter (print + postage + envelope), per Lob's 2026
 pricing — verify your number at <https://help.lob.com/print-and-mail/ready-to-get-started/pricing-details>.
 The dry run estimates the batch total.
+
+## Notice letter variant (`--variant notice`) — DRAFT, template is a placeholder
+
+A two-page **English front / Spanish back** duplex letter. The wording and layout in
+`notice_letter_template.py` are a **placeholder that will be replaced by a new design**; the logic in
+`notice_letter.py` (config, gates, per-lead fields) is meant to stay as-is when the template is swapped.
+
+- **Refuses to build anything** (exit 2, no preview, no PDF, no send) unless all three are set, as
+  environment variables or in the gitignored `notice_letter.local.json` (`phone`, `call_hours`,
+  `return_address`):
+  `BSG_NOTICE_PHONE` (mail-only number, never the main line), `BSG_NOTICE_CALL_HOURS`,
+  `BSG_NOTICE_RETURN_ADDRESS` (lines split by `|`, ending `City, FL 33xxx`; no apartment addresses).
+- **Miami-Dade only** by default. `--notice-include-county broward` / `--notice-include-county palm-beach`
+  opt a county in; every existing hold (bankruptcy stay, federal bankruptcy check, opt-out /
+  suppression, diligence, already-mailed) still applies.
+- Sends only via `--vendor c2m` (Click2Mail, `Printing both sides`). `--lang` is ignored.
+
+```
+python outreach_mail.py --variant notice --queue dealflow-mailqueue-YYYY-MM-DD.json   # dry run + mail_preview.html
+```
