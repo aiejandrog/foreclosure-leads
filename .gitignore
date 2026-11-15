@@ -211,12 +211,8 @@ propstream_leads.json — resolved street addresses + owner-of-record names for 
 # records existing on a county server. Same reason skiptrace_results.json is here.
 lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
-code_liens.json
 # verified back-tax data (folio+owner delinquency) — public repo, keep out
-county_taxes.json
 # PropStream exports + derived overlays: owner PII on a PUBLIC repo — never commit
-propstream/
-propstream_overlay.json
 propstream_leads.json
 tps_cookies.txt
 site.codes
@@ -308,7 +304,6 @@ worker_notes.json
 worker_notes_snapshots/
 !_notesbridgetest.py
 !_redfintest.py
-!_nearmetest.py
 !_callmodetest.py
 !_sendbridgetest.py
 !_ledgerwritetest.py
@@ -404,7 +399,6 @@ IRS_147C_*
 *.key
 *.key.*
 *.retired
-site.codes
 # runtime logs / queues — carry lead emails, phones and addresses in plain text
 send_server_run.log
 phones-run.log
@@ -510,7 +504,6 @@ _ff4.py
 send_scripts.py
 send_docket.py
 _corr.py
-_avm3.py
 _rdc.py
 _rdc2.py
 send_complaint.py
@@ -592,7 +585,6 @@ imghash.key
 # tracker_template.html / design-preview.html do NOT match these patterns and stay tracked.
 *_Case_Brief_*.html
 *_Options_Memo_*.html
-*_Position_Report_*.html
 *_Strategy_Workup_*.html
 *_Brief_*.html
 *_Memo_*.html
@@ -897,3 +889,4 @@ BSG_Mail_Variants_*
 /broward_mortgages.json
 /listing_status_cache.json
 /REFERRAL_CODES.json
+!_callcoachlivetest.py
