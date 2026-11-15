@@ -164,7 +164,7 @@ code{color:var(--accent)}
     <div class="row">
       <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
-      <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (~$0.004/min). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
+      <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (about 1 cent a minute). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
     </div>
 
     <div class="err" id="gateerr"></div>
@@ -506,7 +506,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgSpk0:null,
+  dg:null, dgOn:false, dgYou:null, dgVotes:{}, dgGot:false,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -764,6 +764,32 @@ function fcVoice(nline, nref){
     return (hit>=3&&hit/n>=0.6)?'you':'them';      /* "i have" + "have a" is not a script read */
   };
   return {all:side(w), tail:side(w.slice(-6))};
+}
+/* DEEPGRAM WORDS -> RUNS BY VOICE. Deepgram tags every word with a speaker number. One result can
+   hold two voices (they cut in while you were reading), so it is split where the voice changes.
+   A one-word blip between two runs of the same voice is folded in. Returns [{spk, text}]. */
+function fcRuns(words){
+  var runs=[];
+  (words||[]).forEach(function(w){
+    var k=(w.speaker==null)?'':String(w.speaker), t=String(w.punctuated_word||w.word||'').trim();
+    if(!t) return;
+    var last=runs[runs.length-1];
+    if(last&&last.spk===k){ last.text+=' '+t; last.n++; } else runs.push({spk:k, text:t, n:1});
+  });
+  for(var i=1;i<runs.length-1;i++){
+    if(runs[i].n===1&&runs[i-1].spk===runs[i+1].spk){
+      runs[i-1].text+=' '+runs[i].text+' '+runs[i+1].text; runs[i-1].n+=1+runs[i+1].n; runs.splice(i,2); i--;
+    }
+  }
+  return runs.map(function(r){ return {spk:r.spk, text:r.text}; });
+}
+/* WHICH VOICE IS YOU. Not "whoever spoke first": on an outbound call they say hello first. The
+   voice that reads the screen is you. votes: {speaker: lines that were a script read}. Returns the
+   speaker with the most votes, or null while nobody has read anything yet. */
+function fcYouVoice(votes){
+  var best=null, n=0;
+  Object.keys(votes||{}).forEach(function(k){ if(votes[k]>n){ n=votes[k]; best=k; } });
+  return best;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1301,20 +1327,51 @@ function startSR(){
 /* ============== DEEPGRAM (optional: real YOU/THEM + ~300ms) ==============
    Key saved in THIS browser's localStorage only (never the repo, never the server).
    Streams the same mic through a second 250ms MediaRecorder to Deepgram's websocket with
-   diarization on. First voice heard = YOU (you speak first on an outbound call). */
+   diarization on. Which voice is YOU is learned from who reads the screen (see dgMessage). */
 function dgKey(){ try{ return localStorage.getItem('coachDgKey')||''; }catch(e){ return ''; } }
 function setKey(){
-  var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, ~$0.004/min. Stored only in this browser.');
+  var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, about 1 cent a minute. Stored only in this browser.');
   if(k===null) return;
   try{ k.trim()?localStorage.setItem('coachDgKey',k.trim()):localStorage.removeItem('coachDgKey'); }catch(e){}
   alert(k.trim()?'Saved. Next session uses Deepgram.':'Cleared. Next session uses Chrome.');
 }
+/* One Deepgram result. Words carry a speaker number on partials too, so your own partial words
+   never raise a card, and a result with two voices in it becomes two transcript lines. Which
+   number is you is learned from who reads the screen (fcYouVoice); until then the content guess
+   stands in. */
+function dgTag(k){
+  if(k===''||S.dgYou===null) return '';
+  return k===S.dgYou?'you':'them';
+}
+function dgMessage(j){
+  var alt=j&&j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
+  if(!alt) return;
+  var txt=alt.transcript||'';
+  if(!txt) return;
+  S.dgGot=true;
+  var runs=fcRuns(alt.words||[]);
+  if(!runs.length) runs=[{spk:'', text:txt}];
+  if(j.is_final){
+    S.interim='';
+    runs.forEach(function(r){
+      if(r.spk!==''&&fcVoice(norm(r.text), fcRef()).all==='you'){
+        S.dgVotes[r.spk]=(S.dgVotes[r.spk]||0)+1; S.dgYou=fcYouVoice(S.dgVotes);
+      }
+      pushFinal(r.text, dgTag(r.spk));
+    });
+    $('eng').textContent='engine: Deepgram · '+(S.dgYou===null?'learning your voice (read the opener)':'live speaker labels');
+  } else {
+    var last=runs[runs.length-1];
+    S.interim=txt; S.lastSpeech=now(); fcHear(last.text,false,dgTag(last.spk)); renderTranscript();
+  }
+}
 function startDG(stream,key){
   try{
-    var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&language='+(S.lang==='es-US'?'es':'en-US')
+    S.dgGot=false;
+    var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&language='+(S.lang==='es-US'?'es':'en-US')
       +'&punctuate=true&interim_results=true&diarize=true&smart_format=true',['token',key]);
     ws.onopen=function(){
-      $('eng').textContent='engine: Deepgram · live speaker labels';
+      $('eng').textContent='engine: Deepgram · learning your voice (read the opener)';
       var mr=new MediaRecorder(stream,{mimeType:(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm')});
       mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&ws.readyState===1) ws.send(ev.data); };
       mr.start(250);
@@ -1322,29 +1379,14 @@ function startDG(stream,key){
     };
     ws.onmessage=function(ev){
       var j; try{ j=JSON.parse(ev.data); }catch(e){ return; }
-      var alt=j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
-      if(!alt) return;
-      var txt=alt.transcript||'';
-      if(!txt) return;
-      if(j.is_final){
-        var words=alt.words||[], spk='';
-        if(words.length&&words[0].speaker!=null){
-          var count={}; words.forEach(function(w){ count[w.speaker]=(count[w.speaker]||0)+1; });
-          var maj=Object.keys(count).sort(function(a,b){return count[b]-count[a];})[0];
-          if(S.dgSpk0===null) S.dgSpk0=maj;      // first voice on an outbound call = you
-          spk=(maj===S.dgSpk0)?'you':'them';
-        }
-        S.interim='';
-        pushFinal(txt,spk);
-      } else {
-        S.interim=txt; S.lastSpeech=now(); fcHear(txt,false,''); renderTranscript();
-      }
+      dgMessage(j);
     };
     ws.onerror=function(){ ws.close(); };
     ws.onclose=function(){
       if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
       S.dgRecorder=null;
-      if(S.dgOn){ S.dgOn=false; startSR(); $('eng').textContent='engine: Chrome (Deepgram dropped)'; }
+      if(S.dgOn){ S.dgOn=false; startSR();
+        $('eng').textContent=S.dgGot?'engine: Chrome (Deepgram dropped)':'engine: Chrome (Deepgram refused the key, or no credit)'; }
     };
     S.dg=ws; S.dgOn=true;
     return true;
@@ -1493,7 +1535,8 @@ function finish(outcome){
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
-            cool:function(){ S.fc.cool={}; }, lines:function(){ return S.lines; },
+            cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, dgYou:function(){ return S.dgYou; },
+            dgReset:function(){ S.dgYou=null; S.dgVotes={}; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
