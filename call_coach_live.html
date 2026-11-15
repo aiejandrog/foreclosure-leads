@@ -512,7 +512,7 @@ var S = {
   lastCard:null, lastCardAt:0, cooldown:{},
   lead:null, hits:[], debounce:null, clockTimer:null,
   lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null,
-  fc:{paused:false, card:null, list:null, cool:{}, fires:[], holdT:null, heldSince:0, askI:0,
+  fc:{paused:false, cbArm:0, card:null, list:null, cool:{}, fires:[], holdT:null, heldSince:0, askI:0,
       lastWord:0, lastSound:0, soundMs:0, onset:0, txLag:null, an:null, anT:null, ctx:null}
 };
 function $(id){ return document.getElementById(id); }
@@ -701,6 +701,54 @@ function fcMatch(list, win, newLen, nowMs, cool){
   }
   return best;
 }
+/* THE DAY AND TIME THEY GAVE ("tomorrow at 7 A.M", "around 7", "el lunes a las 3"). Works on norm()
+   text, where "7 A.M" is "7 a m". A bare number is not a time: it needs a lead word (at, around,
+   after...) or a tail (am, pm, oclock, in the morning). Returns {day, time, text} or null. The screen
+   only asks for this in the 90 s after a call-back request, so "the sale is tomorrow" stays quiet. */
+var FC_DAY=new RegExp('(?:^| )((?:later )?today|tonight|tomorrow(?: (?:morning|afternoon|evening|night))?'
+  +'|this (?:morning|afternoon|evening|weekend)|(?:next |this )?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)'
+  +'|next week|in (?:an?|one|two|three|a couple(?: of)?|a few|[0-9]{1,2}) (?:hours?|minutes?|days?)'
+  +'|pasado manana|manana(?: (?:por|en) la (?:manana|tarde|noche))?|hoy|esta (?:tarde|noche)'
+  +'|el (?:lunes|martes|miercoles|jueves|viernes|sabado|domingo))(?= |$)','g');
+var FC_TIME=new RegExp('(?:^| )(?:(at|around|about|after|before|by|a las|como a las|despues de las) )?'
+  +'([0-9]{1,2}(?: [0-9]{2})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
+  +'(?: (a m|p m|am|pm|o ?clock|in the (?:morning|afternoon|evening)|at night|de la (?:manana|tarde|noche)))?(?= |$)','g');
+var FC_NUMW={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12};
+function fcWhen(nline){
+  var s=String(nline||''), m, day='', time='';
+  FC_DAY.lastIndex=0; while((m=FC_DAY.exec(s))){ day=m[1]; FC_DAY.lastIndex=m.index+m[0].length; }
+  FC_TIME.lastIndex=0;
+  while((m=FC_TIME.exec(s))){
+    FC_TIME.lastIndex=m.index+m[0].length;
+    if(!m[1]&&!m[3]) continue;
+    var n=FC_NUMW[m[2]]?String(FC_NUMW[m[2]]):m[2].replace(' ',':');
+    if(parseInt(n,10)<1||parseInt(n,10)>12) continue;
+    var tail=m[3]||'', lead=m[1]||'';
+    tail=/^a ?m$/.test(tail)?' AM':/^p ?m$/.test(tail)?' PM':/clock/.test(tail)?'':tail?' '+tail:'';
+    time=(/^(around|about|after|before|by)$/.test(lead)?lead:/las/.test(lead)?lead:'at')+' '+n+tail;
+  }
+  if(/(?:^| )(noon|midday|mediodia)(?= |$)/.test(s)) time=time||'at noon';
+  if(!day&&!time) return null;
+  return {day:day, time:time, text:(day+' '+time).trim()};
+}
+/* A later line adds to an earlier one: "tomorrow" then "around 7" is "tomorrow around 7". */
+function fcWhenMerge(a, b){
+  if(!a) return b; if(!b) return a;
+  var d=b.day||a.day, t=b.time||a.time;
+  return {day:d, time:t, text:(d+' '+t).trim()};
+}
+function fcWhenSay(w, es){
+  var T=w.text, act='Log Callback in Call Mode: '+T+' (Eastern). Call at that exact time.';
+  if(w.day&&w.time) return es
+    ?{say:'Perfecto, '+T+'. Lo llamo a esa hora exacta. ¿Este es el mejor número para localizarlo?', act:act}
+    :{say:'Got it, '+T+'. I’ll call you right at that time. Is this the best number to reach you on?', act:act};
+  if(w.day) return es
+    ?{say:'Perfecto, '+T+'. ¿A qué hora le queda mejor?', act:'Get the time, then log Callback in Call Mode.'}
+    :{say:'Got it, '+T+'. What time works best?', act:'Get the time, then log Callback in Call Mode.'};
+  return es
+    ?{say:'Perfecto, '+T+'. ¿Hoy o mañana?', act:'Get the day, then log Callback in Call Mode.'}
+    :{say:'Got it, '+T+'. Is that today or tomorrow?', act:'Get the day, then log Callback in Call Mode.'};
+}
 /* Which stage did the caller just read? A line mostly made of stage k's words means k is done:
    returns the stage to show next, or -1. Only moves forward, never past the last stage. */
 function fcStageAfter(nline, stageTexts, cur){
@@ -725,15 +773,32 @@ function fcMoney(v){
 function fcFacts(lead){
   lead=lead||{};
   var j=lead.judgment_unknown?'':fcMoney(lead.judgment);
-  var eqOk=(lead.eqstate==='clear'||lead.eqstate==='priced')&&lead.equity!=null&&isFinite(+lead.equity);
+  var eqFact=(lead.eqstate==='clear'||lead.eqstate==='priced');
+  var eqOk=eqFact&&lead.equity!=null&&isFinite(+lead.equity)&&+lead.equity>0;
   return {
     sale:lead.auction?{v:String(lead.auction)+(lead.days!=null?' · '+lead.days+' days':''), ok:true, src:'court calendar'}
                      :{v:'Not posted', ok:false, src:'no date on the court calendar'},
     judgment:j?{v:j, ok:true, src:'recorded judgment, not a payoff'}:{v:'Not posted', ok:false, src:'none in the court file'},
     payoff:{v:'Not verified', ok:false, src:'only the lender has it'},
-    equity:eqOk?{v:fcMoney(lead.equity)||'$0', ok:true, src:'recorded chain traced'}:{v:'Not verified', ok:false, src:'do not quote a number'},
+    equity:eqOk?{v:fcMoney(lead.equity), ok:true, src:'recorded chain traced'}
+          :eqFact?{v:'Chain traced, no figure to quote', ok:false, src:'do not quote a number'}
+          :{v:'Not verified', ok:false, src:'do not quote a number'},
     bk:!!lead.sale_bk_active
   };
+}
+/* The board's own equity verdict, handed over by Call Mode's Coach link (?case=..&eq=<state>&en=<net>).
+   The coach never works equity out itself: leads_final carries only the raw estimate and no state,
+   so without this every lead reads Not verified. When a verdict arrives the raw estimate is dropped;
+   a figure survives only when the board said it may be quoted. A verdict for another case is ignored. */
+function fcBoard(lead, search){
+  if(!lead) return lead;
+  var q; try{ q=new URLSearchParams(search||''); }catch(e){ return lead; }
+  var st=q.get('eq'), c=q.get('case'), n=q.get('en');
+  if(!st||!/^(clear|priced|unpriced|none|unchecked)$/.test(st)) return lead;
+  if(!c||String(lead.case||'')!==c) return lead;
+  lead.eqstate=st;
+  lead.equity=(n!==null&&n!==''&&isFinite(+n)&&(st==='clear'||st==='priced'))?+n:null;
+  return lead;
 }
 /* The answer to a money / date question, built only from fcFacts(). */
 function fcFactSay(kind, lead, es){
@@ -836,6 +901,7 @@ function lookup(){
 }
 function pick(i){
   var m=S.hits[i]; if(!m) return;
+  fcBoard(m, location.search);
   S.lead=m;
   $('leadhits').innerHTML='';
   $('q').value=m.address||m.case||'';
@@ -895,6 +961,13 @@ function fcHear(cur, isFinal, spk){
   if(!S.fc.list) fcRefreshList();
   var tail=norm(S.finals.slice(-200));
   var hit=fcMatch(S.fc.list, (tail?tail+' ':'')+ncur, ncur.length, t, S.fc.cool);
+  /* They named a day or a time, in the same breath as the call-back request or in answer to
+     "what time is best?": show it back so it gets repeated and logged. Stop still wins. */
+  var w=fcWhen(ncur);
+  if(w&&!S.fc.paused&&!(hit&&hit.kind==='stop')&&(t<S.fc.cbArm||(hit&&(hit.kind==='callback'||hit.id==='obj:busy')))){
+    fcFireWhen(w, cur, isFinal);
+    return true;
+  }
   if(!hit||(S.fc.paused&&hit.kind!=='stop')){ fcListen(false); S.fc.heldSince=0; return false; }
   if(!isFinal&&hit.kind!=='stop'&&fcOpen(ncur)){
     if(!S.fc.heldSince) S.fc.heldSince=t;
@@ -908,7 +981,14 @@ function fcHear(cur, isFinal, spk){
 function fcFire(hit, cur, isFinal){
   var t=now(), held=S.fc.heldSince?t-S.fc.heldSince:0;
   S.fc.heldSince=0; fcListen(false);
-  S.fc.cool[hit.id]=t+12000;
+  /* A call-back request is said once and then talked about by both sides ("you'd have to call me
+     back"), so it stays quiet for 45 s, and so does the busy card it borrows its words from: the
+     test call of 11-15 showed both for one sentence. It also opens the 90 s day-and-time window. */
+  var cbk=(hit.kind==='callback'||hit.id==='obj:busy');
+  S.fc.cool[hit.id]=t+(cbk?45000:12000);
+  if(hit.kind!=='obj'&&hit.card) S.fc.cool['obj:'+hit.card]=t+45000;
+  if(hit.kind==='obj') INTENTS.forEach(function(x){ if(x.card===hit.card.id) S.fc.cool[x.id]=t+45000; });
+  if(cbk) S.fc.cbArm=t+90000;
   var rec={id:hit.id, at:mmss(t-S.t0), partial:!isFinal, held_ms:held, words_lag_ms:S.fc.txLag};
   S.fc.fires.push(rec);
   if(hit.kind==='obj'){
@@ -931,6 +1011,21 @@ function fcFire(hit, cur, isFinal){
              ask:ask.map(merged), act:hit.act||'', newer:0, hidden:false};
   S.fc.askI=0;
   fcRender(true);
+}
+/* The day / time card. A later line inside 30 s adds to it in place ("tomorrow" + "around 7"). */
+function fcFireWhen(w, cur, isFinal){
+  var t=now(), c=S.fc.card, upd=!!(c&&c.id==='cb_time'&&!c.hidden&&t-c.at<30000);
+  if(upd){ w=fcWhenMerge(c.when, w); if(w.text===c.when.text){ c.at=t; return; } }
+  S.fc.heldSince=0; fcListen(false);
+  var rec=upd?c.rec:{id:'cb_time', at:mmss(t-S.t0), partial:!isFinal, held_ms:0, words_lag_ms:S.fc.txLag};
+  rec.when=w.text;
+  if(!upd) S.fc.fires.push(rec);
+  $('objection').className=''; S.lastCard=null;        /* the busy card has done its job */
+  var s=fcWhenSay(w, fcEs());
+  S.fc.card={id:'cb_time', kind:'callback', at:t, heard:String(cur).trim(), label:'gave a day / time', say:s.say,
+             ask:[], act:s.act, newer:0, hidden:false, when:w, rec:rec};
+  S.fc.askI=0; S.fc.cbArm=t+90000;
+  fcRender(!upd);
 }
 function fcRender(pop){
   var c=S.fc.card, el=$('coach');
@@ -1340,7 +1435,8 @@ function finish(outcome){
 }
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
-var _test={ say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
+var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; },
+            say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
