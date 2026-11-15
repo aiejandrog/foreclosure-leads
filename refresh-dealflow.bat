@@ -61,6 +61,8 @@ rem  never came up | 4 healthcheck says DOWN (advisory) | 5 the board built, gat
 rem  here, but the mirror to the public site repo did not publish, so the LIVE SITE still shows the
 rem  previous board - a materially different morning from a clean run, and it went unreported from
 rem  the 09-17 repo split until 09-18 because nobody read publish_site.py's exit code.
+rem  8 = the REBUILD failed (make_tracker exited non-zero). Added 2026-11-15: its exit code was
+rem      never read, so a crashed rebuild left the early board up and the log said "current".
 rem  7 = the LIS PENDENS chain did not fully refresh (lp_refresh.py returned non-zero). Documented
 rem  2026-09-21 because _refreshexittest.py's own "exit code 7 is documented in the header" check
 rem  was the one red in its 52, and because the first real 7 on this box reported `LP CHAIN exit 2`
@@ -638,9 +640,22 @@ if "%WP_WEB_NIGHTLY%"=="1" set "WP_WEB_MAX_LEADS=%WP_WEB_NIGHTLY_N%"
 if "%WP_WEB_NIGHTLY%"=="1" python -u wp_web.py --pick-callable %WP_WEB_NIGHTLY_N% >> "%LOG%" 2>&1
 if "%WP_WEB_NIGHTLY%"=="1" if errorlevel 1 echo     WARN: Whitepages web lookup exited nonzero - refresh continues. See leads-run.log.>> "%LOG%"
 
+rem  2026-11-15: leads with a parcel number and no property value (the last build lists them in
+rem  value_missing.json). Free county lookup, no login, no captcha. A verified lien chain cannot
+rem  show as verified equity without a value. Never fatal.
+python -u pa_values.py --missing >> "%LOG%" 2>&1
+if errorlevel 1 echo     WARN: missing-value lookup exited nonzero - refresh continues.>> "%LOG%"
+
 python -u refresh_progress.py step 4
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
+rem  2026-11-15: this exit code was never read. A crashed rebuild left the early-morning board up
+rem  and the log said "site already current". A failed rebuild now ends the run as exit 8.
+if errorlevel 1 (
+  echo     ^!^! REBUILD FAILED - nothing new was built or published. Live site left as it was.>> "%LOG%"
+  set "RUNEXIT=8"
+  goto :end
+)
 
 python -u refresh_progress.py step 4b
 echo [4b/5] Refreshing the Deals-on-the-Clock auction forecast (reads the freshly-built board)...

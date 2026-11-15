@@ -3306,7 +3306,36 @@ def make_tracker(leads):
     try:
         import value_join as _vj
         _side = _vj.load_sidecars(HERE)
+        _noval = [_r for _r in slim if isinstance(_r, dict) and not _r.get('value')]
         _vs = _vj.attach(slim, redfin=_side['redfin'], listing=_side['listing'], pa=_side['pa'])
+        # THE EQUITY CARD WAS BAKED BEFORE THIS JOIN (2026-11-15). A lead whose only value is the
+        # property-appraiser cache got its card with no value, so a verified lien chain could never
+        # show as verified equity. Re-bake the card of every row this join just valued.
+        _rb = 0
+        for _r in _noval:
+            if _r.get('value') and 'eqc' in _r:
+                try:
+                    _r['eqc'] = _es.card(_r)
+                    _rb += 1
+                except Exception as _e:
+                    print(f"equity card re-bake skipped for one row ({str(_e)[:60]})")
+        if _rb:
+            print(f"roll value: equity card re-baked on {_rb} lead(s) valued from the cache")
+        # WHO STILL HAS NO VALUE BUT HAS A FULL PARCEL NUMBER. Nothing looked these up: the lookup
+        # only ran for auction rows carrying a 'no cadastral match' warning, and a lis pendens row
+        # that later gained a folio was never one of those. pa_values.py --missing reads this list
+        # (parcel number and county only) and fills the cache for the next build. Free, no login.
+        try:
+            import pa_values as _pv
+            _miss = sorted({(str(_r.get('county') or '').upper(), str(_r.get('folio') or '').upper())
+                            for _r in slim if isinstance(_r, dict) and not _r.get('value')
+                            and len(str(_r.get('folio') or '')) >= _pv._FULL_LEN.get(str(_r.get('county') or '').upper(), 99)})
+            with open(os.path.join(HERE, 'value_missing.json'), 'w', encoding='utf-8') as _f:
+                json.dump([{'county': _c, 'folio': _fo} for _c, _fo in _miss], _f)
+            if _miss:
+                print(f"roll value: {len(_miss)} lead(s) have a parcel number and no value -> python pa_values.py --missing")
+        except Exception as _e:
+            print(f"value_missing.json not written ({str(_e)[:60]})")
         if _vs.get('rfval'):
             print(f"redfin: {_vs['rfval']} lead(s) carry a Redfin Estimate")
         if _vs.get('zest'):

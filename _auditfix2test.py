@@ -122,12 +122,103 @@ try:
 finally:
     F.HERE = _fh
 
+# ---- 15 ----------------------------------------------------------------------------------------
+bat = open(os.path.join(HERE, 'refresh-dealflow.bat'), encoding='utf-8', errors='replace').read()
+i = bat.index("F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))")
+rec('the nightly reads the rebuild exit code and ends as 8', 'set "RUNEXIT=8"' in bat[i:i + 700] and 'goto :end' in bat[i:i + 700])
+rl = open(os.path.join(HERE, 'run-leads.bat'), encoding='utf-8', errors='replace').read()
+i = rl.index('F.make_tracker(')
+rec('run-leads stops before the push when the rebuild fails', 'REBUILD FAILED' in rl[i:i + 400])
+
 # ---- 16 ----------------------------------------------------------------------------------------
+import publish_guard as PG  # noqa: E402
+
+_pg = (PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv)
+gd = tempfile.mkdtemp(prefix='auditfix2_guard_')
+PG.DOCS = os.path.join(gd, 'index.html')
+PG.LAST_GOOD = os.path.join(gd, 'lastgood.json')
+PG.integrity = lambda path: []
+sys.argv = ['publish_guard.py']
+
+
+_MARK = '<!-- DEALFLOW-COVERAGE %s -->'
+
+
+def _board(cov):
+    open(PG.DOCS, 'w', encoding='utf-8').write(_MARK % json.dumps(cov) + chr(10) + 'const RAW = {"enc":"x"}' + chr(10))
+
+
 try:
-    import _auditfix2_guard as G16  # noqa: E402
-    G16.run(rec, d)
-except ImportError:
-    pass
+    PG.cov_of_git = lambda ref: None
+    rec('a missing board is blocked', PG.main() == 2)
+    open(PG.DOCS, 'w', encoding='utf-8').write('no marker\nconst RAW = {"enc":"x"}\n')
+    rec('a build with no census marker is blocked', PG.main() == 2)
+    f = next(iter(PG.FIELDS))
+    _board({f: 1000})
+    rec('no baseline at all is blocked', PG.main() == 2)
+    sys.argv = ['publish_guard.py', '--first-build']
+    rec('--first-build allows it and saves the day baseline', PG.main() == 0 and os.path.exists(PG.LAST_GOOD))
+    sys.argv = ['publish_guard.py']
+    # each publish loses a little against the board before it, never enough to trip on its own
+    ratio = PG.FIELDS[f][0]
+    step = 1000
+    codes = []
+    for _ in range(6):
+        prev = step
+        step = int(prev * (ratio + (1 - ratio) * 0.5))
+        PG.cov_of_git = lambda ref, _p=prev: {f: _p}
+        _board({f: step})
+        codes.append(PG.main())
+    rec('a slow shrink across the day is caught against the day baseline', codes[0] == 0 and 2 in codes, codes)
+finally:
+    PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv = _pg
+
+# ---- 18 ----------------------------------------------------------------------------------------
+r = src('records_liens.py')
+rec('the row limits are judged on the longest single name search',
+    '_one = len(models) if busiest is None else int(busiest)' in r and "'capped': _one >= 500" in r
+    and "if _one > 45: conf = 'low'" in r)
+rec('the browser read passes the longest search only when every name was copied in full',
+    "busiest=(_FILE_META.get('busiest') if a.models_file and _FILE_META.get('full') else None)" in r)
+rec('the queue writes the longest single search into the file', "'busiest': max([int(p.get('n') or 0) for p in cur['parts']] or [0])" in src('equity_queue.py'))
+
+# ---- 19 ----------------------------------------------------------------------------------------
+import datetime  # noqa: E402
+import judgment_interest as JI  # noqa: E402
+
+rec('a judgment entered in October 2023 starts at that quarter\'s rate', JI.entry_rate(datetime.date(2023, 10, 15)) == 8.54)
+rec('a January judgment keeps the January rate', JI.entry_rate(datetime.date(2023, 2, 1)) == JI.JAN1_RATES[2023])
+a = JI.accrue(500000, datetime.date(2023, 10, 1), datetime.date(2024, 1, 1))
+if True:
+    rec('$500,000 from 10/1/2023 to year end accrues at 8.54%', abs(a['interest'] - round(500000 * 0.0854 * 92 / 365, 2)) < 0.02, a['interest'])
+    b = JI.accrue(500000, datetime.date(2023, 10, 1), datetime.date(2024, 3, 1))
+    rec('and the rate moves to the January rate on January 1', [s_['rate'] for s_ in b['segments']] == [8.54, 9.09], b['segments'])
+import re as _re  # noqa: E402
+rec('a response in opposition to a final judgment is not the judgment',
+    bool(_re.search(JI.FJ_EXCLUDE, 'RESPONSE IN OPPOSITION TO FINAL JUDGMENT', _re.I))
+    and not _re.search(JI.FJ_EXCLUDE, 'FINAL JUDGMENT OF FORECLOSURE', _re.I))
+
+# ---- 20 ----------------------------------------------------------------------------------------
+import jose_buybox as JB  # noqa: E402
+
+
+def _bb(case, st, value, judg, days):
+    return {'case': case, 'st': st, 'value': value, 'judg': judg, 'days': days, 'warn': '', 'fake': False,
+            'ju': False, 'vac': False, 'hs': False, 'county': 'MIAMI-DADE', 'addr': '', 'auction': ''}
+
+
+out, _, _ = JB.gate([_bb('2099-TD', 'TD', 1000000, 12000, 20), _bb('2099-FC', 'FC', 500000, 200000, 30)])
+rec('a foreclosure ranks first; a tax deed is listed after it', [x['case'] for x in out] == ['2099-FC', '2099-TD'], out)
+rec('a tax deed carries no seller-room or profit figure', out[1]['seller_room'] is None and out[1]['profit_at_target'] is None and out[1]['zone'] == 'TAXDEED')
+
+# ---- value join: the equity card is re-baked, and unvalued parcels are listed --------------------
+fl = src('foreclosure_leads.py')
+i = fl.index("_vs = _vj.attach(slim")
+rec('the equity card is re-baked for rows the value join just valued',
+    "_noval = [_r for _r in slim" in fl[i - 200:i] and "_r['eqc'] = _es.card(_r)" in fl[i:i + 900])
+rec('leads with a parcel number and no value are listed for the free county lookup',
+    "'value_missing.json'" in fl[i:i + 2600] and 'def fill_missing(' in src('pa_values.py')
+    and 'pa_values.py --missing' in bat)
 
 print('\n%d passed, %d failed' % (len(ok), len(bad)))
 sys.exit(1 if bad else 0)

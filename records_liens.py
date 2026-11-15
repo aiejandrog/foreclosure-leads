@@ -1042,7 +1042,7 @@ def _other_person(party, owners):
                for w in owners or ()) and not _maybe_owner(party, owners)
 
 
-def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=()):
+def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', co_owners=(), busiest=None):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
     ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd.
@@ -1610,7 +1610,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     conf = 'ok'
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
     if len(opens) > 4: conf = 'low'                    # one parcel rarely has >4 live mortgages
-    if len(models) > 45: conf = 'low'                  # busy/common name -> results unreliable
+    # `busiest` = the largest SINGLE name search behind `models`, when the caller knows it (a browser
+    # read of several names). Both row limits are about one search, so a lead searched under three
+    # names is judged on its longest search, not on the three added together.
+    _one = len(models) if busiest is None else int(busiest)
+    if _one > 45: conf = 'low'                         # busy/common name -> results unreliable
     # always present (None = looked, found none), so a cached chain from before this check can be
     # told apart from one that passed it -- see clear_undocumented()
     _fc = bank_foreclosure(models, fol, subj_subdiv) if ftype == 'HOA' else None
@@ -1636,7 +1640,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
             # the county search returns at most 500 records; a full page cannot prove what is not
             # on it (equity_state.coverage_documented), and a search that never returned the
             # subject folio may be a namesake's records (verification defect 3)
-            'capped': len(models) >= 500, 'parcel_found': parcel_found,
+            'capped': _one >= 500, 'parcel_found': parcel_found,
             'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
 
 
@@ -1782,7 +1786,8 @@ def _run(a, ap):
         a.cached_only = True                                  # nothing is fetched or bought on this path
         _fm_doc = json.load(open(a.models_file, encoding='utf-8')) or {}
         _FILE_MODELS[:] = _fm_doc.get('recordingModels') or []
-        _FILE_META.clear(); _FILE_META.update({'full': bool(_fm_doc.get('full')), 'searched': str(_fm_doc.get('searched') or '')})
+        _FILE_META.clear(); _FILE_META.update({'full': bool(_fm_doc.get('full')), 'searched': str(_fm_doc.get('searched') or ''),
+                           'busiest': _fm_doc.get('busiest')})
         qs_cache = dict(qs_cache)                             # a copy: the marker below is never saved
 
     picked = []
@@ -2094,7 +2099,8 @@ def _run(a, ap):
             except Exception:
                 pass
             res = analyze(models, folio, judg, ftype=_fc_type(case, r.get('case_type'), r.get('plaintiff') or ''), plaintiff=r.get('plaintiff') or '',
-                          owner=_searched, case=case, co_owners=_co)
+                          owner=_searched, case=case, co_owners=_co,
+                          busiest=(_FILE_META.get('busiest') if a.models_file and _FILE_META.get('full') else None))
             res['searched_as'] = _searched
             if _jsrc:
                 res['judgment_source'] = _jsrc          # 'court copy': equity_state.card reads it

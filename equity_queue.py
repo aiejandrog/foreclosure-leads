@@ -544,8 +544,13 @@ def _models_file(it):
     names = _names(it)
     full = bool(cur['parts']) and len(cur['parts']) == len(names) and not any(p.get('capped') for p in cur['parts'])
     out = path[:-5] + '.models.json'
+    # busiest: the largest single name search. The lien reader's row limits are about ONE search
+    # (the county caps one at 500 rows; a very long one means a common name), so it needs this and
+    # not the total across names: two complete 260-row searches are not a cut-off read.
     _write(out, {'case': it['case'], 'full': full, 'searched': '; '.join(p['name'] for p in cur['parts']),
-                 'searches': len(cur['parts']), 'names_on_lead': len(names), 'recordingModels': models})
+                 'searches': len(cur['parts']), 'names_on_lead': len(names),
+                 'busiest': max([int(p.get('n') or 0) for p in cur['parts']] or [0]),
+                 'recordingModels': models})
     return out, full
 
 
