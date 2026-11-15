@@ -220,5 +220,30 @@ rec('leads with a parcel number and no value are listed for the free county look
     "'value_missing.json'" in fl[i:i + 2600] and 'def fill_missing(' in src('pa_values.py')
     and 'pa_values.py --missing' in bat)
 
+# ---- association cases in the recorded-debt tier ------------------------------------------------
+import equity_state as ES  # noqa: E402
+
+
+def _lead(**kw):
+    d = {'case': '2099-HOA-1', 'st': 'LP', 'value': 400000, 'ftype': 'HOA', 'ctype': 'HOA', 'eqstate': 'priced',
+         'orliens': [{'st': 'OPEN', 'amt': 150000}], 'ju': True}
+    d.update(kw)
+    return d
+
+
+k = ES.card(_lead())
+rec('an association case with a priced chain joins the tier', k['recorded'] and k['recorded_debt'] == 150000 and k['recorded_net'] == 250000, k)
+rec('nothing on it may be quoted', k['may_quote'] is False and k['net'] is None and 'association' in k['why'].lower())
+k = ES.card(_lead(eqstate='clear', orliens=[]))
+rec('an association case with a verified clear chain joins the tier', k['recorded'] and k['recorded_net'] == 400000, k)
+k = ES.card(_lead(eqstate='none'))
+rec('an unverified chain never joins it', not k['recorded'])
+k = ES.card(_lead(orliens=[{'st': 'OPEN', 'amt': 150000}, {'st': 'OPEN', 'amt': 0}]))
+rec('an open loan with no amount keeps it out', not k['recorded'])
+k = ES.card(_lead(value=0))
+rec('no property value keeps it out', not k['recorded'])
+k = ES.card(_lead(st='FC'))
+rec('only a fresh filing qualifies, not an auction row', not k['recorded'])
+
 print('\n%d passed, %d failed' % (len(ok), len(bad)))
 sys.exit(1 if bad else 0)
