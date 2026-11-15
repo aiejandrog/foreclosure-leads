@@ -274,11 +274,43 @@ BOARD_MIN_DAYS = 11
 FOLLOWUP_MIN_DAYS = 7
 
 
+VARIANTS_LEDGER = 'mail_variants.json'       # bsg_mail_variants.LEDGER, read here without importing it
+
+
+def _ck(case):
+    return re.sub(r'[^A-Z0-9]', '', str(case or '').upper())
+
+
+def other_mail_ledgers():
+    """Cases that already got a first letter by a path that does not write mail_letters_sent.json:
+    --from-route's print ledger and the variants run's assignment ledger (in_print_file only).
+    {case key: reason}. A missing ledger is empty; an unreadable one stops the run, the same as the
+    letter ledger: it cannot prove who was already mailed."""
+    out = {}
+    for name, why in ((ROUTE_LEDGER, 'already printed (call mode route)'),
+                      (VARIANTS_LEDGER, 'already printed (variants run)')):
+        path = P.out(name)
+        if not os.path.exists(path):
+            continue
+        try:
+            d = json.load(open(path, encoding='utf-8'))
+            if name == VARIANTS_LEDGER:
+                d = {c: v for c, v in d['cases'].items() if isinstance(v, dict) and v.get('in_print_file') is True}
+            if not isinstance(d, dict):
+                raise ValueError
+        except Exception:
+            raise SystemExit('ABORT: %s is unreadable; fix it before mailing.' % name)
+        for c in d:
+            out.setdefault(_ck(c), why)
+    return out
+
+
 def pool_board(tiers, min_days, cases=None, remail=False):
     """Board leads for a hand-mailed run, selected by outreach_mail.build_selection -- the SAME
     selector the paid Lob / Click2Mail path uses, so a stamp-and-envelope run can never be looser
     than a paid one: opt-out ledger, stay gate (contact_blocked_reason), diligence gate, company
     owners, vacant land, sale runway, and the letter ledger (mail_letters_sent.json) dedupe.
+    A first letter also skips anyone the Call Mode route run or the variants run already printed.
     On top of that: existing clients and estates are dropped, and a first name is required.
 
     cases: restrict to these case numbers (the touch-2 run passes touch 1's manifest).
@@ -303,9 +335,13 @@ def pool_board(tiers, min_days, cases=None, remail=False):
         import clients as _CL
     except Exception:
         _CL = None
+    printed = {} if remail else other_mail_ledgers()
     out = []
     for r, parsed in queue:
         case = OM._case(r)
+        if _ck(case) in printed:
+            drops[printed[_ck(case)]] = drops.get(printed[_ck(case)], 0) + 1
+            continue
         if _CL is None or _CL.is_client(r):
             k = 'existing client' if _CL else 'client list unreadable'
             drops[k] = drops.get(k, 0) + 1

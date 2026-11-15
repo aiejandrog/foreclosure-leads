@@ -64,7 +64,15 @@ leads = [
     {'case': 'SOON-1', 'owners': 'SOON,SAM', 'addr': '4 D ST', 'mail': '4 D ST, MIAMI, FL 33101', 'days': 8, 'tier': 'A'},
     {'case': 'EST-1', 'owners': 'ESTATE OF ROE,RICK', 'addr': '5 E ST', 'mail': '5 E ST, MIAMI, FL 33101', 'days': 30, 'tier': 'A'},
     {'case': 'CLI-1', 'owners': 'CLIENT,CARA', 'addr': '6 F ST', 'mail': '6 F ST, MIAMI, FL 33101', 'days': 30, 'tier': 'A'},
+    {'case': 'RTE-1', 'owners': 'ROUTE,RITA', 'addr': '7 G ST', 'mail': '7 G ST, MIAMI, FL 33101', 'days': 30, 'tier': 'A'},
+    {'case': 'VAR-1', 'owners': 'VARIANT,VIC', 'addr': '8 H ST', 'mail': '8 H ST, MIAMI, FL 33101', 'days': 30, 'tier': 'A'},
+    {'case': 'VAR-2', 'owners': 'VARIANT,VAL', 'addr': '9 I ST', 'mail': '9 I ST, MIAMI, FL 33101', 'days': 12, 'tier': 'A'},
 ]
+os.makedirs(os.path.join(tmp, 'out'))
+json.dump({'RTE-1': '2026-11-10'}, open(os.path.join(tmp, 'out', 'mail_route_printed.json'), 'w'))
+# VAR-2 was dealt an arm but never made the print file, so it is still owed a first letter
+json.dump({'cases': {'var 1': {'arm': 'A', 'in_print_file': True}, 'VAR-2': {'arm': 'B'}}},
+          open(os.path.join(tmp, 'out', 'mail_variants.json'), 'w'))
 json.dump(leads, open(os.path.join(tmp, 'leads_final.json'), 'w'))
 json.dump({'OPT-1': {'optout': True}}, open(os.path.join(tmp, 'optouts.json'), 'w'))
 ledger = os.path.join(tmp, 'mail_letters_sent.json')
@@ -82,10 +90,14 @@ B.P.out = lambda name: os.path.join(tmp, 'out', name)
 try:
     rows, drops = B.pool_board(None, B.BOARD_MIN_DAYS)
     got = [r['case'] for r in rows]
-    chk('board run keeps only the clean leads, soonest sale first', got == ['OK-2', 'OK-1'])
+    chk('board run keeps only the clean leads, soonest sale first', got == ['VAR-2', 'OK-2', 'OK-1'])
     chk('opt-out ledger drops a lead', 'OPT-1' not in got)
     chk('stay gate drops a lead', 'STAY-1' not in got and drops.get('bankruptcy-stay-check') == 1)
     chk('letter ledger drops an already-mailed lead', 'SENT-1' not in got)
+    chk('a lead the call mode route run already printed is dropped',
+        'RTE-1' not in got and drops.get('already printed (call mode route)') == 1)
+    chk('a lead in the variants print file is dropped, one only dealt an arm is not',
+        'VAR-1' not in got and 'VAR-2' in got and drops.get('already printed (variants run)') == 1)
     chk('a sale inside 11 days is not mailed', 'SOON-1' not in got)
     chk('estates and clients are dropped', 'EST-1' not in got and 'CLI-1' not in got)
     ok1 = [r for r in rows if r['case'] == 'OK-1'][0]
@@ -98,7 +110,7 @@ try:
 
     mp = B.write_manifest(rows, 1)
     man = json.load(open(mp))
-    chk('manifest carries case numbers only', man['cases'] == ['OK-2', 'OK-1'] and 'owners' not in json.dumps(man))
+    chk('manifest carries case numbers only', man['cases'] == ['VAR-2', 'OK-2', 'OK-1'] and 'owners' not in json.dumps(man))
     opt_before = open(os.path.join(tmp, 'optouts.json')).read()
     B.mark_mailed(mp)
     led = json.load(open(ledger))
@@ -110,11 +122,19 @@ try:
     json.dump({'OPT-1': {'optout': True}, 'OK-2': {'status': 'DO NOT CONTACT'}},
               open(os.path.join(tmp, 'optouts.json'), 'w'))
     rows2, _ = B.pool_board(None, B.FOLLOWUP_MIN_DAYS, cases=man['cases'], remail=True)
-    chk('touch 2 re-checks: an opt-out after letter 1 drops the follow-up', [r['case'] for r in rows2] == ['OK-1'])
+    chk('touch 2 re-checks: an opt-out after letter 1 drops the follow-up', [r['case'] for r in rows2] == ['VAR-2', 'OK-1'])
     json.dump({'touch': 2, 'printed': man['printed'], 'cases': ['OK-1']}, open(mp + '.2', 'w'))
     B.mark_mailed(mp + '.2')
     led = json.load(open(ledger))
     chk('touch 2 adds a date and keeps the touch 1 entry', led['OK-1'].get('touch2') and led['OK-1']['src'] == 'hand')
+
+    open(os.path.join(tmp, 'out', 'mail_variants.json'), 'w').write('{torn')
+    try:
+        B.pool_board(None, B.BOARD_MIN_DAYS)
+        chk('an unreadable variants ledger stops the run', False)
+    except SystemExit:
+        chk('an unreadable variants ledger stops the run', True)
+    os.remove(os.path.join(tmp, 'out', 'mail_variants.json'))
 
     open(ledger, 'w').write('{torn')
     try:
