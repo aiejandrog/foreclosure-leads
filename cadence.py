@@ -972,6 +972,10 @@ def _run(args):
     _touch_of = _touch_index(state)
     _mailed = set()
     for c, s in active.items():
+        # `active` was built before the inbox check above, which marks a reply or a stop word on
+        # the same dict. Without this line that person still got this run's step.
+        if s.get('status') != 'active':
+            continue
         due = s.get('next') or str(today)
         if due > str(today):
             continue

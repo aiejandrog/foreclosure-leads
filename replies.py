@@ -257,9 +257,19 @@ def _stamp_optout_verified(mailbox, days):
         'mailbox': mailbox, 'window_days': days,
         'src': 'replies.py scan (no unledgered STOP found)',
     }
+    # Through a temp file and os.replace, never in place: the bridge reads this list before every
+    # send, and a read that landed mid-write (or a kill mid-write) saw a broken list.
+    tmp = p + '.tmp'
     try:
-        json.dump(raw, open(p, 'w', encoding='utf-8'), indent=1)
-        return True
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(raw, f, indent=1)
+        for attempt in range(4):
+            try:
+                os.replace(tmp, p)
+                return True
+            except PermissionError:
+                time.sleep(0.2 * (attempt + 1))
+        return False
     except Exception:
         return False
 

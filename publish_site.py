@@ -101,15 +101,31 @@ def _run(args, cwd, check=True, env=None):
     return p
 
 
+_IMG_EXT = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg')
+
+
+def _published(rel):
+    """True for the files the site is made of, and nothing else under docs/: the board, the call
+    pages (one index.html per folder), the balloon book, and images. docs/ also holds internal
+    notes, scripts and dated backups of the board (index.html.bak-...). A backup stayed openable
+    with any code that was valid the day it was made, so a revoke did not lock that holder out.
+    An allowlist, so a new kind of file in docs/ is unpublished until it is named here."""
+    parts = rel.replace(os.sep, '/').split('/')
+    if parts[0] == 'img':
+        return parts[-1].lower().endswith(_IMG_EXT)
+    if parts[-1] != 'index.html':
+        return False
+    return (len(parts) == 1 or (parts[0] == 'call' and len(parts) <= 3)
+            or (parts[0].startswith('hm-balloon-') and len(parts) == 2))
+
+
 def _pages():
-    """Every built page to publish. Never a PDF: door books and call sheets are gitignored in the engine
-    and carry homeowner phones and addresses; they ride into the public repo only because this walks the
-    local docs/ folder, so they are excluded by kind, here, for the mirror, the guard and site_fresh."""
+    """Every built page to publish: only what _published() names. Never a PDF, a backup or a note."""
     for root, _dirs, files in os.walk(DOCS):
         for n in files:
-            if n.lower().endswith('.pdf'):
-                continue
-            yield os.path.join(root, n)
+            p = os.path.join(root, n)
+            if _published(os.path.relpath(p, DOCS)):
+                yield p
 
 
 def guard():
@@ -180,7 +196,7 @@ def mirror(dry=False):
             rel = os.path.relpath(dst, SITE_DOCS)
             if rel in KEEP or os.path.basename(rel) in KEEP:
                 continue
-            if rel.lower().endswith('.pdf') or not os.path.exists(os.path.join(DOCS, rel)):
+            if not _published(rel) or not os.path.exists(os.path.join(DOCS, rel)):
                 if not dry:
                     os.remove(dst)
                 removed += 1

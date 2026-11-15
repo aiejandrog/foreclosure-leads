@@ -785,31 +785,116 @@ def _ledger_unreadable():
     return not isinstance(data, list)
 
 
-def _append_ledger(entry):
-    """Atomic write. Lock protects against two concurrent /send requests corrupting the file.
+class LedgerUnreadable(RuntimeError):
+    """mail_sent.json exists but would not read as a list after retries."""
 
-    os.replace() on Windows can throw a transient PermissionError (WinError 5) when something else
-    — antivirus, Windows Search indexing, OneDrive, a stray `open()` from an ad-hoc diagnostic
-    script — has the destination file open for a few milliseconds. POSIX rename tolerates this;
-    Windows does not. Caught live 2026-08-05: a real, already-delivered email hit this on its
-    ledger write, AFTER the SMTP send had already succeeded — the write itself has no business
-    logic to retry, it just needs to survive a momentary lock. 3 attempts with a short backoff
-    clears the overwhelming majority of these without changing behavior on a real, persistent
-    failure (permissions actually wrong, disk full, etc. still raise after the last attempt)."""
-    with _LEDGER_LOCK:
-        log = _load_ledger()
-        log.append(entry)
-        tmp = SENT_LEDGER + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(log, f, indent=2, ensure_ascii=False)
-        for attempt in range(3):
+
+def read_ledger_strict(path, tries=5, wait=0.2):
+    """The rows, [] for a missing file. A file that EXISTS and will not read is retried, then
+    raises: a moment's lock by antivirus or OneDrive must never read as an empty history, because
+    the writer would then save a one-row file over every past send."""
+    if not os.path.exists(path):
+        return []
+    last = None
+    for i in range(tries):
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                raise ValueError('not a list')
+            return data
+        except (OSError, ValueError) as e:
+            last = e
+            time.sleep(wait * (i + 1))
+    raise LedgerUnreadable('%s exists but will not read (%s). Not rewritten.'
+                           % (os.path.basename(path), str(last)[:120]))
+
+
+class ledger_file_lock(object):
+    """One lock for every process that rewrites mail_sent.json (bridge, outreach_email, cadence,
+    ledger_sync). Each of them reads the file, adds rows and replaces it, so two at once lose a
+    row for a delivered email. The lock is a file created with O_EXCL beside the ledger; one left
+    behind by a killed process is taken over after `stale` seconds."""
+
+    def __init__(self, path, timeout=30.0, stale=120.0):
+        self.lk, self.timeout, self.stale, self.held = path + '.lock', timeout, stale, False
+
+    def __enter__(self):
+        end = time.time() + self.timeout
+        while True:
             try:
-                os.replace(tmp, SENT_LEDGER)
-                return
-            except PermissionError:
-                if attempt == 2:
-                    raise
-                time.sleep(0.15 * (attempt + 1))
+                os.close(os.open(self.lk, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                self.held = True
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(self.lk) > self.stale:
+                        os.remove(self.lk)
+                        continue
+                except OSError:
+                    pass
+                if time.time() > end:
+                    raise LedgerUnreadable('%s is held by another process.' % os.path.basename(self.lk))
+                time.sleep(0.1)
+
+    def __exit__(self, *exc):
+        if self.held:
+            try:
+                os.remove(self.lk)
+            except OSError:
+                pass
+        return False
+
+
+def replace_ledger(path, rows, tries=6):
+    """Write `rows` over the ledger through a .tmp and os.replace, retrying the short Windows
+    PermissionError a reader causes. On a lasting failure the .tmp is left in place: it holds the
+    complete ledger and can be promoted by hand. Call with the lock held."""
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(rows, f, indent=2, ensure_ascii=False)
+    last = None
+    for attempt in range(tries):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as e:
+            last = e
+            time.sleep(0.25 * (attempt + 1))
+    raise RuntimeError('%s is locked by another process (%s). The complete ledger is in %s; promote '
+                       'it by hand.' % (os.path.basename(path), last, os.path.basename(tmp)))
+
+
+def append_ledger_row(path, entry):
+    """Add one row for an email that has ALREADY gone out. If the ledger will not read, the row is
+    parked in <ledger>.pending.jsonl and the error is raised: history is kept, the row is not lost,
+    and the next good append folds parked rows back in."""
+    pend = path + '.pending.jsonl'
+    try:
+        with ledger_file_lock(path):
+            log = read_ledger_strict(path)
+            parked = []
+            if os.path.exists(pend):
+                with open(pend, encoding='utf-8') as f:
+                    for line in f:
+                        try:
+                            parked.append(json.loads(line))
+                        except ValueError:
+                            pass
+            replace_ledger(path, log + parked + [entry])
+            if parked:
+                os.remove(pend)
+    except LedgerUnreadable:
+        with open(pend, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + chr(10))
+        raise
+
+
+def _append_ledger(entry):
+    """One row for a delivered email. _LEDGER_LOCK covers this process's threads;
+    append_ledger_row's file lock covers the other programs that write the same file."""
+    with _LEDGER_LOCK:
+        append_ledger_row(SENT_LEDGER, entry)
 
 
 def _note_time(n):

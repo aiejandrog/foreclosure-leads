@@ -897,3 +897,9 @@ BSG_Mail_Variants_*
 !_noticelettertest.py
 # outreach_mail --variant notice: mail-only phone, call hours, return address/PMB (never commit)
 notice_letter.local.json
+
+# sent-mail ledger sidecars (recipient addresses): lock, parked rows, temp
+mail_sent.json.lock
+mail_sent.json.pending.jsonl
+mail_sent.json.tmp
+!_auditfix2test.py
