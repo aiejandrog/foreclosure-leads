@@ -890,3 +890,8 @@ BSG_Mail_Variants_*
 /listing_status_cache.json
 /REFERRAL_CODES.json
 !_callcoachlivetest.py
+# _noticelettertest: outreach_mail --variant notice refusal, county gate, EN/ES render.
+# Invented names, addresses and numbers only; no config, no network, no vendor call.
+!_noticelettertest.py
+# outreach_mail --variant notice: mail-only phone, call hours, return address/PMB (never commit)
+notice_letter.local.json
