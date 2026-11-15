@@ -8676,8 +8676,13 @@ function fileLinks(r){
      name, street and sale date off the same leads_final row. Laptop only by design: the server
      binds loopback, so on a phone the link simply does not resolve; the coach's mic IS the laptop
      (speakerphone + laptop mic). Plain http on purpose — an <a> navigation to a loopback origin
-     is allowed from the https page, and the coach is its own tab, not a fetch. */
-  if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)]);
+     is allowed from the https page, and the coach is its own tab, not a fetch.
+     EQUITY VERDICT (2026-11-15). The link also carries this row's equity state (eqc.st) and, only
+     when the card says it may be quoted, the net. leads_final has no state, so the coach showed
+     every lead as Not verified; now it shows the board's verdict and never works out its own. */
+  if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)
+    + ((r.eqc && r.eqc.st) ? '&eq=' + encodeURIComponent(r.eqc.st)
+        + ((r.eqc.q && r.eqc.n != null && isFinite(+r.eqc.n)) ? '&en=' + Math.round(+r.eqc.n) : '') : '')]);
   return L;
 }
 /* COACH DOCK (2026-11-07, Alex: "have it in the call mode"). On a computer, the Coach link no longer
@@ -8686,7 +8691,7 @@ function fileLinks(r){
    transcript sit next to the dial screen. The coach keeps its own consent gate, recorder and save
    path; Call Mode only frames it. On a phone (narrow screen or touch-only) the link is left alone:
    the server is the computer's, so it cannot answer there. Nothing here reads or sends lead data;
-   the frame loads only the case number in its URL. */
+   the frame loads only the case number and the equity verdict in its URL. */
 var COACH_ORIGIN = 'http://127.0.0.1:8777';
 function _coachDockable(){ return window.innerWidth >= 900 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches && !matchMedia('(any-pointer:fine)').matches); }
 function coachDock(url){

@@ -121,6 +121,20 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   C.jump(1); var s1=$('saytext').textContent;
   T.say(s1);
   o.stage=T.stage();
+
+  /* 10. the 11-15 test call: "no time" is ONE card, then the day and time they give */
+  var ids=function(n){ return T.fires().slice(n).map(function(x){ return x.id; }); };
+  T.reset(); var f0=T.fires().length;
+  T.interim('I have no time right now'); T.say('I have no time right now honestly');
+  o.tc_one=ids(f0);
+  T.say('And you’d have to call me back later to catch me what’s your time frame on getting me back');
+  o.tc_quiet=ids(f0).length;
+  T.interim('Tomorrow'); o.tc_day=card();
+  T.say('Tomorrow at 7 A.M'); o.tc_when=card();
+  T.say('Around 7 A.M'); o.tc_upd=[card().say, ids(f0), T.fires().slice(-1)[0].when];
+  T.reset(); T.say('the sale is tomorrow at 9 am'); o.tc_unarmed=T.card()&&T.card().id;
+  T.reset(); T.say('can you call me tomorrow around noon'); o.tc_same=card();
+  T.reset(); T.say('call me later'); T.interim('please stop calling tomorrow'); o.tc_stop=card().kind+':'+card().id;
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -142,6 +156,16 @@ o.open=[fcOpen('i have an attorney but'), fcOpen('i have an attorney'), fcOpen('
 var none={}, rec={judgment:'$412,300.55', auction:'2099-01-02', days:12, equity:88000},
     ver={judgment:412300.55, equity:88000, eqstate:'priced'}, unk={judgment:'$5.00', judgment_unknown:true, equity:50000, eqstate:'unpriced'};
 o.f_none=fcFacts(none); o.f_rec=fcFacts(rec); o.f_ver=fcFacts(ver); o.f_unk=fcFacts(unk);
+var B=function(l,s){ var x=fcBoard(l,s); return [x.eqstate===undefined?null:x.eqstate, x.equity===undefined?'raw':x.equity, fcFacts(x).equity.ok, fcFactSay('equity',x,false).say.indexOf('$')>=0]; };
+o.board=[B({case:'A-1',equity:50000},'?case=A-1&eq=priced&en=120000'), B({case:'A-1',equity:50000},'?case=A-1&eq=clear'),
+         B({case:'A-1',equity:50000},'?case=A-1&eq=unpriced&en=120000'), B({case:'A-1',equity:50000},'?case=B-2&eq=priced&en=120000'),
+         B({case:'A-1',equity:50000},'?case=A-1&eq=bogus&en=9'), B({case:'A-1',equity:50000},'?case=A-1'),
+         B({case:'A-1',equity:50000},'?case=A-1&eq=priced&en=-4000')];
+var W=function(s){ var w=fcWhen(norm(s)); return w?w.text:null; };
+o.when=[W('Tomorrow at 7 A.M'), W('Around 7 A.M'), W('around 7:30 pm'), W('I have 3 kids'), W('el lunes a las 3 de la tarde'),
+        W('next Tuesday after five'), W('give me a call at 25'), W('this afternoon'), W('seven o’clock tonight')];
+o.when_merge=fcWhenMerge(fcWhen('tomorrow'), fcWhen('around 7 a m')).text;
+o.board_v=fcFacts(fcBoard({case:'A-1',equity:50000},'?case=A-1&eq=clear')).equity.v;
 o.say=[fcFactSay('owe',none,false).say, fcFactSay('owe',rec,false).say, fcFactSay('equity',rec,false).say, fcFactSay('equity',ver,false).say,
        fcFactSay('sale',rec,false).say, fcFactSay('sale',none,false).say, fcFactSay('equity',unk,true).say, fcFactSay('owe',unk,true).say];
 o.stage=[fcStageAfter(norm('hi maria can you hear me its alejandro with biscayne'), ['consent line here','hi maria can you hear me its alejandro with biscayne solutions','next'], 0),
@@ -188,6 +212,20 @@ else:
         chk('$88,000' in s[3], 'equity, verified: the figure')
         chk('2099-01-02' in s[4] and '12 days' in s[4] and 'no sale date' in s[5].lower(), 'sale date from the calendar, or none')
         chk('$' not in s[6] and '$' not in s[7], 'Spanish answers follow the same rule')
+        chk(p['when'] == ['tomorrow at 7 AM', 'around 7 AM', 'around 7:30 PM', None, 'el lunes a las 3 de la tarde',
+                          'next tuesday after 5', None, 'this afternoon', 'tonight at 7'],
+            'a day and time are read off the line; a bare number is not a time', p['when'])
+        chk(p['when_merge'] == 'tomorrow around 7 AM', 'a later line adds the time to the day', p['when_merge'])
+        b = p['board']
+        chk(b[0] == ['priced', 120000, True, True], "the board's quotable net replaces the raw estimate", b[0])
+        chk(b[1] == ['clear', None, False, False] and 'no figure' in p['board_v'], 'a verified state with no quotable net shows no number', [b[1], p['board_v']])
+        chk(b[2] == ['unpriced', None, False, False], 'a ceiling-only verdict drops the figure even if one is sent', b[2])
+        chk(b[3] == [None, 50000, False, False], 'a verdict for another case is ignored', b[3])
+        chk(b[4] == [None, 50000, False, False] and b[5] == [None, 50000, False, False], 'an unknown state or no verdict leaves the lead not verified', [b[4], b[5]])
+        chk(b[6][2] is False and b[6][3] is False, 'a negative net is never spoken', b[6])
+        cm = open(os.path.join(HERE, 'call_mode.py'), encoding='utf-8').read()
+        chk("'&eq=' + encodeURIComponent(r.eqc.st)" in cm and "r.eqc.q && r.eqc.n != null" in cm,
+            'Call Mode hands the coach the equity verdict, the net only when quotable')
         chk(p['stage'] == [2, -1, -1], 'a read stage line names the next stage; other talk and earlier stages do not', p['stage'])
 
     o = run(HARNESS.replace('__SRC__', src))
@@ -215,6 +253,17 @@ else:
         chk(o['keep'] and o['keep']['id'] == 'keep' and len(o['keep']['ask']) == 2, 'keep-the-house gets two questions to choose from')
         chk(o['recap'] == 3, 'Catch me up shows the last three lines', o['recap'])
         chk(o['stale'] == [True, True], 'the card goes dim after two more lines', o['stale'])
+        chk(o['tc_one'] == ['callback'], '"I have no time right now" shows one card, not the callback and the busy card', o['tc_one'])
+        chk(o['tc_quiet'] == 1, 'talking about the call back does not fire it again', o['tc_quiet'])
+        chk(o['tc_day'] and o['tc_day']['id'] == 'cb_time' and 'What time' in o['tc_day']['say'], '"Tomorrow" on partial words asks for the time', o['tc_day'])
+        chk(o['tc_when'] and 'tomorrow at 7 AM' in o['tc_when']['say'] and 'tomorrow at 7 AM' in o['tc_when']['act'],
+            '"Tomorrow at 7 A.M" is read back and named in the log step', o['tc_when'])
+        chk('tomorrow around 7 AM' in o['tc_upd'][0] and o['tc_upd'][1] == ['callback', 'cb_time'] and o['tc_upd'][2] == 'tomorrow around 7 AM',
+            '"Around 7 A.M" updates the same card and the saved record', o['tc_upd'])
+        chk(o['tc_unarmed'] != 'cb_time', 'a day and time with no call-back request stays quiet', o['tc_unarmed'])
+        chk(o['tc_same'] and o['tc_same']['id'] == 'cb_time' and 'tomorrow at noon' in o['tc_same']['say'],
+            'a call-back request with its own time goes straight to the time card', o['tc_same'])
+        chk(o['tc_stop'] == 'stop:stop', 'a stop request still wins inside the time window', o['tc_stop'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
 print()
