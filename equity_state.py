@@ -426,19 +426,29 @@ def card(lead):
     if may and basis > 0:
         net = round(basis - _num(debt.get('total')), 2)
     stack = _open_stack(lead.get('orliens'))
-    recorded = bool(st == 'priced' and judgment is None and not taxdeed and _lp_row(lead)
-                    and lender_foreclosure(lead) and basis > 0 and stack is not None)
+    # ASSOCIATION CASES JOIN THE TIER (2026-11-15, Alejandro: raise the verified count). An HOA or
+    # condo association suing does not wipe the mortgage, so the debt that matters is the whole open
+    # recorded stack, which is exactly what this tier already totals. Two shapes qualify: the chain
+    # is priced (every open loan has an amount), or it is verified CLEAR (no mortgage on record, the
+    # house an association forecloses most often). The association's own claim is not in the figure,
+    # and like every row of this tier nothing here may be quoted.
+    assoc = str(lead.get('ftype') or lead.get('orftype') or '').upper() == 'HOA' and not lender_foreclosure(lead)
+    recorded = bool(judgment is None and not taxdeed and _lp_row(lead) and basis > 0 and (
+        (st == 'priced' and stack is not None and (lender_foreclosure(lead) or assoc))
+        or (st == 'clear' and assoc)))
     # The debt is the WHOLE open stack, the foreclosing loan included. known_debt_of() cannot be
     # reused here: on a lender case broward_liens / records_liens put only the juniors in
     # surv / junior (the foreclosing first is wiped at sale) and nothing forwards first_est, so with
     # no judgment to stand in for it that total leaves the largest loan out. max() keeps any larger
     # figure known_debt_of() does see (a validated deep-equity inventory).
-    rdebt = round(max(stack, _num(debt.get('total'))), 2) if recorded else None
+    rdebt = round(max(stack or 0, _num(debt.get('total'))), 2) if recorded else None
     rnet = round(basis - rdebt, 2) if recorded else None
     why = lead.get('eqstate_why') or LABEL[st]
     if recorded:
         why = why + ('. The case has no judgment yet, so the figure is RECORDED DEBT ONLY, not a '
                      'payoff (arrears, interest and fees are not in it): no figure may be quoted')
+        if assoc:
+            why = why + ". An association is the plaintiff: its claim is not in the figure"
     elif fact and judgment is None:
         why = why + ' — but the judgment is not posted, so no figure may be quoted'
     elif fact and jsrc == OPENING_BID:

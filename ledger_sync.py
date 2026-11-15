@@ -137,10 +137,21 @@ def main():
     for name in FILES:
         local_p, repo_p = os.path.join(HERE, name), os.path.join(REPO_DIR, name)
         default = {} if name == 'optouts.json' else []
-        local, remote = load(local_p, default), load(repo_p, default)
-        union = union_optouts(local, remote) if name == 'optouts.json' else union_mail(local, remote)
-        if write_if_changed(local_p, union, local):
-            changed_local = True; print('local  updated:', name)
+        if name == 'mail_sent.json':
+            # The bridge and the 8:00 worker append to this file. Read, union and write under their
+            # lock, or a row they add between our read and our write is overwritten.
+            import send_server as _SS
+            with _SS.ledger_file_lock(local_p):
+                local, remote = _SS.read_ledger_strict(local_p), load(repo_p, default)
+                union = union_mail(local, remote)
+                if union != local:
+                    _SS.replace_ledger(local_p, union)
+                    changed_local = True; print('local  updated:', name)
+        else:
+            local, remote = load(local_p, default), load(repo_p, default)
+            union = union_optouts(local, remote)
+            if write_if_changed(local_p, union, local):
+                changed_local = True; print('local  updated:', name)
         if write_if_changed(repo_p, union, remote):
             changed_repo = True; print('repo   updated:', name)
         n = len(union['notes']) if name == 'optouts.json' else len(union)

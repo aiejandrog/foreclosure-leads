@@ -1620,8 +1620,13 @@ def _js_guard(tpl):
                          'feature would be dead on the live site.')
     print(f'js-guard: {len(blocks)} inline script block(s) parsed clean')
 
-def _text_ledger():
+def _text_ledger(pkey_of=None):
     """text_sent.json -> (case -> {n, opens, last}, pkey -> {n, opens, last}).
+
+    pkey_of: today's case -> person key. A person's key is made from their list of cases, so it
+    changes when one drops off the board or a new one is filed, and a count kept under the key
+    stored at send time restarted at zero. Each past text is counted under TODAY'S key for its
+    case; a text about a case that has left the board follows the key its old key now maps to.
 
     The SMS mirror of _mail_ledger, and it exists for the same measured reason: before it, text
     history lived ONLY in one browser's localStorage, so a new profile / second device / cleared
@@ -1646,16 +1651,28 @@ def _text_ledger():
     except Exception as e:
         print(f'text ledger: text_sent.json unreadable ({e}) - cadence falls back to localStorage only')
         return log, per
+    pkey_of = pkey_of or {}
+    rows = [e for e in rows if isinstance(e, dict) and e.get('ch') == 'text']
+    # old key -> the key(s) its cases carry today
+    now_of = {}
     for e in rows:
-        if not isinstance(e, dict) or e.get('ch') != 'text':
-            continue
+        _old, _now = str(e.get('pkey') or '').strip(), pkey_of.get(str(e.get('case') or '').strip())
+        if _old and _now:
+            now_of.setdefault(_old, set()).add(_now)
+    for e in rows:
         try:
             ms = int(datetime.fromisoformat(e['ts_utc']).timestamp() * 1000)
         except Exception:
             ms = 0
         ok = bool(e.get('confirmed'))
-        for key, table in ((str(e.get('case') or '').strip(), log),
-                           (str(e.get('pkey') or '').strip(), per)):
+        case, old_key = str(e.get('case') or '').strip(), str(e.get('pkey') or '').strip()
+        if pkey_of.get(case):
+            people = {pkey_of[case]}
+        else:
+            people = set(now_of.get(old_key) or ())
+        if old_key:
+            people.add(old_key)             # the stored key still counts: a page built earlier reads it
+        for key, table in [(case, log)] + [(k, per) for k in sorted(people)]:
             if not key:
                 continue
             d = table.setdefault(key, {'n': 0, 'opens': 0, 'last': 0})
@@ -3289,7 +3306,36 @@ def make_tracker(leads):
     try:
         import value_join as _vj
         _side = _vj.load_sidecars(HERE)
+        _noval = [_r for _r in slim if isinstance(_r, dict) and not _r.get('value')]
         _vs = _vj.attach(slim, redfin=_side['redfin'], listing=_side['listing'], pa=_side['pa'])
+        # THE EQUITY CARD WAS BAKED BEFORE THIS JOIN (2026-11-15). A lead whose only value is the
+        # property-appraiser cache got its card with no value, so a verified lien chain could never
+        # show as verified equity. Re-bake the card of every row this join just valued.
+        _rb = 0
+        for _r in _noval:
+            if _r.get('value') and 'eqc' in _r:
+                try:
+                    _r['eqc'] = _es.card(_r)
+                    _rb += 1
+                except Exception as _e:
+                    print(f"equity card re-bake skipped for one row ({str(_e)[:60]})")
+        if _rb:
+            print(f"roll value: equity card re-baked on {_rb} lead(s) valued from the cache")
+        # WHO STILL HAS NO VALUE BUT HAS A FULL PARCEL NUMBER. Nothing looked these up: the lookup
+        # only ran for auction rows carrying a 'no cadastral match' warning, and a lis pendens row
+        # that later gained a folio was never one of those. pa_values.py --missing reads this list
+        # (parcel number and county only) and fills the cache for the next build. Free, no login.
+        try:
+            import pa_values as _pv
+            _miss = sorted({(str(_r.get('county') or '').upper(), str(_r.get('folio') or '').upper())
+                            for _r in slim if isinstance(_r, dict) and not _r.get('value')
+                            and len(str(_r.get('folio') or '')) >= _pv._FULL_LEN.get(str(_r.get('county') or '').upper(), 99)})
+            with open(os.path.join(HERE, 'value_missing.json'), 'w', encoding='utf-8') as _f:
+                json.dump([{'county': _c, 'folio': _fo} for _c, _fo in _miss], _f)
+            if _miss:
+                print(f"roll value: {len(_miss)} lead(s) have a parcel number and no value -> python pa_values.py --missing")
+        except Exception as _e:
+            print(f"value_missing.json not written ({str(_e)[:60]})")
         if _vs.get('rfval'):
             print(f"redfin: {_vs['rfval']} lead(s) carry a Redfin Estimate")
         if _vs.get('zest'):
@@ -3980,7 +4026,8 @@ def make_tracker(leads):
     tpl = tpl.replace('__MAILTO__', _esc_json(_mto))
     # SMS counterpart. __TEXTPERSON__ is the authoritative one — it survives a case dropping off the
     # board after its auction, which a per-case count does not (the human keeps their phone).
-    _tlog, _tper = _text_ledger()
+    _tlog, _tper = _text_ledger({str(_d.get('case') or ''): _d.get('pkey') for _d in slim
+                                 if _d.get('case') and _d.get('pkey')})
     tpl = tpl.replace('__TEXTLOG__', _esc_json(_tlog))
     tpl = tpl.replace('__TEXTPERSON__', _esc_json(_tper))
     if _tlog or _tper:

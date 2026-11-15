@@ -24,7 +24,7 @@ Usage:
     python publish_guard.py --base HEAD         # compare against the local checkout
     python publish_guard.py --strict            # any drop at all fails (default: material drops)
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, 'docs', 'index.html')
@@ -119,14 +119,42 @@ def cov_of_git(ref):
         return None
 
 
+LAST_GOOD = os.path.join(HERE, 'publish_guard_lastgood.json')     # counts only; gitignored
+
+
+def last_good():
+    """{'date', 'cov'} of the first build that passed on the last publishing day, or None."""
+    try:
+        d = json.load(open(LAST_GOOD, encoding='utf-8'))
+        return d if isinstance(d.get('cov'), dict) and d.get('date') else None
+    except Exception:
+        return None
+
+
+def save_last_good(cov):
+    try:
+        tmp = LAST_GOOD + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({'date': time.strftime('%Y-%m-%d'), 'cov': cov}, f)
+        os.replace(tmp, LAST_GOOD)
+    except Exception as e:
+        print('publish-guard: could not save the day baseline (%s)' % str(e)[:80])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', default='origin/main', help='git ref to compare against')
     ap.add_argument('--strict', action='store_true', help='fail on ANY drop')
+    ap.add_argument('--first-build', action='store_true',
+                    help='allow a publish when there is no earlier marked board to compare against')
     args = ap.parse_args()
 
+    # CANNOT CHECK IS NOT A PASS (2026-11-15). A missing board, a build with no census marker and a
+    # baseline that will not read all used to return "allowed": the guard said safe exactly when it
+    # had looked at nothing.
     if not os.path.exists(DOCS):
-        print('publish-guard: docs/index.html missing — nothing to check'); return 0
+        print('publish-guard: BLOCKED — docs/index.html is missing, so there is nothing to publish or check')
+        return 2
 
     # INTEGRITY FIRST. A structurally broken page must never reach the site, no matter how good its
     # census looks — and a conflicted file's census looks perfect, because it still carries the live
@@ -156,30 +184,46 @@ def main():
         return 2
     new = cov_of_text(open(DOCS, encoding='utf-8', errors='replace').read(4000))
     if not new:
-        # An unmarked build predates the marker. Never block on that — just say so.
-        print('publish-guard: new build carries no coverage marker (older template?) — allowing'); return 0
+        print('publish-guard: BLOCKED — the new build carries no coverage marker, so its counts cannot be read')
+        return 2
 
     subprocess.run(['git', 'fetch', 'origin', '--quiet'], cwd=HERE, capture_output=True, timeout=180)
     old = cov_of_git(args.base)
-    if not old:
-        print(f'publish-guard: no coverage marker on {args.base} (first marked build) — allowing')
-        print('  new:', json.dumps(new, separators=(',', ':')))
-        return 0
+    good = last_good()
+    if not old and not good:
+        if args.first_build:
+            print(f'publish-guard: no marked board on {args.base} and no saved baseline — allowed by --first-build')
+            save_last_good(new)
+            return 0
+        print(f'publish-guard: BLOCKED — no coverage marker on {args.base} and no saved baseline to compare against.')
+        print('  If this really is the first marked build, run: python publish_guard.py --first-build')
+        return 2
 
     print('publish-guard: comparing enrichment')
-    print('  live:', json.dumps(old, separators=(',', ':')))
+    if old:
+        print('  live:', json.dumps(old, separators=(',', ':')))
+    if good:
+        print('  day :', json.dumps(good['cov'], separators=(',', ':')), '(first good build of %s)' % good['date'])
     print('  new :', json.dumps(new, separators=(',', ':')))
 
+    # Two baselines. `live` is the board this same pipeline published a few hours ago, so on its own
+    # four publishes a day could each lose just under the threshold. `day` is the first build that
+    # passed on the last publishing day: measured against it, the loss is capped per day, not per run.
     regressions = []
-    for f, (ratio, floor) in FIELDS.items():
-        o, n = int(old.get(f) or 0), int(new.get(f) or 0)
-        if o <= 0 or n >= o:
-            continue
-        drop = o - n
-        if args.strict or (n < o * ratio and drop >= floor):
-            regressions.append(f'{f}: {o} -> {n}  (-{drop}, -{round(100*drop/o)}%)')
+    for label, base in (('live', old), ('day', (good or {}).get('cov'))):
+        for f, (ratio, floor) in FIELDS.items():
+            o, n = int((base or {}).get(f) or 0), int(new.get(f) or 0)
+            if o <= 0 or n >= o:
+                continue
+            drop = o - n
+            if args.strict or (n < o * ratio and drop >= floor):
+                line = f'{f}: {o} -> {n}  (-{drop}, -{round(100*drop/o)}%) vs {label}'
+                if not any(x.startswith(f + ':') for x in regressions):
+                    regressions.append(line)
 
     if not regressions:
+        if not good or good['date'] != time.strftime('%Y-%m-%d'):
+            save_last_good(new)
         print('publish-guard: OK — no material enrichment loss, safe to publish')
         return 0
 

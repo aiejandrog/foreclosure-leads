@@ -56,6 +56,40 @@ JAN1_RATES = {
 }
 LATEST_RATE_YEAR = max(JAN1_RATES)
 
+# ---- the April / July / October rates ------------------------------------------------------------
+# FS 55.03: a judgment bears the rate in effect on the day it is ENTERED, and that rate is then
+# adjusted each January 1. Only the January rates were stored, so a judgment entered in October 2023
+# accrued its first months at 5.52% where the rate that quarter was 8.54% (2026-11-14 audit: 727 of
+# 811 judgments were entered after March). Read off myfloridacfo.com "Judgment Interest Rates"
+# 2026-11-15; every January figure on that page equals JAN1_RATES above. (year, quarter) -> percent.
+QUARTER_RATES = {
+    (2011, 2): 6.00, (2011, 3): 6.00, (2011, 4): 4.75,
+    (2012, 2): 4.75, (2012, 3): 4.75, (2012, 4): 4.75,
+    (2013, 2): 4.75, (2013, 3): 4.75, (2013, 4): 4.75,
+    (2014, 2): 4.75, (2014, 3): 4.75, (2014, 4): 4.75,
+    (2015, 2): 4.75, (2015, 3): 4.75, (2015, 4): 4.75,
+    (2016, 2): 4.78, (2016, 3): 4.84, (2016, 4): 4.91,
+    (2017, 2): 5.05, (2017, 3): 5.17, (2017, 4): 5.35,
+    (2018, 2): 5.72, (2018, 3): 5.97, (2018, 4): 6.09,
+    (2019, 2): 6.57, (2019, 3): 6.77, (2019, 4): 6.89,
+    (2020, 2): 6.66, (2020, 3): 6.03, (2020, 4): 5.37,
+    (2021, 2): 4.31, (2021, 3): 4.25, (2021, 4): 4.25,
+    (2022, 2): 4.25, (2022, 3): 4.34, (2022, 4): 4.75,
+    (2023, 2): 6.58, (2023, 3): 7.69, (2023, 4): 8.54,
+    (2024, 2): 9.34, (2024, 3): 9.46, (2024, 4): 9.50,
+    (2025, 2): 9.15, (2025, 3): 8.90, (2025, 4): 8.65,
+    (2026, 2): 8.25, (2026, 3): 8.06, (2026, 4): 7.87,
+}
+
+
+def entry_rate(d):
+    """The rate in effect on the day a judgment was entered. A quarter this table does not carry
+    falls back to that year's January rate, then to the latest January rate."""
+    q = (d.month - 1) // 3 + 1
+    if q > 1 and (d.year, q) in QUARTER_RATES:
+        return QUARTER_RATES[(d.year, q)]
+    return JAN1_RATES.get(d.year, JAN1_RATES[LATEST_RATE_YEAR])
+
 # Docket labels that mean "final judgment entered". Ordered: we take the EARLIEST match, because
 # accrual runs from the original entry. An amended/reset judgment does not restart the clock.
 # `judge?ment`: the clerk's own docket text spells it both ways ("FINAL JUDGEMENT OF FORECLOSURE"),
@@ -72,7 +106,10 @@ FJ_PATTERNS = [
 # affidavits filed in support of it (indebtedness, amounts due, fees). Taking one
 # of those as the entry date would start interest too early and label an overstatement verified.
 FJ_EXCLUDE = (r'\bmotion\b|\bhearing\b|\bproposed\b|\bnotice\s+of\s+filing\b|\baffidavit\b'
-              r'|\bin\s+support\s+of\b')
+              r'|\bin\s+support\s+of\b'
+              # a defendant's filing AGAINST a judgment ("response in opposition to final judgment")
+              # is not the judgment either
+              r'|\bresponse\b|\bopposition\b|\bobjection\b')
 
 # THE FLOOR, when the docket shows no final-judgment entry but a judgment amount IS published.
 # Under FS 45.031 the clerk's notice of sale is published only AFTER a final judgment sets the
@@ -127,6 +164,8 @@ def accrue(principal, jdate, as_of, stated_rate=None):
             break
         if cur.year == jdate.year and stated_rate:
             rate = float(stated_rate)          # the judgment's own recited rate
+        elif cur.year == jdate.year:
+            rate = entry_rate(jdate)           # the rate of the quarter it was entered in
         else:
             rate = JAN1_RATES.get(cur.year, JAN1_RATES[LATEST_RATE_YEAR])
         # FL convention: simple interest, 365-day year, on the ORIGINAL judgment amount

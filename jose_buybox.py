@@ -112,7 +112,7 @@ def load_rows(county_filter=''):
 
 def gate(rows, entry_max=70.0, ltv=85.0, closing_pct=3.0, min_profit=0):
     """(passes, fails_entry, excluded_by_reason) — the buy-box, floor-honest."""
-    passes, fail_entry = [], 0
+    passes, taxdeeds, fail_entry = [], [], 0
     excl = {'value untrusted': 0, 'debt unknown (incl. LP lane)': 0,
             'junior-lien fantasy (senior debt hidden)': 0, 'vacant land': 0,
             'auction already passed': 0}
@@ -145,6 +145,21 @@ def gate(rows, entry_max=70.0, ltv=85.0, closing_pct=3.0, min_profit=0):
                 fail_entry += 1
                 continue
             r = dict(r)
+            if r['st'] == 'TD':
+                # A TAX DEED'S "JUDGMENT" IS THE OPENING BID (2026-11-14 audit). The mortgage is not
+                # in it, so target minus bid is not seller room: a $1,000,000 house with a $12,000
+                # bid ranked first with $688,000 of "room" while the loan on it went uncounted, and
+                # 20 of the top 25 rows were tax deeds. They are listed, in their own section, by
+                # days to the sale, and carry NO seller-room figure.
+                r['entry_floor_pct'] = None
+                r['target_purchase'] = round(target)
+                r['dscr_loan'] = round(loan)
+                r['closing'] = round(closing)
+                r['profit_at_target'] = None
+                r['seller_room'] = None
+                r['zone'] = 'TAXDEED'
+                taxdeeds.append(r)
+                continue
             r['entry_floor_pct'] = round(floor_pct, 1)
             r['target_purchase'] = round(target)
             r['dscr_loan'] = round(loan)
@@ -154,7 +169,8 @@ def gate(rows, entry_max=70.0, ltv=85.0, closing_pct=3.0, min_profit=0):
             r['zone'] = 'STRONG' if floor_pct <= 60 else 'PASS'
             passes.append(r)
     passes.sort(key=lambda x: -x['seller_room'])
-    return passes, fail_entry, excl
+    taxdeeds.sort(key=lambda x: x['days'])
+    return passes + taxdeeds, fail_entry, excl
 
 
 def main():
@@ -168,7 +184,9 @@ def main():
     a = ap.parse_args()
 
     rows = load_rows(a.county)
-    passes, fail_entry, excl = gate(rows, a.entry, a.ltv, a.closing, a.min_profit)
+    allrows, fail_entry, excl = gate(rows, a.entry, a.ltv, a.closing, a.min_profit)
+    passes = [r for r in allrows if r['zone'] != 'TAXDEED']
+    taxdeeds = [r for r in allrows if r['zone'] == 'TAXDEED']
 
     print('JOSE BUY-BOX — buy at %.0f%% of value, finance %.0f%% DSCR, profit ON THE BUY (playbook §1+§12)'
           % (a.entry, a.ltv))
@@ -188,15 +206,24 @@ def main():
                  '  [homestead]' if r['hs'] else ''))
     if len(passes) > a.top:
         print('  ... %d more in %s' % (len(passes) - a.top, os.path.basename(OUT)))
+    print('\n%d TAX DEED lead(s), listed apart, soonest sale first. NO seller room: the figure on file'
+          % len(taxdeeds))
+    print('is the opening bid, and any mortgage on the house is not in it:\n')
+    for r in taxdeeds[:a.top]:
+        print('  %-7s %-11s %-24s  val $%-9s opening bid $%-9s sale in %sd  %s%s'
+              % (r['zone'], r['county'][:11], (r['addr'] or '(no addr)')[:24], format(r['value'], ','),
+                 format(r['judg'], ','), r['days'], r['case'][:20], '  [homestead]' if r['hs'] else ''))
+    if len(taxdeeds) > a.top:
+        print('  ... %d more in %s' % (len(taxdeeds) - a.top, os.path.basename(OUT)))
     print('\nreminders: the judgment is the payoff FLOOR (interest+fees accrue) - pull the real payoff')
     print('before any offer; TD rows are competitive-auction lane (room = pre-auction negotiation');
     print('window with the owner, not an auction price); total basis (purchase + rehab) must stay')
     print("<= 75% of ARV; a PASS here still walks Jose's door-verification gate on the board.")
 
     tmp = OUT + '.tmp'
-    json.dump(passes, open(tmp, 'w', encoding='utf-8'), indent=1)
+    json.dump(allrows, open(tmp, 'w', encoding='utf-8'), indent=1)
     os.replace(tmp, OUT)
-    print('\n-> %s (%d rows)' % (os.path.basename(OUT), len(passes)))
+    print('\n-> %s (%d ranked rows, then %d tax deeds)' % (os.path.basename(OUT), len(passes), len(taxdeeds)))
 
 
 if __name__ == '__main__':

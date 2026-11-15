@@ -223,5 +223,22 @@ rec('a browser read is truncated unless the whole search was copied, and a trunc
     and "and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated')):" in rl)
 rec('tests cannot write the live queue', 'def _real_run():' in rl and "startswith('2099-')" in src)
 
+# --- a lead queued yesterday is still there today (the queue is one file per day) ---------------
+for _fn in os.listdir(Q.qdir()):
+    if _fn.startswith('queue-'):
+        os.remove(os.path.join(Q.qdir(), _fn))
+_y = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+Q._write(Q.qpath(_y), {'date': _y, 'source': 'records_liens.py', 'items': [
+    {'case': '2099-CARRY-1', 'status': 'pending', 'names': [['DOE', 'JANE']], 'county': 'MIAMI-DADE'},
+    {'case': '2099-CARRY-2', 'status': 'token', 'folio': '0000000000001', 'names': [['ROE', 'RICK']], 'county': 'MIAMI-DADE'},
+    {'case': '2099-CARRY-3', 'status': 'done', 'names': [['POE', 'PAT']], 'county': 'MIAMI-DADE'}]})
+_t = Q._q({'items': []})
+rec("yesterday's unfinished leads are carried into today's queue, finished ones are not",
+    [i['case'] for i in _t['items']] == ['2099-CARRY-1', '2099-CARRY-2'] and _t.get('carried_from') == _y, _t)
+rec('a carried lead keeps its status and stored folio',
+    _t['items'][1]['status'] == 'token' and _t['items'][1]['folio'] == '0000000000001')
+rec("today's file is written once; a second read does not carry again",
+    os.path.exists(Q.qpath()) and len(Q._q({'items': []})['items']) == 2)
+
 print('\n%d passed, %d failed' % (len(ok), len(bad)))
 sys.exit(1 if bad else 0)

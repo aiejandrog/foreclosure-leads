@@ -611,9 +611,34 @@ def backfill(counties=('BROWARD', 'PALM BEACH'), limit=0, refresh=False):
     return patched_total
 
 
+def fill_missing(limit=0):
+    """Look up every parcel in value_missing.json (written by the board build: leads with a full
+    parcel number and no value). Fills the cache; the next build joins it. -> (hits, misses)."""
+    path = os.path.join(HERE, 'value_missing.json')
+    try:
+        todo = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        print('value_missing.json not found or unreadable: build the board first')
+        return 0, 0
+    if limit:
+        todo = todo[:limit]
+    _max_live[0] = max(_max_live[0], _live_count[0] + 8 * len(todo))
+    hit = miss = 0
+    for t in todo:
+        info = lookup(t.get('county'), t.get('folio'), '')
+        if info and info.get('market_value'):
+            hit += 1
+        else:
+            miss += 1
+    print('missing values: %d parcel(s) looked up, %d valued, %d not found' % (len(todo), hit, miss))
+    return hit, miss
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--backfill', action='store_true')
+    ap.add_argument('--missing', action='store_true',
+                    help='value every lead the last build listed with a parcel number and no value')
     ap.add_argument('--county', default='', help='limit backfill/probe to one county')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--refresh', action='store_true', help='retry cached misses')
@@ -621,6 +646,9 @@ def main():
     ap.add_argument('--folio', default='')
     ap.add_argument('--addr', default='')
     a = ap.parse_args()
+    if a.missing:
+        fill_missing(a.limit)
+        return
     if a.probe:
         print(json.dumps(lookup(a.county or 'BROWARD', a.folio, a.addr), indent=1))
         return

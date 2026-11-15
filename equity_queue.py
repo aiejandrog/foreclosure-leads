@@ -73,6 +73,27 @@ def _read(path, default):
         return default
 
 
+_FINISHED = ('done', 'failed', 'miss')
+
+
+def _q(default):
+    """Today's queue. Each day has its own file and every command reads today's, so a lead queued
+    by last night's refresh (or one with a stored folio or half-copied rows) used to vanish at
+    midnight. When today has no file yet, the unfinished leads of the newest earlier file are
+    carried into it first, statuses and stored searches intact."""
+    p = qpath()
+    if not os.path.exists(p):
+        prev = sorted(fn for fn in os.listdir(qdir())
+                      if fn.startswith('queue-') and fn.endswith('.json') and fn[6:16] < _today())
+        if prev:
+            old = _read(os.path.join(qdir(), prev[-1]), None) or {}
+            left = [it for it in old.get('items') or [] if it.get('status', 'pending') not in _FINISHED]
+            if left:
+                _write(p, {'date': _today(), 'source': old.get('source') or 'records_liens.py',
+                           'carried_from': prev[-1][6:16], 'items': left})
+    return _read(p, default)
+
+
 def _write(path, obj):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as fh:
@@ -214,7 +235,7 @@ def flush():
             clean()
             return 0
         tried = _read(os.path.join(qdir(), 'tried.json'), {})
-        q = _read(qpath(), None) or {'date': _today(), 'source': 'records_liens.py', 'items': []}
+        q = _q(None) or {'date': _today(), 'source': 'records_liens.py', 'items': []}
         have = {it['case']: it for it in q['items']}
         added = skipped = 0
         for it in _PENDING:
@@ -240,7 +261,7 @@ def flush():
 
 # ---- worker side ------------------------------------------------------------------------------
 def _set(case, **kw):
-    q = _read(qpath(), None)
+    q = _q(None)
     if not q:
         return None
     for it in q['items']:
@@ -262,7 +283,7 @@ def cmd_next(limit, county='', human=False):
     county: '' = Miami-Dade only (what `next` has always printed); BROWARD / PALM BEACH = that
     county's leads, each with the searches to run. human=True also hands out the Palm Beach leads
     parked as needs_human_captcha, for a session where a person ticks the county's checkbox."""
-    q = _read(qpath(), {'items': []})
+    q = _q({'items': []})
     rows = []
     C = _C()
     want = C.norm(county)
@@ -296,7 +317,7 @@ def cmd_folio(case, folio):
 
 def cmd_token(case, qs):
     qs = str(qs or '').strip()
-    it = _read(qpath(), {'items': []})
+    it = _q({'items': []})
     it = next((x for x in it['items'] if x['case'] == case), None)
     if not it or len(qs) < 20:
         print('refused: unknown case for today or an empty token')
@@ -405,7 +426,7 @@ def checksum(rows):
 
 
 def js_for(case, chunk=-1):
-    q = _read(qpath(), {'items': []})
+    q = _q({'items': []})
     if not any(x['case'] == case for x in q['items']):
         return None
     _it = next(x for x in q['items'] if x['case'] == case)
@@ -446,7 +467,7 @@ def _party_words(v):
 def accept_search(case, payload, name_index=0):
     """Store ONE name search: [header, chunk 0, chunk 1, ...] exactly as the page returned them.
     -> (ok, message). All or nothing: a search with a bad chunk stores no rows."""
-    q = _read(qpath(), {'items': []})
+    q = _q({'items': []})
     it = next((x for x in q['items'] if x['case'] == case), None)
     if it and _C().handled(it):
         return _C().accept_search(case, payload, name_index)   # Broward / Palm Beach rows
@@ -523,13 +544,18 @@ def _models_file(it):
     names = _names(it)
     full = bool(cur['parts']) and len(cur['parts']) == len(names) and not any(p.get('capped') for p in cur['parts'])
     out = path[:-5] + '.models.json'
+    # busiest: the largest single name search. The lien reader's row limits are about ONE search
+    # (the county caps one at 500 rows; a very long one means a common name), so it needs this and
+    # not the total across names: two complete 260-row searches are not a cut-off read.
     _write(out, {'case': it['case'], 'full': full, 'searched': '; '.join(p['name'] for p in cur['parts']),
-                 'searches': len(cur['parts']), 'names_on_lead': len(names), 'recordingModels': models})
+                 'searches': len(cur['parts']), 'names_on_lead': len(names),
+                 'busiest': max([int(p.get('n') or 0) for p in cur['parts']] or [0]),
+                 'recordingModels': models})
     return out, full
 
 
 def cmd_finish():
-    q = _read(qpath(), None)
+    q = _q(None)
     if not q:
         print('nothing queued today')
         clean()
@@ -555,7 +581,7 @@ def cmd_finish():
         _set(it['case'], status='done' if ok else 'failed', full=full,
              finished_at=dt.datetime.now().isoformat(timespec='seconds'))
         time.sleep(0.5)
-    q = _read(qpath(), q)
+    q = _q(q)
     import shutil
     shutil.rmtree(os.path.join(qdir(), 'rows'), ignore_errors=True)      # raw rows are not kept once read
     removed = clean()
@@ -583,7 +609,7 @@ def main():
     ap.add_argument('--limit', type=int, default=DAILY_LIMIT)
     a = ap.parse_args()
     if a.cmd == 'status':
-        q = _read(qpath(), {'date': _today(), 'items': []})
+        q = _q({'date': _today(), 'items': []})
         print(json.dumps(dict(date=q.get('date'), **_counts(q))))
         return 0
     if a.cmd == 'next':

@@ -45,6 +45,7 @@ rem  workups) were NOT gitignored, so one run of this bat would have published f
 rem  numbers to a PUBLIC repo. Now: rebuild, gate, and add ONLY the two built site paths - never -A.
 rem  Same contract as refresh-dealflow.bat.
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> leads-run.log 2>&1
+if errorlevel 1 (echo REBUILD FAILED - skipping commit/push, live site left intact >> leads-run.log & goto :done)
 rem  healthcheck runs FIRST, and it was missing entirely: this file had publish_guard but not the
 rem  compliance gate, so it could publish a board that had lost its 362 bankruptcy-stay flags.
 rem  publish_guard only compares counts against the live board - it cannot see a compliance fail,
