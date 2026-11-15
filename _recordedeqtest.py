@@ -148,5 +148,8 @@ chk('quotable card unchanged: still prints Net equity', 'Net equity' in out.get(
 chk('Money line has a recorded-debt branch that says do not quote',
     'Liens verified, recorded debt only (not a payoff) -- do not quote a number' in SRC)
 
+chk('Find a number Has equity button asks the verified lane question (isEquity), not the scraped e figure',
+    'var nEq = all.filter(isEquity).length;' in SRC and 'var rows = LKEQ ? all.filter(isEquity) : all;' in SRC)
+
 print('FAIL: %s' % F if F else 'ALL PASS')
 raise SystemExit(1 if F else 0)
