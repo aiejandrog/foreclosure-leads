@@ -53,8 +53,13 @@ import sys
 import threading
 
 # Pages that may call the bridge from a browser (see Handler._auth). "null" is a local file page.
-import board_url as _BU
-_ALLOWED_ORIGINS = ('/'.join(_BU.BOARD_URL.split('/')[:3]).lower(), 'null')
+try:
+    import board_url as _BU
+    _ALLOWED_ORIGINS = ('/'.join(_BU.BOARD_URL.split('/')[:3]).lower(), 'null')
+except ImportError:
+    # a copy of this file run on its own (the test harnesses do that) has no board address to allow:
+    # stricter, never looser
+    _ALLOWED_ORIGINS = ('null',)
 _ATTACH_EXT = ('.pdf', '.png', '.jpg', '.jpeg', '.docx')
 import time
 import urllib.error
