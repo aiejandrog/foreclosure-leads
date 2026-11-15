@@ -1,31 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-11-14T17:55:21-05:00",
+   "at": "2026-11-14T21:10:29-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-14T17:55:21-05:00",
+   "at": "2026-11-14T21:10:29-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 21h ago."
+   "text": "Laptop readiness (checked 11-14 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) last result failed (DealFlow Daily Routes, DealFlow Replies, DealFlow Weekly Analyst); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-14T17:55:21-05:00",
+   "at": "2026-11-14T21:10:29-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-14T17:55:21-05:00",
+   "at": "2026-11-14T21:10:29-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-14T17:55:21-05:00",
+ "published_at": "2026-11-14T21:10:29-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -33,22 +33,22 @@
   "bk_lookup": {
    "errors": 1,
    "filings": 3112,
-   "holds": 647,
+   "holds": 678,
    "last_http_status": 0,
-   "leads_checked": 8,
+   "leads_checked": 35,
    "match_s": 1,
-   "needing_search": 3069,
+   "needing_search": 3061,
    "provider": "courtlistener",
-   "pull_age_h": 3.28,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "searched_this_run": 8,
+   "reason": "time_budget",
+   "requests_used": 65,
+   "searched_this_run": 35,
    "starved_runs": 0,
-   "truncated": 0
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -118,12 +118,14 @@
    "scheduled": false,
    "sent": 0,
    "worker_run": {
-    "ev": {},
+    "ev": {
+     "worker_loaded": 2
+    },
     "no_email": {},
-    "queued": 0,
+    "queued": 34,
     "readable": true,
     "refused": {},
-    "rows": 0,
+    "rows": 2,
     "skipped": {}
    }
   },
@@ -147,7 +149,7 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-11-13T21:09:48-05:00",
+   "at": "2026-11-14T21:10:29-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
