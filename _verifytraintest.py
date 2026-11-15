@@ -64,7 +64,7 @@ rows = {k: call_mode.call_rows([lead(k, c)], None, None)[0][0] for k, c in (('G'
 
 print('\nTASK 2: equity gate on a GUESS lead (call_rows -> built page -> node)')
 JS = ("var notes={}; function $(i){return null;}\n" + html[html.index('var AY_STAGES'):html.index('\n', html.index('var AY_STAGES'))] + '\n'
-      + fn('esc') + one('eqFact') + '\n' + one('eqMay') + '\n' + one('_eqUsd') + '\n' + fn('eqCardHtml')
+      + fn('esc') + one('eqFact') + '\n' + one('eqMay') + '\n' + one('_eqUsd') + '\n' + fn('isRecordedEquity') + fn('eqCardHtml')
       + ''.join(fn(n) for n in ('ayIsStage', 'ayDateOk', 'ayTomorrow', 'ayApply', 'ayBookedUnverified', 'ayNeedsDate', 'ayPanelHtml')))
 body = JS + """
 var R=%s, T='2026-10-30', N=1793400000000, out={};
