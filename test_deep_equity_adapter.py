@@ -192,9 +192,69 @@ class AdapterTests(unittest.TestCase):
 
     def test_bake_wiring_precedes_diligence_and_publishing(self):
         src = pathlib.Path('foreclosure_leads.py').read_text()
-        self.assertIn('_dea.attach(slim, _dea.load())', src)
-        self.assertLess(src.index('_dea.attach(slim, _dea.load())'),
+        self.assertIn('_dea.attach(slim, _dea_latest)', src)
+        self.assertLess(src.index('_dea.snapshot(slim, _dea_latest)'),
+                        src.index('_dea.attach(slim, _dea_latest)'))
+        self.assertLess(src.index('_dea.attach(slim, _dea_latest)'),
                         src.index('_DF_BAKE.annotate(_d)'))
+        # The hold-change report runs after the diligence bake has written ddhold.
+        self.assertLess(src.index('_DF_BAKE.annotate(_d)'),
+                        src.index('_dea.hold_changes(_dea_before, slim)'))
+
+
+class HoldChangeTests(unittest.TestCase):
+    """Every lead whose contact hold the deep-equity join changed must be listed."""
+
+    def setUp(self):
+        t = AdapterTests('test_all_hud_claims_count_once')
+        t.setUp()
+        self.now, self.lead, self.result = t.now, t.lead, t.result
+
+    def bake(self, lead, result):
+        import diligence_gate as G
+        rows = [copy.deepcopy(lead)]
+        latest = {'CACE26900001': {'verified': result, 'last_attempt': result}}
+        before = A.snapshot(rows, latest)
+        A.attach(rows, latest, now=self.now)
+        for r in rows:                     # the same steps make_tracker's diligence bake runs
+            r.update(D.annotate(r))
+            g = G.gate(r)
+            r.update(G.board_fields(r))
+            if not g['hold']:
+                r.pop('ddhold', None)
+        return A.hold_changes(before, rows)
+
+    def test_new_underwater_hold_is_listed(self):
+        res = dict(self.result, value_low=200000, equity_low=round(200000 - 355260.56, 2))
+        ch = self.bake(dict(self.lead, value=200000), res)
+        self.assertEqual(len(ch), 1)
+        self.assertEqual((ch[0]['hold_before'], ch[0]['hold_after'], ch[0]['code_after']),
+                         (False, True, 'UNDERWATER'))
+
+    def test_released_hold_is_listed(self):
+        ch = self.bake(dict(self.lead, orjunior=250000, orsurv=250000), self.result)
+        self.assertEqual(len(ch), 1)
+        self.assertEqual((ch[0]['hold_before'], ch[0]['code_before'], ch[0]['hold_after']),
+                         (True, 'UNDERWATER', False))
+
+    def test_unchanged_hold_is_not_listed(self):
+        self.assertEqual(self.bake(self.lead, self.result), [])
+
+    def test_rows_outside_cache_are_not_snapshotted(self):
+        other = dict(self.lead, case='CACE-26-900002')
+        self.assertEqual(A.snapshot([other], {'CACE26900001': {}}), {})
+
+    def test_report_writes_file_and_history_without_names(self):
+        res = dict(self.result, value_low=200000, equity_low=round(200000 - 355260.56, 2))
+        ch = self.bake(dict(self.lead, value=200000, owner='EXAMPLE, PERSON'), res)
+        with tempfile.TemporaryDirectory() as tmp:
+            A.report(ch, 1, folder=tmp, now=self.now)
+            A.report([], 1, folder=tmp, now=self.now)
+            doc = json.loads((pathlib.Path(tmp) / 'hold_changes.json').read_text())
+            hist = (pathlib.Path(tmp) / 'hold_changes.jsonl').read_text().splitlines()
+        self.assertEqual(doc['changed'], 0)            # latest build overwrites
+        self.assertEqual([json.loads(h)['changed'] for h in hist], [1, 0])   # history appends
+        self.assertNotIn('EXAMPLE', hist[0])
 
 
 if __name__ == '__main__':
