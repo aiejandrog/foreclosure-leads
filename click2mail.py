@@ -225,7 +225,8 @@ def create_address_list(recipient, name, base, username, password):
     return _parse_id(r.text, 'addressList')
 
 
-def create_job(document_id, address_id, from_addr, base, username, password):
+def create_job(document_id, address_id, from_addr, base, username, password, *,
+               layout='Address on Separate Page', print_option='Printing One side'):
     """POST /jobs. `from_addr` matches the Lob shape (name, company, address_line1, address_line2,
     address_city, address_state, address_zip).
 
@@ -234,15 +235,19 @@ def create_job(document_id, address_id, from_addr, base, username, password):
     `Address on Separate Page` layout adds a page carrying the recipient address in the window
     band -- this preserves our carefully tuned two-fold body layout, but does add a page. If a
     single-page overlay layout is needed later ("Address on Letter"), swap the layout string.
+
+    `layout` / `print_option` default to the values every existing letter has always used. Only the
+    duplex notice variant (outreach_mail --variant notice) passes others: its EN front / ES back
+    sheet needs 'Printing both sides', and a separate address page would push Spanish onto sheet 2.
     """
     data = {
         'documentClass': 'Letter 8.5 x 11',
-        'layout': 'Address on Separate Page',
+        'layout': layout,
         'productionTime': 'Next Day',
         'envelope': '#10 Double Window',
         'color': 'Black and White',
         'paperType': 'White 24#',
-        'printOption': 'Printing One side',
+        'printOption': print_option,
         'documentId': str(document_id),
         'addressId': str(address_id),
         # Return address. address2 carries the PMB (see sender.json addr_line2).
@@ -267,7 +272,8 @@ def submit_job(job_id, base, username, password, billing='User Credit'):
     return r.text
 
 
-def send_letter(html_letter, recipient, from_addr, *, name='DealFlow letter', prod=False):
+def send_letter(html_letter, recipient, from_addr, *, name='DealFlow letter', prod=False,
+                layout='Address on Separate Page', print_option='Printing One side'):
     """The public entry point mirrors send_via_lob(): one call, four API hops, one return dict.
 
     Returns:
@@ -281,7 +287,8 @@ def send_letter(html_letter, recipient, from_addr, *, name='DealFlow letter', pr
     try:
         doc_id = upload_document(pdf_path, name, base, username, password)
         list_id = create_address_list(recipient, name, base, username, password)
-        job_id = create_job(doc_id, list_id, from_addr, base, username, password)
+        job_id = create_job(doc_id, list_id, from_addr, base, username, password,
+                            layout=layout, print_option=print_option)
         raw = submit_job(job_id, base, username, password)
         return {'ok': True, 'vendor': 'click2mail', 'env': env,
                 'document_id': doc_id, 'address_id': list_id, 'job_id': job_id, 'raw': raw[:400]}
