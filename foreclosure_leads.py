@@ -3271,6 +3271,15 @@ def make_tracker(leads):
               f"{_jskip} judgment(s) left as-entered (no verified entry date)")
     except Exception as _e:
         print(f"post-judgment interest: SKIPPED ({_e}) — judgments shown as entered")
+    # The equity card was baked BEFORE the accrual above put `payoff` on the row, so card.net was
+    # value minus the frozen judgment while the same line in Call Mode printed "owed" from the payoff
+    # (2026-11-14 audit: one row overstated by ~$194k). Re-bake every accrued row now.
+    for _r in slim:
+        if _r.get('jaccrued') and 'eqc' in _r:
+            try:
+                _r['eqc'] = _es.card(_r)
+            except Exception as _e:
+                print(f"equity card re-bake skipped for one row ({str(_e)[:60]})")
 
     # Free value sidecars. Redfin and the Zestimate stay advisory (rfval / zest) — they are
     # not copied into `value`, so they do not move _basisOf. A missing county just/market

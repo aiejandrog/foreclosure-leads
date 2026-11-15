@@ -882,3 +882,17 @@ call_sessions/
 mail_variants*.json
 mail_pages*/
 BSG_Mail_Variants_*
+
+# 2026-11-14 audit: owner names / addresses / notes. Public repo: never tracked again.
+/lis_pendens.json
+/lis_pendens.json.prekind
+/ownership_cache.json
+/ownership.json
+/county_plaintiffs.json
+/auction_archive.json
+/cash_buyers.json
+/diligence_cache.json
+/comps.json
+/broward_mortgages.json
+/listing_status_cache.json
+/REFERRAL_CODES.json

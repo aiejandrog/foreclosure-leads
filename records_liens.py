@@ -1070,7 +1070,11 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     satisfied = set()
     for r in models:
         if 'SATISFACTION' in (r.get('doC_TYPE', '') or '').upper():
-            satisfied.add((str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip()))
+            # both halves must be real: a release with a blank / None / 0 book or page points at
+            # nothing, and ('', '') in this set once marked every mortgage with a blank book/page paid
+            _sb, _sp = str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip()
+            if _sb not in ('', 'None', '0') and _sp not in ('', 'None', '0'):
+                satisfied.add((_sb, _sp))
     def sortkey(r):
         m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (r.get('reC_DATE', '') or '').strip())
         return (m.group(3), m.group(1).zfill(2), m.group(2).zfill(2)) if m else ('0000', '00', '00')
@@ -1242,21 +1246,27 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 if nxt not in out:
                     out.add(nxt); frontier.append(nxt)
         return out
-    for o in liens:
+    # ONE RELEASE FREES ONE LOAN (2026-11-14 audit). A release that names no book/page used to free
+    # EVERY later-or-equal loan from the same lender: a 2015 first and a 2020 credit line from one
+    # bank plus one release read as zero open debt. Oldest loan first, as broward_liens does.
+    _used_rel = set()
+    for o in sorted(liens, key=lambda x: x['_dt']):
         if o['st'] == 'SATISFIED':
             continue
         chain = chain_of(o['_lend'], o['_dt'])
         for s in sats2:
+            if id(s) in _used_rel: continue
             if not s['_dt'] or s['_dt'] < o['_dt']: continue
             si = _inst(s.get('seconD_PARTY'))
             if si and si in chain and not _rel_names_other(s, o):
-                o['st'] = 'SATISFIED'; o['sat_by'] = 'lender chain'; break
+                o['st'] = 'SATISFIED'; o['sat_by'] = 'lender chain'; _used_rel.add(id(s)); break
     opens = [o for o in liens if o['st'] == 'OPEN']
     # rule 2: a LENDER-party release kills the NEWEST still-open mortgage recorded 3-24 months
     # before it. The 3-month floor is the Echeverri guard: a release dated weeks after a loan was
     # written belongs to an OLDER loan in the chain, never to the new one — so same-year misfires
     # (Echeverri's real New Century senior) can't be killed by a different loan's satisfaction.
     for s in sorted(sats2, key=lambda x: x['_dt']):
+        if id(s) in _used_rel: continue            # already spent on a loan in rule 1
         if not (s['_dt'] and _LENDER_RE.search(s.get('seconD_PARTY') or '')): continue
         # an unpriced row never absorbs a release here: it would free the priced loan the release
         # was really for, and rule 2 is a guess about WHICH loan, not proof
@@ -2099,7 +2109,10 @@ def _run(a, ap):
                 if not _FILE_META.get('full'):
                     res['truncated'] = True
                 _prev = out.get(case) or {}
-                if res.get('truncated') and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated'):
+                # ...and so is a read that returned nothing or never found the parcel: an empty
+                # answer once replaced a chain with open mortgages by '0 open' (2026-11-14 audit)
+                if ((res.get('truncated') or not res.get('nrec') or not res.get('parcel_found'))
+                        and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated')):
                     print(f"  ..  {case:22} {oc:26} a full chain is already saved; the browser read is not written over it")
                     continue
             if _folio_only:

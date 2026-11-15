@@ -44,11 +44,15 @@ def _lead(case, **kw):
     return d
 
 
-def _build():
+def _build(lookup_details=False):
     slim = [_lead(DIAL, phones=['3055550101'], phdnc=[False], phsrc=['st'], phtype=['mobile'],
                   owners='GARCIA, MARIA', oname='Maria Garcia'),
             _lead(LK1, owners='PEREZ, CARLOS', oname='Carlos Perez', addr='200 SW 2 AVE, MIAMI, FL 33130'),
             _lead(LK2, owners='LOPEZ, ANA', oname='Ana Lopez', addr='300 SW 3 AVE, MIAMI, FL 33130')]
+    if lookup_details:
+        slim[1].update(eq=45, eqc={'state': 'unpriced', 'label': 'Recorded debt found, total unresolved'})
+        slim[2].update(st='LP', auction='', days=9999, filedDate='11/09/2026',
+                       eqc={'state': 'priced', 'fact': True, 'label': 'Surviving debt traced'})
     sink = []
     rows, _ = call_mode.call_rows(slim, None, None, lookup=sink)
     cov, _ = call_mode.coverage_rows(slim, [r['c'] for r in rows])
@@ -172,6 +176,22 @@ class FindANumberFlow(unittest.TestCase):
         self.ev("() => document.getElementById('navback').click()")
         self.page.wait_for_timeout(200)
         self.assertEqual(self.ev('[SCREEN, BLANE, LKFROM]'), ['lead', '__lk', None])
+        self.assertEqual(self.errors, [])
+
+    def test_lookup_displays_auction_date_filing_date_and_equity_status(self):
+        _, data = _build(lookup_details=True)
+        self.page.evaluate(LOAD, data)
+        self.to_list()
+        dated = self.page.locator('.lkcard[data-lkc="%s"]' % LK1).inner_text()
+        filing = self.page.locator('.lkcard[data-lkc="%s"]' % LK2).inner_text()
+        self.assertIn('Sale 12/20/2026', dated)
+        self.assertIn('45% equity estimate', dated)
+        self.assertIn('Recorded debt found, total unresolved', dated)
+        self.assertIn('Filed 11/09/2026', filing)
+        self.assertIn('no sale date on file', filing)
+        self.assertIn('judgment not posted', filing)
+        self.assertIn('Property value $400,000', filing)
+        self.assertEqual(self.ev("lkAsDial(COV.find(r => r.c === '%s'), '').v" % LK2), 400000)
         self.assertEqual(self.errors, [])
 
 
