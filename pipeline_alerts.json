@@ -1,31 +1,31 @@
 {
  "alerts": [
   {
-   "at": "2026-11-15T07:06:22-05:00",
+   "at": "2026-11-15T07:15:10-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-15T07:06:22-05:00",
+   "at": "2026-11-15T07:15:10-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 11-14 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) last result failed (DealFlow Daily Routes, DealFlow Replies, DealFlow Weekly Analyst); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-15T07:06:22-05:00",
+   "at": "2026-11-15T07:15:10-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-15T07:06:22-05:00",
+   "at": "2026-11-15T07:15:10-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-15T07:06:22-05:00",
+ "published_at": "2026-11-15T07:15:10-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
@@ -39,7 +39,7 @@
    "match_s": 1,
    "needing_search": 3029,
    "provider": "courtlistener",
-   "pull_age_h": 0.63,
+   "pull_age_h": 0.78,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
@@ -132,12 +132,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-14",
+   "date": "2026-11-15",
    "failed_steps": [],
    "past_cutoff": false,
    "readable": true,
    "run_ok": true,
-   "started_at": 1794696890,
+   "started_at": 1794744903,
    "state": "finished"
   },
   "paid_reads": {
