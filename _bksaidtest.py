@@ -75,11 +75,13 @@ except SG.NeverContactError:
     raised = True
 rec('and the gate still refuses on it', raised)
 
-# Call Mode: "already filed" ends the call as Do Not Contact; "thinking about it" keeps card 6.
+# Call Mode: "already filed" ends the call as Do Not Contact; "thinking about it" gets the attorney referral line.
 import call_mode as CM
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'call_mode.py'), encoding='utf-8').read()
 rec('Call Mode q4 has a filed-bankruptcy branch to end:dnc', "'Already filed bankruptcy', 'end:dnc'" in src)
-rec('Call Mode q4 keeps card 6 only for planning to file', "'Planning to file bankruptcy', 'obj:6'" in src)
+rec('Call Mode q4 sends planning-to-file to the referral step', "'Planning to file bankruptcy', 'bkref'" in src)
+rec('card 6 is reached only from the referral step', "'My lawyer is already filing', 'obj:6'" in src
+    and "'Planning to file bankruptcy', 'obj:6'" not in src)
 
 print('\n%d passed, %d failed' % (len(ok), len(bad)))
 sys.exit(1 if bad else 0)

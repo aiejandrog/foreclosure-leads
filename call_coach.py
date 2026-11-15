@@ -64,6 +64,14 @@ DONT_SAY = [
 # Branch label (as in call_mode._flow) -> what the homeowner actually says. Lowercase substrings;
 # multi-word phrases score higher than single words.
 _LABEL_KW = {
+    # keep / sell branches (short labels carry no words of their own)
+    'Okay / go ahead': ['okay', 'ok', 'sure', 'go ahead', 'fine', 'yes', 'está bien', 'esta bien', 'dale'],
+    'Okay': ['okay', 'ok', 'alright', 'fine', 'sure', 'está bien', 'esta bien'],
+    'Yes': ['yes', 'yeah', 'sure', 'i can', 'claro', 'sí'],
+    'No one': ['no one', 'nobody', 'not really', 'nadie', 'no hay nadie'],
+    'Yes, someone': ['my brother', 'my sister', 'my son', 'my daughter', 'my mom', 'my dad', 'family',
+                     'a friend', 'someone', 'mi hermano', 'mi hermana', 'mi hijo', 'mi familia'],
+    'Just me': ['just me', 'only me', 'nobody else', 'solo yo', 'nada más yo', 'nada mas yo'],
     "Good / hey / that's me": ['yeah', 'yes', 'speaking', "that's me", 'this is he', 'this is she',
                                'go ahead', 'hello', 'hey', 'i can hear you'],
     "Who's this? / who's asking?": ["who's this", 'who is this', "who's asking", 'who is asking',

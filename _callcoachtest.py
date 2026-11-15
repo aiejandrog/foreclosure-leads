@@ -53,7 +53,7 @@ chk(m('disarm', 'are you trying to buy my house?') == 'defusebuy', 'disarm: buyi
 chk(m('disarm', "don't call me again") == 'end:dnc', 'disarm: do not call -> dnc')
 chk(m('disarm', 'we already reinstated the loan') == 'reinstated', 'disarm: reinstated')
 chk(m('nots', "I'm busy, can you call me back later") == 'busy', 'nots: busy -> busy')
-chk(m('q1', 'we want to keep the house') == 'q2', 'q1: keep -> q2')
+chk(m('q1', 'we want to keep the house') == 'k1', 'q1: keep -> the keep branch')
 chk(m('q4', 'I already filed for bankruptcy', ) is not None, 'q4: bankruptcy routes')
 chk(m('q6', 'just send me something in writing') == 'sendinfo', 'q6: send me something')
 chk(m('q6', 'let me think about it') == 'think', 'q6: think about it')
