@@ -88,8 +88,8 @@ rec('no script for a case that is not on today\'s list', Q.js_for('2099-999999-C
 TYPES = ['MORTGAGE - MOR', 'SATISFACTION OF MORTGAGE - SMO', 'LIEN - LIE', 'FINAL JUDGMENT - FJU']
 
 
-def packed(i, t=0, folio=100000000010):
-    return [t, folio, 'EXAMPLE BANK NA', 'EXAMPLE JANE', 100 + i, 30000 + i, '6/%d/2019' % (i % 27 + 1),
+def packed(i, t=0, folio=100000000010, who='EXAMPLE JANE'):
+    return [t, folio, 'EXAMPLE BANK NA', who, 100 + i, 30000 + i, '6/%d/2019' % (i % 27 + 1),
             20190000 + i, 0, 0, 'EXAMPLE SUB']
 
 
@@ -117,19 +117,26 @@ rec('the python checksum is the one the page script computes (31-multiplier over
     Q.checksum([['A', 1, None]]) == ((((ord('A') * 31 + ord('|')) * 31 + ord('1')) * 31 + ord('|')) % Q.MOD))
 
 # two names on one lead: full only when both are stored
-okk, msg = Q.accept_search(P2, search([packed(i, 0, 100000000020) for i in range(5)]), 0)
+okk, msg = Q.accept_search(P2, search([packed(i, 0, 100000000020, 'SAMPLE JOHN') for i in range(5)]), 0)
 rec('a lead with two names says which is still to search', okk and 'Names still to search: [1]' in msg, msg)
 mf, full = Q._models_file([i for i in items() if i['case'] == P2][0])
 rec('one of two names stored: the read is NOT full', full is False and json.load(open(mf, encoding='utf-8'))['full'] is False)
-dup = [packed(i, 0, 100000000020) for i in range(3)] + [packed(50, 2, 0)]
+dup = [packed(i, 0, 100000000020, 'SAMPLE JOHN') for i in range(3)] + [packed(50, 2, 0, 'SAMPLE MARY')]
+# 2026-11-14 audit: an empty answer, another lead's rows, and name 0's file stored again as name 1
+rec('an empty search is refused, so it never counts as a searched name',
+    Q.accept_search(P2, search([]), 1)[0] is False)
+rec('rows that do not carry the name they are stored under are refused',
+    Q.accept_search(P2, search([packed(i, 0, 100000000020) for i in range(3)]), 1)[0] is False)
+rec('the first name\'s file stored again as the second name is refused',
+    Q.accept_search(P2, search([packed(i, 0, 100000000020, 'SAMPLE JOHN') for i in range(5)]), 1)[0] is False)
 rec('the second name is stored', Q.accept_search(P2, search(dup), 1)[0] is True)
 mf, full = Q._models_file([i for i in items() if i['case'] == P2][0])
 doc = json.load(open(mf, encoding='utf-8'))
 rec('both names stored: the read is full, and a row both searches returned is kept once',
     full is True and doc['full'] is True and len(doc['recordingModels']) == 6 and doc['searched'] == 'SAMPLE JOHN; SAMPLE MARY', doc.get('searched'))
 rec('rows for a bank-named lead are accepted like any other',
-    Q.accept_search(ENT, search([packed(1, 0, 100000000090)]), 0)[0] is True)
-big = [packed(i) for i in range(Q.CLERK_CAP)]
+    Q.accept_search(ENT, search([packed(1, 0, 100000000090, 'OWNER REAL')]), 0)[0] is True)
+big = [packed(i, who='NAME COMMON') for i in range(Q.CLERK_CAP)]
 Q.add('2099-000007-CA-01', 'COMMON NAME', 'NAME', 'COMMON', '0100000000070', names=[('NAME', 'COMMON')])
 Q.flush()
 Q.accept_search('2099-000007-CA-01', search(big, per=50))
@@ -175,7 +182,7 @@ rec('the raw rows are deleted once read', not os.path.isdir(os.path.join(Q.qdir(
 Q.add('2099-000008-CA-01', 'LATE FOLIO', 'FOLIO', 'LATE', '', names=[('FOLIO', 'LATE')], address='2 EXAMPLE ST')
 Q.flush()
 quiet(Q.cmd_folio, '2099-000008-CA-01', '0100000000080')
-Q.accept_search('2099-000008-CA-01', search([packed(1, 0, 100000000080)]))
+Q.accept_search('2099-000008-CA-01', search([packed(1, 0, 100000000080, 'FOLIO LATE')]))
 del calls[:]
 quiet(Q.cmd_finish)
 rec('a folio the browser found is passed to the scraper for that lead',
@@ -212,7 +219,8 @@ rec('nothing in the scraper\'s hand-off skips a bank or association: it searches
     "names = ([] if ent or not sp[1] else [(sp[0], sp[1])]) + [tuple(x) for x in (co or [])]" in rl)
 rec('a browser read is truncated unless the whole search was copied, and a truncated one never replaces a full chain',
     "if not _FILE_META.get('full'):\n                    res['truncated'] = True" in rl
-    and "if res.get('truncated') and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated'):" in rl)
+    and "if ((res.get('truncated') or not res.get('nrec') or not res.get('parcel_found'))" in rl
+    and "and _prev.get('conf') in ('ok', 'low') and not _prev.get('truncated')):" in rl)
 rec('tests cannot write the live queue', 'def _real_run():' in rl and "startswith('2099-')" in src)
 
 print('\n%d passed, %d failed' % (len(ok), len(bad)))

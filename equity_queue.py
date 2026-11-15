@@ -35,6 +35,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -350,8 +351,9 @@ const q = new URLSearchParams(location.search).get('qs');
 if(!q){ out = JSON.stringify({err: 'no search results on this page: run the name search first'}); }
 else {
   if(window.__eqQ !== q){
-    const j = await fetch('/officialrecords/api/SearchResults/getStandardRecords?qs=' + encodeURIComponent(q)).then(r => r.json());
-    const all = j.recordingModels || [], types = [];
+    const j = await fetch('/officialrecords/api/SearchResults/getStandardRecords?qs=' + encodeURIComponent(q)).then(r => { if(!r.ok) throw new Error('county answered ' + r.status); return r.json(); });
+    if(!Array.isArray(j.recordingModels)) throw new Error('the county did not return a result list');
+    const all = j.recordingModels, types = [];
     const ti = v => { const s = (v == null) ? null : String(v); let i = types.indexOf(s); if(i < 0){ types.push(s); i = types.length - 1; } return i; };
     const dsfx = all.every(r => r.reC_DATE == null || String(r.reC_DATE).endsWith(SFX));
     const bpd = all.every(r => String(r.reC_BOOKPAGE == null ? '' : r.reC_BOOKPAGE) === (r.reC_BOOK + '/' + r.reC_PAGE));
@@ -428,6 +430,19 @@ def _unpack(row, hdr):
     return dict(zip(FIELDS, vals))
 
 
+_SUFFIX = ('LLC', 'INC', 'CORP', 'CORPORATION', 'LTD', 'LP', 'LLP', 'CO', 'COMPANY', 'THE')
+
+
+def _name_key(v):
+    """First distinctive word of a last name / company, letters and digits only, upper case."""
+    words = [w for w in re.sub(r'[^A-Z0-9 ]', ' ', str(v or '').upper()).split() if w not in _SUFFIX]
+    return words[0] if words else ''
+
+
+def _party_words(v):
+    return set(re.sub(r'[^A-Z0-9 ]', ' ', str(v or '').upper()).split())
+
+
 def accept_search(case, payload, name_index=0):
     """Store ONE name search: [header, chunk 0, chunk 1, ...] exactly as the page returned them.
     -> (ok, message). All or nothing: a search with a bad chunk stores no rows."""
@@ -450,6 +465,10 @@ def accept_search(case, payload, name_index=0):
         return False, 'the header is missing n / of / dsfx / bpd / types'
     if n > MAX_ROWS:
         return False, 'more than %d rows' % MAX_ROWS
+    if n == 0:
+        # an empty answer is not evidence: a frozen page and an error both look like it, and it
+        # used to count as a stored name, so a lead read as fully searched with nothing in hand
+        return False, 'no rows: an empty search is not stored. Move on to the next name.'
     chunks = payload[1:]
     if len(chunks) != of:
         return False, 'the header says %d chunk(s), the file has %d' % (of, len(chunks))
@@ -469,9 +488,17 @@ def accept_search(case, payload, name_index=0):
             return False, 'chunk %d: %s' % (k, e)
     if len(models) != n:
         return False, 'the header says %d row(s), the chunks hold %d' % (n, len(models))
+    # THE ROWS MUST BE THIS NAME'S. Nothing tied a file to the name it was stored under, so name 0's
+    # file stored again as name 1 read as 'every name searched' (2026-11-14 audit).
+    _want = _name_key(names[int(name_index)][0])
+    if _want and not any(_want in _party_words(m.get('firsT_PARTY')) or _want in _party_words(m.get('seconD_PARTY'))
+                         for m in models):
+        return False, 'none of these rows carries name %d of this lead: this is another search\'s result' % int(name_index)
     path = rows_path(case)
     cur = _read(path, None) or {'case': case, 'parts': []}
     cur['parts'] = [p for p in cur['parts'] if p.get('i') != int(name_index)]
+    if any(p.get('models') == models for p in cur['parts']):
+        return False, 'these rows are identical to another name\'s stored search: run the search for name %d itself' % int(name_index)
     cur['parts'].append({'i': int(name_index), 'name': ' '.join(x for x in names[int(name_index)] if x),
                          'n': n, 'capped': n >= CLERK_CAP, 'models': models})
     _write(path, cur)

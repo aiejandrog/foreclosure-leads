@@ -460,7 +460,24 @@ def pick_first(open_debts, case_facts=None, assignments=()):
         for r in cands:
             if pl in _inst_name(r['holder']):
                 return r
+        # No holder carries the plaintiff's name (a servicer or trustee sues). The loan in the case
+        # is the one whose recorded amount sits nearest the principal claimed, not simply the
+        # largest: a $52,000 claim beside a $300,000 first and a $50,000 second is the second, and
+        # the first is still owed on top of it (2026-11-14 audit).
+        pr = _num((case_facts or {}).get('principal'))
+        if pr > 0:
+            return min(cands, key=lambda r: abs((r['amt'] or 0) - pr))
     return max(cands, key=lambda r: r['amt'])
+
+
+_ASSOC_RE = re.compile(r'\b(ASSOCIATION|ASSN|ASSOC|HOMEOWNERS?|CONDOMINIUM|CONDO|HOA|POA|PROPERTY OWNERS)\b', re.I)
+
+
+def association_case(case_facts):
+    """An association (HOA / condo) is the plaintiff. Its claim is its own lien: the bank's first
+    mortgage is not in the case and survives it."""
+    cf = case_facts or {}
+    return bool(cf.get('hoa_case')) or bool(_ASSOC_RE.search(str(cf.get('plaintiff') or '')))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -507,6 +524,12 @@ def compute(lead, sources, records_searches=None, coborrowers=(), links=None, tr
                                          'under these names: the search missed it'})
         else:
             principal = _num(cf.get('principal'))
+            if association_case(cf):
+                # the claim is the association's, never the mortgage balance. $8,000 claimed beside
+                # an open $300,000 mortgage used to read as $8,000 of debt, VERIFIED (2026-11-14).
+                principal = 0
+                unknowns.append({'what': 'an association is foreclosing, so the case does not state '
+                                         'the first mortgage balance: only its recorded amount is known'})
             if principal > 0:
                 debt_first, debt_first_src = principal, 'principal claimed in the case'
             elif mods_on_first:
