@@ -512,7 +512,7 @@ var S = {
   lastCard:null, lastCardAt:0, cooldown:{},
   lead:null, hits:[], debounce:null, clockTimer:null,
   lastSpeech:0, idleTimer:null, idleCounting:false, outcomeSel:null,
-  fc:{paused:false, cbArm:0, card:null, list:null, cool:{}, fires:[], holdT:null, heldSince:0, askI:0,
+  fc:{paused:false, cbArm:0, seen:{}, said:[], card:null, list:null, cool:{}, fires:[], holdT:null, heldSince:0, askI:0,
       lastWord:0, lastSound:0, soundMs:0, onset:0, txLag:null, an:null, anT:null, ctx:null}
 };
 function $(id){ return document.getElementById(id); }
@@ -749,6 +749,46 @@ function fcWhenSay(w, es){
     ?{say:'Perfecto, '+T+'. ¿Hoy o mañana?', act:'Get the day, then log Callback in Call Mode.'}
     :{say:'Got it, '+T+'. Is that today or tomorrow?', act:'Get the day, then log Callback in Call Mode.'};
 }
+/* WHO IS TALKING, from the words alone. You read what is on the screen (the stage line, the card);
+   they do not. `nref` is everything the screen has shown you lately, normalized. A run of words
+   is yours when its word PAIRS appear in that text, so one shared word ("you", "not") proves nothing
+   and a misheard word breaks only two pairs. `tail` judges the newest six words: your sentence
+   with "no thank you seriously" landing at the end of it reads you-then-them, and the coach answers
+   the end. Returns {all, tail}: each 'you', 'them' or '' (too few words to say). */
+function fcVoice(nline, nref){
+  var w=String(nline||'').split(' ').filter(Boolean), ref=' '+String(nref||'')+' ';
+  var side=function(a){
+    if(a.length<3||ref.length<12) return '';
+    var hit=0, n=a.length-1;
+    for(var i=0;i<n;i++) if(ref.indexOf(' '+a[i]+' '+a[i+1]+' ')>=0) hit++;
+    return (hit>=3&&hit/n>=0.6)?'you':'them';      /* "i have" + "have a" is not a script read */
+  };
+  return {all:side(w), tail:side(w.slice(-6))};
+}
+/* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
+   dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
+   second time gets one short different line that ends on an open question; the third time lets
+   them go. Returns null for the first time. The sale date is the court calendar's, or left out. */
+var FC_SECOND={
+  notint:function(d){ return ['I hear you, and I’m not going to push. I only called because '+(d?'the court has a sale set for '+d:'there’s a foreclosure case filed on the property')
+      +', and most owners I talk to were never shown every option before it. What’s your plan for '+(d?'that date?':'it?'),
+    'Lo entiendo, y no voy a insistir. Solo llamé porque '+(d?'la corte tiene la subasta fijada para el '+d:'hay un caso de ejecución hipotecaria sobre la propiedad')
+      +', y a casi nadie le mostraron todas sus opciones antes. ¿Cuál es su plan para '+(d?'esa fecha?':'eso?')]; },
+  busy:function(){ return ['Understood, I’ll be quick. What day and time do I call you back?',
+    'Entendido, seré breve. ¿Qué día y a qué hora lo llamo?']; }
+};
+function fcLadder(id, n, lead, es){
+  if(!(n>=2)) return null;
+  if(n>=3) return {who:'third time · let them go',
+    say:es?'Entendido, y lo respeto. Lo dejo ahí. Si algo cambia antes de la subasta, tiene mi número. Que esté bien.'
+          :'Understood, and I respect that. I’ll leave it there. If anything changes before the sale, you have my number. Take care.',
+    act:'End the call. Log the outcome in Call Mode.'};
+  var d=(lead&&lead.auction)?String(lead.auction):'';
+  var f=FC_SECOND[String(id).replace(/^obj:/,'')];
+  var s=f?f(d):['I hear you, and I’m not asking you to change anything. One question and I’ll leave it with you: what would you want to know before the sale that nobody has told you yet?',
+                'Lo entiendo, y no le pido que cambie nada. Una pregunta y lo dejo: ¿qué le gustaría saber antes de la subasta que nadie le ha dicho todavía?'];
+  return {who:'said it again · second pass', say:s[es?1:0], act:'Say it once, then listen. Do not read the first card again.'};
+}
 /* Which stage did the caller just read? A line mostly made of stage k's words means k is done:
    returns the stage to show next, or -1. Only moves forward, never past the last stage. */
 function fcStageAfter(nline, stageTexts, cur){
@@ -946,6 +986,11 @@ function fcEs(){ return S.lang==='es-US'; }
 function fcRefreshList(){ S.fc.list=fcList(S.autoCards); }
 function fcStageTexts(){ return STAGES.map(function(st){ return norm(merged(st.say)); }); }
 function fcCardById(id){ for(var i=0;i<S.autoCards.length;i++) if(S.autoCards[i].id===id) return S.autoCards[i]; return null; }
+/* Everything the screen has put in front of you lately: the stage line, its note, the last few cards. */
+function fcRef(){
+  return norm($('saytext').textContent+' '+$('saynote').textContent+' '+S.fc.said.join(' '));
+}
+function fcSaid(txt){ S.fc.said.push(String(txt||'')); if(S.fc.said.length>4) S.fc.said.shift(); }
 function fcListen(on){ $('clisten').className=on?'on':''; }
 function fcLagPill(){
   var x=S.fc.txLag;
@@ -961,6 +1006,8 @@ function fcHear(cur, isFinal, spk){
   if(!S.fc.list) fcRefreshList();
   var tail=norm(S.finals.slice(-200));
   var hit=fcMatch(S.fc.list, (tail?tail+' ':'')+ncur, ncur.length, t, S.fc.cool);
+  /* The newest words are you reading the screen: nothing to answer. A stop request is never skipped. */
+  if(!(hit&&hit.kind==='stop')&&fcVoice(ncur, fcRef()).tail==='you'){ fcListen(false); S.fc.heldSince=0; return false; }
   /* They named a day or a time, in the same breath as the call-back request or in answer to
      "what time is best?": show it back so it gets repeated and logged. Stop still wins. */
   var w=fcWhen(ncur);
@@ -992,8 +1039,11 @@ function fcFire(hit, cur, isFinal){
   var rec={id:hit.id, at:mmss(t-S.t0), partial:!isFinal, held_ms:held, words_lag_ms:S.fc.txLag};
   S.fc.fires.push(rec);
   if(hit.kind==='obj'){
-    var c=hit.card;
-    showCard('heard on the line · '+c.who, merged(cardBody(c)));
+    var c=hit.card, n=(S.fc.seen[c.id]=(S.fc.seen[c.id]||0)+1);
+    var lad=fcLadder(c.id, n, S.lead, fcEs());
+    rec.pass=n;
+    if(lad) showCard(lad.who+' · '+c.who, merged(lad.say)+'\n\n('+lad.act+')');
+    else showCard('heard on the line · '+c.who, merged(cardBody(c)));
     S.lastCard=c.id; S.lastCardAt=t;
     S.objFired.push({id:c.id, at:rec.at, partial:!isFinal});
     return;
@@ -1010,6 +1060,7 @@ function fcFire(hit, cur, isFinal){
   S.fc.card={id:hit.id, kind:hit.kind, at:t, heard:String(cur).trim(), label:hit.heard, say:merged(say),
              ask:ask.map(merged), act:hit.act||'', newer:0, hidden:false};
   S.fc.askI=0;
+  fcSaid(S.fc.card.say+' '+S.fc.card.ask.join(' '));
   fcRender(true);
 }
 /* The day / time card. A later line inside 30 s adds to it in place ("tomorrow" + "around 7"). */
@@ -1025,6 +1076,7 @@ function fcFireWhen(w, cur, isFinal){
   S.fc.card={id:'cb_time', kind:'callback', at:t, heard:String(cur).trim(), label:'gave a day / time', say:s.say,
              ask:[], act:s.act, newer:0, hidden:false, when:w, rec:rec};
   S.fc.askI=0; S.fc.cbArm=t+90000;
+  fcSaid(s.say);
   fcRender(!upd);
 }
 function fcRender(pop){
@@ -1104,6 +1156,7 @@ function showCard(who,body){
   $('objwho').textContent=who;
   $('objbody').textContent=body;
   $('objection').className='on';
+  fcSaid(body);
 }
 function dismissObjection(){
   $('objection').className='';
@@ -1163,6 +1216,10 @@ function scanFlags(txt){
    that tripped an objection trigger is THEM?. The ? is honest — one mic cannot know. The Deepgram
    path replaces this with real diarization (no ?). */
 function guessSpeaker(nline){
+  // Read off the screen = you. Your sentence with unfamiliar words landing at the end of it
+  // (they cut in while you were reading) is treated as theirs, so the coach answers the cut-in.
+  var v=fcVoice(nline, fcRef());
+  if(v.all==='you') return v.tail==='them'?'them?':'you?';
   // Your identity phrasing beats everything — "can you hear me", "biscayne solutions",
   // "i'm not your lender" are things only the caller says.
   for(var i=0;i<YOU_PAT.length;i++) if(YOU_PAT[i]&&nline.indexOf(YOU_PAT[i])>=0) return 'you?';
@@ -1435,7 +1492,8 @@ function finish(outcome){
 }
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
-var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; },
+var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
+            cool:function(){ S.fc.cool={}; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

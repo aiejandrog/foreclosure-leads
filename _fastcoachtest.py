@@ -135,6 +135,21 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   T.reset(); T.say('the sale is tomorrow at 9 am'); o.tc_unarmed=T.card()&&T.card().id;
   T.reset(); T.say('can you call me tomorrow around noon'); o.tc_same=card();
   T.reset(); T.say('call me later'); T.interim('please stop calling tomorrow'); o.tc_stop=card().kind+':'+card().id;
+
+  /* 11. the 18:38 test call: you read the card, they cut in with the same objection, then a third time */
+  T.reset(); C.jump(1);
+  T.say('no thank you'); var b1=$('objbody').textContent;
+  var fA=T.fires().length;
+  T.interim('thats not a problem at all honestly i wasnt expecting you to be');
+  T.say('That’s not a problem at all honestly I wasn’t expecting you to be');
+  o.lad_read=[T.fires().length-fA, T.lines().slice(-1)[0].spk];
+  T.cool();
+  var cut='almost everybody I reach about a place like yours says the exact same thing when I first call no thank you seriously I’m not interested';
+  T.interim(cut);
+  o.lad_2=[$('objwho').textContent.indexOf('second pass')>=0, $('objbody').textContent!==b1, $('objbody').textContent.indexOf('plan')>=0, T.fires().slice(-1)[0].pass];
+  T.say(cut); o.lad_tag=T.lines().slice(-1)[0].spk;
+  T.cool(); T.say('I said I am not interested');
+  o.lad_3=[$('objwho').textContent.indexOf('third time')>=0, $('objbody').textContent.indexOf('leave it there')>=0, T.fires().slice(-1)[0].pass];
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -165,6 +180,14 @@ var W=function(s){ var w=fcWhen(norm(s)); return w?w.text:null; };
 o.when=[W('Tomorrow at 7 A.M'), W('Around 7 A.M'), W('around 7:30 pm'), W('I have 3 kids'), W('el lunes a las 3 de la tarde'),
         W('next Tuesday after five'), W('give me a call at 25'), W('this afternoon'), W('seven o’clock tonight')];
 o.when_merge=fcWhenMerge(fcWhen('tomorrow'), fcWhen('around 7 a m')).text;
+var REF=norm('That’s not a problem at all, honestly, I wasn’t expecting you to be. Almost everybody I reach about a place like yours says the exact same thing when I first call');
+var V=function(s){ var v=fcVoice(norm(s), REF); return v.all+'/'+v.tail; };
+o.voice=[V('honestly I wasn’t expecting you to be'), V('no thank you seriously I’m not interested'),
+         V('almost everybody I reach about a place like yours says the exact same thing no thank you seriously I’m not interested'),
+         V('ok'), V('honestly I was not expecting him to be')];
+var LD=function(id,n,l,es){ var x=fcLadder(id,n,l,es); return x?x.who+'|'+x.say:null; };
+o.ladder=[LD('notint',1,{},false), LD('notint',2,{auction:'2099-01-02'},false), LD('notint',2,{},false), LD('obj:v2',2,{},false),
+          LD('notint',3,{},false), LD('notint',2,{auction:'2099-01-02'},true)];
 o.board_v=fcFacts(fcBoard({case:'A-1',equity:50000},'?case=A-1&eq=clear')).equity.v;
 o.say=[fcFactSay('owe',none,false).say, fcFactSay('owe',rec,false).say, fcFactSay('equity',rec,false).say, fcFactSay('equity',ver,false).say,
        fcFactSay('sale',rec,false).say, fcFactSay('sale',none,false).say, fcFactSay('equity',unk,true).say, fcFactSay('owe',unk,true).say];
@@ -216,6 +239,14 @@ else:
                           'next tuesday after 5', None, 'this afternoon', 'tonight at 7'],
             'a day and time are read off the line; a bare number is not a time', p['when'])
         chk(p['when_merge'] == 'tomorrow around 7 AM', 'a later line adds the time to the day', p['when_merge'])
+        chk(p['voice'][:4] == ['you/you', 'them/them', 'you/them', '/'],
+            'words read off the screen are you; unfamiliar words are them, even at the end of your sentence', p['voice'])
+        ld = p['ladder']
+        chk(ld[0] is None and 'second pass' in ld[1] and '2099-01-02' in ld[1] and ld[1].rstrip().endswith('?'),
+            'the same objection a second time gets a different line with the court sale date', ld[1])
+        chk('$' not in ''.join(x or '' for x in ld) and 'sale set for' not in ld[2] and 'One question' in ld[3],
+            'no date on file: no date said; other cards get the general second pass', [ld[2], ld[3]])
+        chk('third time' in ld[4] and 'leave it there' in ld[4] and 'subasta' in ld[5], 'the third time lets them go; Spanish follows', [ld[4], ld[5]])
         b = p['board']
         chk(b[0] == ['priced', 120000, True, True], "the board's quotable net replaces the raw estimate", b[0])
         chk(b[1] == ['clear', None, False, False] and 'no figure' in p['board_v'], 'a verified state with no quotable net shows no number', [b[1], p['board_v']])
@@ -264,6 +295,10 @@ else:
         chk(o['tc_same'] and o['tc_same']['id'] == 'cb_time' and 'tomorrow at noon' in o['tc_same']['say'],
             'a call-back request with its own time goes straight to the time card', o['tc_same'])
         chk(o['tc_stop'] == 'stop:stop', 'a stop request still wins inside the time window', o['tc_stop'])
+        chk(o['lad_read'] == [0, 'you?'], 'reading the card aloud fires nothing and is tagged as you', o['lad_read'])
+        chk(o['lad_2'] == [True, True, True, 2], 'they cut in with the same objection mid-card: a new second-pass line, on partial words', o['lad_2'])
+        chk(o['lad_tag'] == 'them?', 'that mixed line is treated as theirs', o['lad_tag'])
+        chk(o['lad_3'] == [True, True, 3], 'the third time shows the let-them-go line', o['lad_3'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
 print()
