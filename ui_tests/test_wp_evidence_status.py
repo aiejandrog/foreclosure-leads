@@ -53,7 +53,12 @@ class WhitepagesEvidenceUI(base.NumbersCardUI):
                 self.assertEqual(self.page.evaluate('cur.c'), row['c'])
             self.page.evaluate('navNext()')
         self.assertEqual(len(seen), 36)
-        self.assertIn('Queue clear', self.page.locator('#app').inner_text())
+        # F-site-02: Next writes nothing, so all 36 are still due. The 36th Next goes back to the
+        # first lead; it never shows the empty-list card while the list still holds leads.
+        self.assertNotIn('Queue clear', self.page.locator('#app').inner_text())
+        self.assertEqual(self.page.locator('#dial').count(), 1)
+        self.assertEqual(self.page.evaluate('[i, pool().length, cur.c === pool()[0].c]'), [0, 36, True])
+        self.assertIn(self.page.evaluate('cur.c'), seen)
         self.assertEqual(self.page.evaluate('Object.keys(notes).length'), 0)
         self.page.evaluate("lane='urgent';i=0;render()")
         self.assertEqual(self.page.evaluate('pool().length'), 0)
