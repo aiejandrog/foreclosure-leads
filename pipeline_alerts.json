@@ -1,54 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-14T21:10:29-05:00",
+   "at": "2026-11-15T07:06:22-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-14T21:10:29-05:00",
+   "at": "2026-11-15T07:06:22-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 11-14 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) last result failed (DealFlow Daily Routes, DealFlow Replies, DealFlow Weekly Analyst); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-14T21:10:29-05:00",
+   "at": "2026-11-15T07:06:22-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-14T21:10:29-05:00",
+   "at": "2026-11-15T07:06:22-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-14T21:10:29-05:00",
+ "published_at": "2026-11-15T07:06:22-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
-   "filings": 3112,
-   "holds": 678,
+   "errors": 3,
+   "filings": 3114,
+   "holds": 711,
    "last_http_status": 0,
-   "leads_checked": 35,
+   "leads_checked": 37,
    "match_s": 1,
-   "needing_search": 3061,
+   "needing_search": 3029,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 0.63,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 65,
-   "searched_this_run": 35,
+   "reason": "budget",
+   "requests_used": 115,
+   "searched_this_run": 37,
    "starved_runs": 0,
-   "truncated": 1
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -110,22 +110,20 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-14",
+   "date": "2026-11-15",
    "eligible": 48,
-   "judged": true,
+   "judged": false,
    "paused": false,
    "readable": true,
    "scheduled": false,
    "sent": 0,
    "worker_run": {
-    "ev": {
-     "worker_loaded": 2
-    },
+    "ev": {},
     "no_email": {},
-    "queued": 34,
+    "queued": 0,
     "readable": true,
     "refused": {},
-    "rows": 2,
+    "rows": 0,
     "skipped": {}
    }
   },
@@ -136,7 +134,7 @@
   "optout_sync": {
    "date": "2026-11-14",
    "failed_steps": [],
-   "past_cutoff": true,
+   "past_cutoff": false,
    "readable": true,
    "run_ok": true,
    "started_at": 1794696890,
