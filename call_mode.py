@@ -7067,8 +7067,12 @@ function lookupList(){
   var all = lkSorted();
   /* "Has equity" (2026-10-26, Alex: "i need their information ... for them to have equity"): only
      rows with a known, positive equity figure. Unknown equity is not zero, so the default shows all. */
-  var nEq = all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }).length;
-  var rows = LKEQ ? all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }) : all;
+  /* 2026-11-15, Alex: "get phone numbers for the 210 verified leads". The button used the scraped `e`
+     figure, which is not the Has equity lane: the 166 recorded-debt leads were missing from it. It now
+     asks the lane's own question (isEquity: verified chain, net above zero), so what is under this
+     button is exactly the verified-equity leads that still need a number. */
+  var nEq = all.filter(isEquity).length;
+  var rows = LKEQ ? all.filter(isEquity) : all;
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
             + '<div class="sub">Look up the owner on Whitepages and enter a number you trust. '
             + 'Recent filings can appear before a sale date or verified equity is available.</div>'

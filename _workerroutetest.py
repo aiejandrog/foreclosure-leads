@@ -260,25 +260,25 @@ rec('each seat page prints its own Find a number count (a count, no lead)',
     "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 
 print('\nFIND A NUMBER: SHOW ALL, HAS EQUITY')
-H5 = 'var LKSHOW = 200, LKEQ = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + grab_fn('lookupList') + r"""
+H5 = 'var LKSHOW = 200, LKEQ = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', 'lookupList')) + r"""
 function esc(x){ return String(x); } function head(){ return ''; } function ownerLabel(r){ return r.c; }
 function propertyLabel(){ return ''; } function _bView(){ return {auction:''}; } function fileLinks(){ return []; }
-function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function lkAsDial(r){ return r; }
-var ALL = []; for(var k=0;k<450;k++) ALL.push({c:'L'+k, e:(k%3===0 ? 40 : (k%3===1 ? -5 : null))});
+function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function lkAsDial(r){ return r; } function money(x){ return String(x); }
+var ALL = []; for(var k=0;k<450;k++) ALL.push({c:'L'+k, eqc:(k%3===0 ? {q:1, n:40} : (k%3===1 ? {q:1, n:-5} : (k%2===0 ? {q:0, r:1, rn:5} : null)))});
 function lkSorted(){ return ALL; }
 var out = {};
 var h = lookupList(); out.cards1 = (h.match(/class="lknum"/g)||[]).length; out.more1 = /id="lkmore"/.test(h);
 LKSHOW = 400; h = lookupList(); out.cards2 = (h.match(/class="lknum"/g)||[]).length;
 LKSHOW = 600; h = lookupList(); out.cards3 = (h.match(/class="lknum"/g)||[]).length; out.more3 = /id="lkmore"/.test(h);
-LKEQ = true; LKSHOW = 200; h = lookupList(); out.eq = (h.match(/class="lknum"/g)||[]).length; out.eqlabel = /Has equity 150/.test(h);
+LKEQ = true; LKSHOW = 200; h = lookupList(); out.eq = (h.match(/class="lknum"/g)||[]).length; out.eqlabel = /Has equity 225/.test(h);
 console.log(JSON.stringify(out));
 """
 rc, so, se = node(H5)
 f = json.loads(so.strip().splitlines()[-1]) if rc == 0 else {}
 rec('Find a number pages 200 at a time with a Show more button, down to the last lead',
     f.get('cards1') == 200 and f.get('more1') and f.get('cards2') == 400 and f.get('cards3') == 450 and not f.get('more3'), (f, se))
-rec('Has equity shows only known positive equity (unknown and negative left out)',
-    f.get('eq') == 150 and f.get('eqlabel'), f)
+rec('Has equity shows only verified equity: a quotable net above zero or a recorded-debt lead (negative and unverified left out)',
+    f.get('eq') == 200 and f.get('eqlabel'), f)
 rec('the buttons are wired', "querySelectorAll('button.lkf')" in SRC and "$('lkmore')" in SRC)
 
 print('\n%s (%d failed)' % ('ALL PASS' if not FAILS else 'FAILED', len(FAILS)))
