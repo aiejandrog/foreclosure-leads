@@ -176,16 +176,17 @@ try{
   reset(); stepPastA(); _openCase('X');
   o.other = cur.c + ':' + lane + ':' + dim();
   toasts = []; navBack(); o.other_tap = cur.c + '|' + lane + '|' + QVIEW + '|' + toasts.length;
-  /* QUEUE CLEAR: the Back button is drawn only when Back can reach a lead */
-  reset(); _NAVB = [{c:'A', l:'soon'}]; GONE = {A:1}; i = 9; render();
-  o.qc_gone = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback');
-  reset(); _NAVB = [{c:'A', l:'soon'}]; i = 9; POOLN = 0; render();
-  o.qc_live = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback') + '|' + (!!$('navback') && $('navback').onclick === navBack);
+  /* PAST THE END (F-site-02): `i` beyond a pool that still holds leads goes back to the first lead with
+     one toast. "Queue clear" is not painted, and the Back button follows the same rule as any lead paint. */
+  reset(); _NAVB = [{c:'A', l:'soon'}]; GONE = {A:1}; i = 9; toasts = []; render();
+  o.qc_gone = (app._h.indexOf('Queue clear') > -1) + '|' + cur.c + '|' + i + '|' + dim() + '|' + toasts.length;
+  reset(); _NAVB = [{c:'B', l:'soon'}]; i = 9; POOLN = 0; toasts = []; render();
+  o.qc_live = (app._h.indexOf('Queue clear') > -1) + '|' + cur.c + '|' + i + '|' + dim() + '|' + toasts.length;
   o.qc_passes = POOLN;
   toasts = []; navBack(); o.qc_tap = cur.c + '|' + toasts.length;
-  /* Queue clear while a one-off is open: answered for the view Back restores */
+  /* past the end while a one-off is open: answered for the view Back restores */
   reset(); stepPastA(); _openCase('R'); i = 9; render();
-  o.qc_oneoff = (app._h.indexOf('Queue clear') > -1) + '|' + !!$('navback') + '|' + QVIEW;
+  o.qc_oneoff = (app._h.indexOf('Queue clear') > -1) + '|' + cur.c + '|' + dim() + '|' + QVIEW;
   toasts = []; navBack(); o.qc_oneoff_tap = cur.c + '|' + QVIEW + '|' + toasts.length;
 }catch(e){ o.err = String(e && e.stack || e).slice(0, 400); }
 console.log(JSON.stringify(o));
@@ -207,12 +208,14 @@ rec('one-off with no reachable trail lead: dim, and the tap only toasts',
     c.get('oneoff_gone') == 'R:dim' and c.get('oneoff_gone_tap') == 'R|1', c)
 rec('one-off into another lane: full strength, and the tap returns to the lane he came from',
     c.get('other') == 'X:lp:full' and c.get('other_tap') == 'A|soon|untouched|0', c)
-rec('Queue clear: no Back button when no trail lead is in the pool', c.get('qc_gone') == 'true|false', c)
-rec('Queue clear: Back button drawn and wired when a trail lead is in the pool', c.get('qc_live') == 'true|true|true', c)
-rec('Queue clear: that Back tap opens the lead', c.get('qc_tap') == 'A|0', c)
-rec('Queue clear: the paint builds the pool once', c.get('qc_passes') == 1, c)
-rec('Queue clear in a one-off: Back button drawn, view on screen untouched, and the tap moves',
-    c.get('qc_oneoff') == 'true|true|retries' and c.get('qc_oneoff_tap') == 'A|untouched|0', c)
+rec('past the end, trail lead gone: first lead of the list, no "Queue clear", Back dim, one toast',
+    c.get('qc_gone') == 'false|B|0|dim|1', c)
+rec('past the end, trail lead in the pool: first lead, no "Queue clear", Back at full strength, one toast',
+    c.get('qc_live') == 'false|A|0|full|1', c)
+rec('past the end: that Back tap opens the trail lead', c.get('qc_tap') == 'B|0', c)
+rec('past the end: the paint builds the pool 2 times, as any lead paint', c.get('qc_passes') == 2, c)
+rec('past the end in a one-off: the one-off lead stays, Back at full strength, and the tap moves',
+    c.get('qc_oneoff') == 'false|R|full|retries' and c.get('qc_oneoff_tap') == 'A|untouched|0', c)
 rec('the lead card counts from the pool the nav row built',
     "' of '+(_NAVP||pool()).length+'" in SRC and "' of '+pool().length+'" not in SRC)
 
