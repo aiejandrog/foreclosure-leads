@@ -2389,6 +2389,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                            # through lkAsDial, and without its equity card isEquity() was false, so a
                            # No answer on a pasted number could never route it to mail.
                            'eqc': _eqc_slim(d.get('eqc')),
+                           'v': d.get('value') or None,
                            'ab': 1 if ((d.get('mail') or '').split(',')[0].strip().upper()
                                        and (d.get('addr') or '').split(',')[0].strip().upper()
                                        and (d.get('mail') or '').split(',')[0].strip().upper()
@@ -3262,7 +3263,7 @@ def mark_lookup(cov, lookup, crew_sb=None):
         r['lk'] = 1
         # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
         r['sb'] = 0 if x.get('rp') else crew_sb.get(x.get('pk'), x['sb'])
-        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp', 'eqc', 'ab', 'ma'):
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp', 'eqc', 'v', 'ab', 'ma'):
             if x.get(k) not in (None, '', []):
                 r[k] = x[k]
         n += 1
@@ -6805,7 +6806,7 @@ function lkAsDial(r, num){
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
   /* eqc / ab / ma (2026-11-11): the equity card, absentee flag and mailing address, so a No answer on a
      pasted number can route the lead to mail like any traced lead (noAnswerRoute). */
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu','eqc','ab','ma'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu','eqc','v','ab','ma'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -6864,8 +6865,8 @@ function lookupList(){
   var nEq = all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }).length;
   var rows = LKEQ ? all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }) : all;
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
-            + '<div class="sub">These leads passed every check and have no number yet. Look the owner up '
-            + 'on Whitepages, type the number you trust, and it becomes a normal lead you can call.</div>'
+            + '<div class="sub">Look up the owner on Whitepages and enter a number you trust. '
+            + 'Recent filings can appear before a sale date or verified equity is available.</div>'
             + '<div class="sub">The call script at the bottom is for the lead you tapped last (gold border). '
             + 'After you log the call you come back here, to the next lead on this list.</div>'
             + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
@@ -6877,10 +6878,20 @@ function lookupList(){
   if(!shown.some(function(r){ return r.c === LKFOCUS; })) LKFOCUS = shown[0].c;
   var body = shown.map(function(r){
     var bv = _bView(r);
-    var clock = (!bv.auction) ? 'no sale date'
-              : (bv.days == null || bv.days >= NO_SALE) ? esc(bv.auction)
-              : (bv.days < 0 ? 'sale passed' : 'sale in ' + bv.days + 'd');
-    var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
+    var clock = bv.auction ? 'Sale ' + esc(bv.auction) : 'no sale date on file';
+    if(bv.auction && bv.days != null && bv.days < NO_SALE){
+      clock += bv.days < 0 ? ' (date passed)' : bv.days === 0 ? ' (today)' : ' (in ' + bv.days + 'd)';
+    } else if(!bv.auction && (r.lp || r.xf) && r.x){
+      clock = 'Filed ' + esc(r.x) + ' &middot; ' + clock;
+    }
+    var c = r.eqc;
+    var eq = c && c.q && c.n != null ? 'Net equity ' + money(c.n)
+           : typeof r.e === 'number' ? r.e + '% equity estimate' : 'equity unknown';
+    var eqStatus = '';
+    if(c && !(c.q && c.n != null)){
+      if(c.f && c.j == null) eqStatus = 'Recorded liens checked, judgment not posted';
+      else if(!c.f && c.lb) eqStatus = esc(c.lb);
+    }
     var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
       return /Whitepages|People search|Coach/.test(x[0]); });
     var _g = _lkGroup(r), _on = (LKFOCUS === r.c);
@@ -6889,6 +6900,8 @@ function lookupList(){
          + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">new filing</span>' : ''))
          + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
+         + (typeof r.v === 'number' && r.v > 0 ? '<div class="sub">Property value ' + money(r.v) + '</div>' : '')
+         + (eqStatus ? '<div class="sub">' + eqStatus + '</div>' : '')
          + (r.bq ? '<div class="sub" style="color:var(--gold)">Bankruptcy not checked. Ask first: Have you filed for bankruptcy?</div>' : '')
          + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('') + '</div>'
