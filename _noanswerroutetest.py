@@ -100,7 +100,7 @@ NOTES = {
     'LATE': {'route': {'k': 'mail', 'd': ymd(-3), 'ts': 10, 'by': 'Alex', 'auto': 'na', 'mc': 1}},
 }
 
-FNS = ('isBalloon', 'liveDays', 'isEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
+FNS = ('isBalloon', 'liveDays', 'isEquity', 'isRecordedEquity', 'hardSuppressed', '_wasLp', 'noState', 'routeOf', 'routeAtty',
        'routeBlock', 'setRoute', 'routeMark', 'routeCity', 'routeLists', 'esc', '_lkDigits', 'wpmNums', 'wprList',
        'relKindNum', 'lkAsDial', '_eqUsd', '_tele24n', '_ymd', '_ymdAdd', '_ymdDiff', '_md', '_hm', 'numSrc',
        'ownerMisses', 'reachedAt', 'bookOpen', 'letterSent', '_rowsByC', 'noAnswerRoute', 'routeLeftWhy', 'mailTo',

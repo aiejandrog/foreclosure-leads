@@ -1835,7 +1835,13 @@ def _eqc_slim(c):
            'f': 1 if c.get('fact') else 0, 'q': 1 if c.get('may_quote') else 0,
            'j': num(c.get('judgment')), 'js': str(c.get('judgment_source') or '')[:16],
            'li': liens or None, 'b': num(c.get('basis')), 'bs': str(c.get('basis_source') or '')[:8] or None,
-           'n': num(c.get('net')) if c.get('may_quote') else None}
+           'n': num(c.get('net')) if c.get('may_quote') else None,
+           # RECORDED-DEBT TIER (equity_state.card `recorded`): a lender's filed case with a priced
+           # chain and no judgment yet. r/rn decide only whether the lead is worth calling; may_quote
+           # stays 0, so no figure is ever offered to say. rn is recorded debt against the value,
+           # never a payoff, and is dropped whenever the card is quotable (n already says it).
+           'r': 1 if (c.get('recorded') and not c.get('may_quote')) else None,
+           'rn': num(c.get('recorded_net')) if (c.get('recorded') and not c.get('may_quote')) else None}
     return {k: v for k, v in out.items() if v is not None}
 
 
@@ -5558,8 +5564,9 @@ function isThreeDay(r){
 /* EQUITY LANE (2026-11-04, Alex: "create a section on the call mode where its for leads that have
    equity"). The STRICT reading: the bake's equity card says a figure may be spoken (eqc.q =
    equity_state.card() may_quote: the recorded chain was traced clear/priced AND a real judgment is
-   posted, never a tax-deed opening bid) and that figure is positive (eqc.n > 0). A traced chain with
-   no judgment (eqc.f only), an unpriced ceiling and the scraped `e` percentage are NOT equity here:
+   posted, never a tax-deed opening bid) and that figure is positive (eqc.n > 0), OR the recorded-debt
+   tier below (isRecordedEquity, 2026-11-11). Any other traced chain with no judgment (eqc.f only), an
+   unpriced ceiling and the scraped `e` percentage are NOT equity here:
    unknown equity is not equity. Homeowner lane, so balloon (investor) rows stay out. It is a lane
    predicate and nothing else: pool() still runs supReason() (opt-out, Dead, stay, DNC, diligence,
    already called), the seat split and the claim filter on it like every other lane, and the build's
@@ -5567,7 +5574,15 @@ function isThreeDay(r){
 function isEquity(r){
   if(!r || isBalloon(r)) return false;
   var c = r.eqc;
-  return !!(c && c.q && typeof c.n === 'number' && c.n > 0);
+  return !!(c && ((c.q && typeof c.n === 'number' && c.n > 0) || isRecordedEquity(r)));
+}
+/* RECORDED-DEBT TIER (2026-11-11, Alex: "absolutely go on"). A lender's filed case (no judgment yet)
+   whose lien chain is verified and priced: value less the RECORDED debt is above zero. It joins the
+   Has equity lane so it gets called. It is never a figure to say: eqc.q stays 0, the Money line and
+   the equity card say "recorded debt only, do not quote a number", and nothing here reaches a script. */
+function isRecordedEquity(r){
+  var c = r && r.eqc;
+  return !!(c && !c.q && c.r && typeof c.rn === 'number' && c.rn > 0);
 }
 var LANES = [
   {k:'d3',     lbl:'3-DAY',             pred:isThreeDay, hide0:true},
@@ -7591,6 +7606,16 @@ function screenMail(r, raw, back){
   var sending = false;
   $('mlgo').onclick = function(){
     if(sending) return;
+    /* Re-check at the irreversible boundary: another device/sync may have
+       changed opt-out, hold, reply, or ladder state since preview. */
+    var fresh = mailCheck(r, M.to);
+    if(fresh.why){
+      var gate = $('mlwhy');
+      if(gate){ gate.textContent = fresh.why; gate.style.display = 'block'; }
+      return;
+    }
+    /* Rebuild from the fresh row so stale preview text cannot be sent. */
+    M = composeMail(r, fresh.addr, lang());
     sending = true;
     $('mlgo').disabled = true;
     $('mlgo').textContent = 'Sending\u2026';
@@ -8497,6 +8522,53 @@ function fileLinks(r){
   if(r.c) L.push(['Coach', 'http://127.0.0.1:8777/?case=' + encodeURIComponent(r.c)]);
   return L;
 }
+/* COACH DOCK (2026-11-07, Alex: "have it in the call mode"). On a computer, the Coach link no longer
+   opens a second tab: it docks the live coach (call_coach_server.py on THIS machine, 127.0.0.1:8777)
+   as a panel on the right of Call Mode, with this lead preselected, so the script, objections and
+   transcript sit next to the dial screen. The coach keeps its own consent gate, recorder and save
+   path; Call Mode only frames it. On a phone (narrow screen or touch-only) the link is left alone:
+   the server is the computer's, so it cannot answer there. Nothing here reads or sends lead data;
+   the frame loads only the case number in its URL. */
+var COACH_ORIGIN = 'http://127.0.0.1:8777';
+function _coachDockable(){ return window.innerWidth >= 900 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches && !matchMedia('(any-pointer:fine)').matches); }
+function coachDock(url){
+  var d = document.getElementById('coachdock');
+  if(!d){
+    var st = document.createElement('style');
+    st.textContent = '#coachdock{position:fixed;top:0;right:0;bottom:0;width:min(58vw,1100px);z-index:9000;background:#0b0e11;'
+      + 'border-left:2px solid #4aa8ff;box-shadow:-8px 0 24px rgba(0,0,0,.5);display:flex;flex-direction:column}'
+      + '#coachdock .cdbar{display:flex;gap:8px;align-items:center;padding:6px 10px;background:#14181d;color:#e6edf3;font:13px/1.4 system-ui,sans-serif}'
+      + '#coachdock .cdbar b{flex:1}#coachdock .cdbar button{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #333;background:#1b2129;color:#e6edf3;cursor:pointer}'
+      + '#coachdock .cdhint{padding:4px 10px;color:#8b98a6;font:12px/1.4 system-ui,sans-serif;background:#101418}'
+      + '#coachdock iframe{flex:1;border:0;width:100%;background:#0b0e11}'
+      + 'body.coachon{margin-right:min(58vw,1100px)}';
+    document.head.appendChild(st);
+    d = document.createElement('div'); d.id = 'coachdock';
+    d.innerHTML = '<div class="cdbar"><b>Live coach</b><button id="cdtab" title="Open in its own tab">Pop out</button>'
+      + '<button id="cdclose" title="Hide the coach (stop and save the call in the coach first)">Hide</button></div>'
+      + '<div class="cdhint">Blank or "can\'t connect"? Start it on this computer: <code>python call_coach_server.py</code>, then Reload.'
+      + ' <button id="cdreload" style="font:inherit;padding:1px 8px">Reload</button></div>'
+      + '<iframe id="cdframe" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe>';
+    document.body.appendChild(d);
+    document.getElementById('cdclose').onclick = function(){ d.style.display = 'none'; document.body.classList.remove('coachon'); };
+    document.getElementById('cdtab').onclick = function(){ window.open(document.getElementById('cdframe').src, '_blank', 'noopener'); };
+    document.getElementById('cdreload').onclick = function(){ var f = document.getElementById('cdframe'); f.src = f.src; };
+  }
+  var f = document.getElementById('cdframe');
+  /* Same lead already docked: just show it. Switching leads reloads the coach, which ends a call that
+     is recording without its stop-and-save, so ask first. */
+  var cur = f.getAttribute('src');
+  if(cur !== url){
+    if(cur && !confirm('Switch the coach to this lead?\n\nIf the coach is recording, press Stop & save in it first.')) { d.style.display = 'flex'; document.body.classList.add('coachon'); return; }
+    f.src = url;
+  }
+  d.style.display = 'flex'; document.body.classList.add('coachon');
+}
+document.addEventListener('click', function(e){
+  var a = e.target && e.target.closest ? e.target.closest('a[href^="' + COACH_ORIGIN + '/"]') : null;
+  if(!a || !_coachDockable() || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault(); coachDock(a.getAttribute('href'));
+}, true);
 /* What to type into Whitepages' own Reverse Address box: our street in Whitepages' spelling, ordinal
    and suffix included, no unit ("920 N 70 TER" -> "920 N 70th Ter"). Our county spelling often
    matches nothing; Whitepages' own spelling brings up the drop-down and the right house (and unit)
@@ -9329,7 +9401,9 @@ function screenOutcome(){
       + (_en != null && _en > 0 ? ' &middot; equity <b style="color:#7ad48f">' + _money(_en) + '</b>'
          : (_en != null && _en < 0 ? ' &middot; <b style="color:#ff8a80">UNDERWATER ' + _money(-_en)
                       + '</b> <span class="mut">(no equity &mdash; short sale / lender workout, not cash-for-keys)</span>'
-            : ' &middot; <b style="color:#ff8a80">Equity not verified -- do not quote a number</b>')));
+            : (isRecordedEquity(r)
+               ? ' &middot; <b style="color:#ffb74d">Liens verified, recorded debt only (not a payoff) -- do not quote a number</b>'
+               : ' &middot; <b style="color:#ff8a80">Equity not verified -- do not quote a number</b>'))));
   }
   /* THE DATE LINE — three honest states, because r.x and r.d don't mean one thing. r.x is
      auction OR filed date; r.d uses 9999 as the NO-AUCTION sentinel. The first version tested
@@ -10362,6 +10436,11 @@ function eqCardHtml(r){
        + (c.n < 0 ? 'UNDERWATER ' + _eqUsd(-c.n) : _eqUsd(c.n)) + '</b> <span class="mut">'
        + (c.b != null ? 'on ' + _eqUsd(c.b) + (c.bs ? ' (' + esc(c.bs) + ')' : '') + ' value, ' : '')
        + 'less the judgment and recorded liens above</span></div>';
+  } else if(isRecordedEquity(r)){
+    h += '<div class="nc" style="margin-top:4px">No judgment yet. Value less the recorded debt is about <b>'
+       + _eqUsd(c.rn) + '</b>' + (c.b != null ? ' on ' + _eqUsd(c.b) + (c.bs ? ' (' + esc(c.bs) + ')' : '') + ' value' : '')
+       + ': RECORDED debt only, not a payoff (arrears, interest and fees are not in it). It is why this lead is'
+       + ' worth a call. Do not quote a number.</div>';
   } else if(c.f){
     h += '<div class="nc" style="margin-top:4px">Judgment not posted: no net figure yet. Do not quote a number.</div>';
   }

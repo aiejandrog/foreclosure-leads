@@ -8,7 +8,7 @@ def chk(name, ok, d=''):
         F.append(name)
 
 KEYS = {'state', 'label', 'fact', 'judgment', 'judgment_source', 'liens', 'basis', 'basis_source',
-        'net', 'may_quote', 'why'}
+        'net', 'may_quote', 'recorded', 'recorded_debt', 'recorded_net', 'why'}
 
 def row(chain, **kw):
     r = {'case': '2099-000001-CA-01', 'county': 'MIAMI-DADE', 'ctype': 'HOA/Condo', 'value': 400000,

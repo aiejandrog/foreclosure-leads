@@ -101,7 +101,7 @@ js = ('const BUILTAT = "2026-10-12 07:00";\n' + js_fn(board, '_expireReleases') 
       'const b = _expireReleases([{case:"A", bkUntil: now-10, saleLift:"x"}, {case:"B", bkUntil: now+3600},'
       ' {case:"C"}, {case:"D", bkUntil: now-10, saleBkAct:true, bkWhy:"docket"}]);\n'
       'const c = _dropExpired([{c:"A", bu: now-10}, {c:"B", bu: now+3600}, {c:"C"}]);\n'
-      'console.log(JSON.stringify({b:b.map(r=>[r.case, !!r.saleBkAct, r.bkWhy||"", "saleLift" in r]), c:c.map(r=>r.c)}));\n')
+      'console.log(JSON.stringify({b:b.map(r=>[r.case, !!r.saleBkAct, r.bkWhy||"", "saleLift" in r, !!r.bkExpired]), c:c.map(r=>r.c)}));\n')
 try:
     out = subprocess.run(['node', '-e', js], capture_output=True, text=True, timeout=60)
     res = __import__('json').loads(out.stdout.strip() or '{}')
@@ -113,6 +113,12 @@ check('board: an expired release is held, with a reason, and loses its stay-lift
 check('board: an unexpired release stays released', b.get('B', [0, 1])[1] is False, res)
 check('board: a row with no bkUntil (Miami) is untouched', b.get('C', [0, 1])[1] is False, res)
 check('board: a docket-held row keeps its own reason', b.get('D', [0, 0, ''])[2] == 'docket', res)
+check('board: an expired release is marked bkExpired and says it is not a stay finding',
+      b.get('A', [0] * 5)[4] is True and 'not a stay finding' in b['A'][2], res)
+check('board: a docket-held row is not marked bkExpired', b.get('D', [0] * 5)[4] is False, res)
+check('board labels an expired release as BK CHECK EXPIRED, never as an active stay',
+      board.count('r.bkExpired') >= 3 and 'BK CHECK EXPIRED' in board
+      and "r.saleBkAct && r.bkExpired" in board)
 check('Call Mode: the expired row leaves the queue, the others stay', res.get('c') == ['B', 'C'], res)
 check('Call Mode ships bu on dial rows', "'bu': d.get('bkUntil') or None" in cm)
 check('both payload paths of Call Mode run _dropExpired', cm.count('_dropExpired(') >= 3)
