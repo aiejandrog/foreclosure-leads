@@ -1,0 +1,222 @@
+"""Fast coach in call_coach_live.html: the transcript drives the card, partial words included.
+
+Runs the page's whole script in node against a small fake page, so what is tested is the code that
+ships. Covers: a card on PARTIAL words; a mid-thought partial waits; a stronger read of the same
+sentence replaces the first card; the lines a real recorded call (2026-11-15) said and nothing heard;
+money answers never carry a number that is not verified; a stop request beats the rebuttal cards and
+is not silenced by Pause; guardrail flags skip the homeowner's words; the script moves forward when
+a stage line is read; the card goes dim when the conversation moves on. Invented lines only.
+Needs node; skipped, loudly, without it.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+html = open(os.path.join(HERE, 'call_coach_live.html'), encoding='utf-8').read()
+bad = []
+
+
+def chk(c, m, extra=None):
+    print(('ok   ' if c else 'FAIL ') + m + ('' if c or extra is None else '  | %s' % (extra,)))
+    if not c:
+        bad.append(m)
+
+
+src = html[html.index('<script>') + 8:html.rindex('</script>')]
+chk('/* FASTCOACH-BEGIN' in src and '/* FASTCOACH-END */' in src, 'fast coach block is in the page')
+pure = src[src.index('/* FASTCOACH-BEGIN'):src.index('/* FASTCOACH-END */')]
+for banned in ('document.', '$(', 'fetch(', 'XMLHttpRequest', 'WebSocket', 'localStorage'):
+    chk(banned not in pure, 'the matcher touches no page and no network: %s' % banned)
+chk('scanObjections' not in src and 'sitRespond(' not in src, 'one matcher: the old final-only paths are gone')
+chk("fcHear(interim,false,'')" in src and "fcHear(txt,false,'')" in src, 'both engines feed partial words to the coach')
+srv = open(os.path.join(HERE, 'call_coach_server.py'), encoding='utf-8').read()
+chk('"eqstate": r.get("eqstate")' in srv and 'm["coach_fires"]' in srv, 'server carries the verified state and saves prompt timings')
+gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().splitlines()
+chk('!_fastcoachtest.py' in gi, 'this test is tracked')
+
+HARNESS = r"""
+var els = {};
+function El(id){ this.id=id; this.textContent=''; this.className=''; this.value=''; this.style={}; this._h='';
+  this.checked=false; this.disabled=false; this.offsetWidth=1; this.scrollTop=0; this.scrollHeight=0; this.children=[];
+  var self=this; this.classList={add:function(c){ if((' '+self.className+' ').indexOf(' '+c+' ')<0) self.className=(self.className+' '+c).trim(); },
+    remove:function(c){ self.className=(' '+self.className+' ').split(' '+c+' ').join(' ').trim(); }}; }
+El.prototype.appendChild=function(c){ this.children.push(c); };
+Object.defineProperty(El.prototype,'innerHTML',{get:function(){ return this._h || String(this.textContent).replace(/&/g,'&amp;').replace(/</g,'&lt;'); },
+  set:function(v){ this._h=String(v); this.children=[]; }});
+global.document={getElementById:function(id){ return els[id]||(els[id]=new El(id)); }, createElement:function(){ return new El(''); },
+  addEventListener:function(){}};
+global.window=global; global.location={search:'', reload:function(){}};
+global.localStorage={getItem:function(){ return ''; }, setItem:function(){}, removeItem:function(){}};
+global.alert=function(){}; global.prompt=function(){ return null; };
+var VAULT={cards:[{n:2,t:'The Lawyer Wall',say:'I have a lawyer',reb:['Keep your attorney.','Second paragraph.']},
+                  {n:7,t:'Scam fatigue',say:'three of you',reb:['You should be suspicious.']}]};
+global.fetch=function(u){ return Promise.resolve({ok:true, json:function(){ return Promise.resolve(String(u).indexOf('objections')>=0?VAULT:{matches:[]}); }}); };
+var _si=global.setInterval; global.setInterval=function(f,ms){ var h=_si(f,ms); if(h.unref) h.unref(); return h; };
+__SRC__
+var C=window.Coach, T=C._test, o={};
+function $(id){ return document.getElementById(id); }
+function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.ask,act:c.act,heard:c.heard}:null; }
+(async function(){
+  $('f_sender').value='Alejandro'; $('f_first').value='Maria'; $('f_st1').value='100 NW 1st Ave';
+  C.plain(); await wait(30);                      // vault cards load
+
+  /* 1. partial words: the lawyer card is up before the sentence is over */
+  T.interim('yeah i have a lawyer');
+  o.partial_obj=[$('objection').className, $('objwho').textContent.indexOf('Lawyer Wall')>=0, T.fires().slice(-1)[0]];
+  /* 2. the rest of the sentence changes the read: the first card is replaced */
+  T.interim('yeah i have a lawyer but');
+  o.mid_listen=$('clisten').className;
+  T.interim('yeah i have a lawyer but he hasnt called me back');
+  o.replaced=[card(), $('objection').className, $('coach').className.indexOf('on')===0];
+  T.say('Yeah I have a lawyer but he hasn’t called me back');
+  o.no_refire=T.fires().length;
+
+  /* 3. mid-thought partial waits, then answers when nothing more comes */
+  await wait(20); var n0=T.fires().length;
+  T.interim('can you call me back because');
+  o.held=[T.fires().length-n0, $('clisten').className];
+  await wait(1050);
+  o.held_then=[T.fires().length-n0, card(), T.fires().slice(-1)[0].held_ms>=850];
+
+  /* 4. the lines the real call said and nothing heard */
+  T.say('There’s been so many people calling us about this');
+  o.crowd=T.fires().slice(-1)[0].id;
+  T.say('Well listen I literally do not have time right now');
+  o.notime=card();
+  T.say('Um we already got it handled I promise our lawyer is the best');
+  o.handled=[T.fires().slice(-1)[0].id, $('redflag').className];
+
+  /* 5. guardrail flags are about the caller's words */
+  T.say('Well keep your attorney, seriously');
+  o.flag_your=$('redflag').className;
+  T.say('our attorneys will take a look at it for you today');
+  o.flag_our=$('redflag').className;
+
+  /* 6. money questions: nothing unverified becomes a number */
+  T.say('so how much do I owe on this thing');
+  o.owe_none=card();
+  T.say('what is my house worth right now');
+  o.eq_none=card();
+
+  /* 7. stop beats the rebuttal cards, even paused */
+  C.pauseCoach();
+  T.say('this is he');                       o.paused_quiet=T.card()&&T.card().id;
+  T.interim('please stop calling');
+  o.stop=[card(), $('coach').className, $('objection').className];
+  C.pauseCoach();
+
+  /* 8. the card goes dim once two more lines have gone by */
+  T.say('I want to keep my house');          o.keep=card();
+  T.say('it has been a rough year for us'); T.say('my husband lost his job in march');
+  C.catchUp(); o.recap=T.card().say.split('\n').length;
+  T.say('I just want out of this'); var before=$('coach').className;
+  T.say('it has been a rough year for us'); T.say('nothing else to add really');
+  C.coachMore(); o.stale=[before.indexOf('stale')<0, $('coach').className.indexOf('stale')>=0];
+
+  /* 9. reading a stage line moves the script forward */
+  C.jump(1); var s1=$('saytext').textContent;
+  T.say(s1);
+  o.stage=T.stage();
+  console.log('@@'+JSON.stringify(o));
+  process.exit(0);
+})().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
+"""
+
+PURE = r"""
+function norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/[’']/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }
+var SIT=[{tag:'t',m:['this is he','speaking'],say:'x'}], CARDS=[{id:'busy',s:2,nm:['call me back'],body:'b'}], TRIG={2:[],7:[]};
+__PURE__
+var L=fcList(CARDS), o={};
+function M(older, cur){ var w=norm(older+' '+cur), t=fcMatch(L, w, norm(cur).length, 1000, {}); return t?t.id:null; }
+o.fresh_only=[M('i want to keep my house','and the weather is nice'), M('','i want to keep my house')];
+o.gap=[M('','i literally do not really have time'), M('','people like you keep on calling me'), M('','do not under any circumstances whatsoever ever have time')];
+o.whole=[M('','i was misspeaking'), M('','speaking')];
+o.pri=[M('','dont call me at work'), M('','do not call me again'), M('','call me back later')];
+o.also=[M('','my attorney is great'), M('my attorney is on it','he hasnt called me back')];
+o.open=[fcOpen('i have an attorney but'), fcOpen('i have an attorney'), fcOpen('si')];
+var none={}, rec={judgment:'$412,300.55', auction:'2099-01-02', days:12, equity:88000},
+    ver={judgment:412300.55, equity:88000, eqstate:'priced'}, unk={judgment:'$5.00', judgment_unknown:true, equity:50000, eqstate:'unpriced'};
+o.f_none=fcFacts(none); o.f_rec=fcFacts(rec); o.f_ver=fcFacts(ver); o.f_unk=fcFacts(unk);
+o.say=[fcFactSay('owe',none,false).say, fcFactSay('owe',rec,false).say, fcFactSay('equity',rec,false).say, fcFactSay('equity',ver,false).say,
+       fcFactSay('sale',rec,false).say, fcFactSay('sale',none,false).say, fcFactSay('equity',unk,true).say, fcFactSay('owe',unk,true).say];
+o.stage=[fcStageAfter(norm('hi maria can you hear me its alejandro with biscayne'), ['consent line here','hi maria can you hear me its alejandro with biscayne solutions','next'], 0),
+         fcStageAfter(norm('totally different words spoken here today'), ['a','b','c'], 0),
+         fcStageAfter(norm('hi maria can you hear me its alejandro with biscayne'), ['x','hi maria can you hear me its alejandro with biscayne solutions','next'], 2)];
+console.log('@@'+JSON.stringify(o));
+"""
+
+
+def run(js):
+    # stdin, not -e: the page script is longer than a Windows command line may be
+    r = subprocess.run([node, '-'], input=js, capture_output=True, text=True, timeout=90, encoding='utf-8')
+    line = [x for x in (r.stdout or '').splitlines() if x.startswith('@@')]
+    if r.returncode or not line:
+        return {'err': ((r.stderr or '') + (r.stdout or ''))[-600:]}
+    return json.loads(line[-1][2:])
+
+
+node = shutil.which('node')
+if not node:
+    print('SKIP JS checks: node not on PATH')
+else:
+    p = run(PURE.replace('__PURE__', pure))
+    chk(not p.get('err'), 'matcher runs alone in node', p.get('err'))
+    if not p.get('err'):
+        chk(p['fresh_only'] == [None, 'keep'], 'only the newest words can fire a card', p['fresh_only'])
+        chk(p['gap'] == ['callback', 'obj:talked', None] or p['gap'][:1] == ['callback'] and p['gap'][2] is None,
+            'a 3+ word phrase survives up to two extra words, not more', p['gap'])
+        chk(p['whole'] == [None, 'sit0'], 'whole words only', p['whole'])
+        chk(p['pri'] == ['cb_window', 'stop', 'callback'], '"not at work" is a callback, "do not call me again" is a stop', p['pri'])
+        chk(p['also'] == [None, 'atty_silent'], 'the two-part read needs both parts, across two lines', p['also'])
+        chk(p['open'] == [True, False, False], 'a partial ending in "but" is mid-thought; "si" is an answer', p['open'])
+        chk(p['f_none']['equity']['ok'] is False and p['f_none']['payoff']['ok'] is False and p['f_none']['judgment']['ok'] is False,
+            'no data: equity, payoff and judgment all read not verified')
+        chk(p['f_rec']['equity'] == {'v': 'Not verified', 'ok': False, 'src': 'do not quote a number'},
+            'an equity figure with no verified state is not shown', p['f_rec']['equity'])
+        chk(p['f_ver']['equity']['ok'] is True and p['f_ver']['equity']['v'] == '$88,000', 'a verified state shows the figure')
+        chk(p['f_unk']['judgment']['ok'] is False and p['f_unk']['equity']['ok'] is False, 'judgment_unknown and a ceiling-only state stay unverified')
+        chk(p['f_rec']['payoff']['ok'] is False and p['f_ver']['payoff']['ok'] is False, 'payoff is never verified from our data')
+        s = p['say']
+        chk('$' not in s[0] and 'verified number' in s[0], 'owed, nothing posted: no number')
+        chk('$412,301' in s[1] and 'not today’s payoff' in s[1], 'owed, judgment recorded: the recorded figure, called what it is', s[1])
+        chk('$' not in s[2] and 'not going to guess' in s[2], 'equity, unverified: no number', s[2])
+        chk('$88,000' in s[3], 'equity, verified: the figure')
+        chk('2099-01-02' in s[4] and '12 days' in s[4] and 'no sale date' in s[5].lower(), 'sale date from the calendar, or none')
+        chk('$' not in s[6] and '$' not in s[7], 'Spanish answers follow the same rule')
+        chk(p['stage'] == [2, -1, -1], 'a read stage line names the next stage; other talk and earlier stages do not', p['stage'])
+
+    o = run(HARNESS.replace('__SRC__', src))
+    chk(not o.get('err'), 'the page script runs end to end in node', o.get('err'))
+    if not o.get('err'):
+        chk(o['partial_obj'][0] == 'on' and o['partial_obj'][1] and o['partial_obj'][2]['partial'] is True,
+            'objection card is up on partial words', o['partial_obj'])
+        chk(o['replaced'][0] and o['replaced'][0]['id'] == 'atty_silent' and o['replaced'][1] == '' and o['replaced'][2],
+            'the rest of the sentence replaces the first card', o['replaced'])
+        chk(o['replaced'][0] and 'next step' in (o['replaced'][0]['ask'] or [''])[0], 'and offers the question to ask next')
+        chk(o['no_refire'] == 2, 'the final wording of the same sentence does not fire again', o['no_refire'])
+        chk(o['held'] == [0, 'on'], 'a mid-thought partial waits and says it is listening', o['held'])
+        chk(o['held_then'][0] == 1 and o['held_then'][1]['kind'] == 'callback' and o['held_then'][2],
+            'then answers 0.9 s later when nothing more comes', o['held_then'])
+        chk(o['crowd'] == 'obj:v7', '"so many people calling us" reaches the scam-fatigue card', o['crowd'])
+        chk(o['notime'] and o['notime']['kind'] == 'callback' and 'Callback' in o['notime']['act'],
+            '"I literally do not have time right now" reaches the callback card', o['notime'])
+        chk(o['handled'][0] == 'obj:plan' and o['handled'][1] == '', '"we already got it handled I promise" is the plan card and no red flag', o['handled'])
+        chk(o['flag_your'] == '' and o['flag_our'] == 'on', '"your attorney" is not flagged, "our attorneys" is', [o['flag_your'], o['flag_our']])
+        chk(o['owe_none'] and o['owe_none']['id'] == 'owe' and '$' not in o['owe_none']['say'], 'asked what is owed with no lead: no number', o['owe_none'])
+        chk(o['eq_none'] and o['eq_none']['id'] == 'equity' and '$' not in o['eq_none']['say'], 'asked what it is worth: no number', o['eq_none'])
+        chk(o['paused_quiet'] != 'sit3', 'Pause holds ordinary prompts back', o['paused_quiet'])
+        chk(o['stop'][0] and o['stop'][0]['kind'] == 'stop' and 'DO NOT CONTACT' in o['stop'][0]['act'] and 'stop' in o['stop'][1] and o['stop'][2] == '',
+            'a stop request shows the stop card on partial words, paused or not, and no rebuttal card', o['stop'])
+        chk(o['keep'] and o['keep']['id'] == 'keep' and len(o['keep']['ask']) == 2, 'keep-the-house gets two questions to choose from')
+        chk(o['recap'] == 3, 'Catch me up shows the last three lines', o['recap'])
+        chk(o['stale'] == [True, True], 'the card goes dim after two more lines', o['stale'])
+        chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
+
+print()
+print('FAIL %d' % len(bad) if bad else 'ALL OK')
+raise SystemExit(1 if bad else 0)
