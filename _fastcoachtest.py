@@ -31,7 +31,7 @@ pure = src[src.index('/* FASTCOACH-BEGIN'):src.index('/* FASTCOACH-END */')]
 for banned in ('document.', '$(', 'fetch(', 'XMLHttpRequest', 'WebSocket', 'localStorage'):
     chk(banned not in pure, 'the matcher touches no page and no network: %s' % banned)
 chk('scanObjections' not in src and 'sitRespond(' not in src, 'one matcher: the old final-only paths are gone')
-chk("fcHear(interim,false,'')" in src and "fcHear(txt,false,'')" in src, 'both engines feed partial words to the coach')
+chk("fcHear(interim,false,'')" in src and "fcHear(last.text,false,dgTag(last.spk))" in src, 'both engines feed partial words to the coach')
 srv = open(os.path.join(HERE, 'call_coach_server.py'), encoding='utf-8').read()
 chk('"eqstate": r.get("eqstate")' in srv and 'm["coach_fires"]' in srv, 'server carries the verified state and saves prompt timings')
 gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().splitlines()
@@ -150,6 +150,20 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   T.say(cut); o.lad_tag=T.lines().slice(-1)[0].spk;
   T.cool(); T.say('I said I am not interested');
   o.lad_3=[$('objwho').textContent.indexOf('third time')>=0, $('objbody').textContent.indexOf('leave it there')>=0, T.fires().slice(-1)[0].pass];
+
+  /* 12. Deepgram results: they speak first, you are whoever reads the screen, two voices in one result */
+  T.reset(); T.dgReset(); C.jump(1); var st=$('saytext').textContent.split(' ').slice(0,12).join(' ');
+  var W=function(txt,spk){ return txt.split(' ').map(function(x){ return {word:x.toLowerCase(), punctuated_word:x, speaker:spk}; }); };
+  var M=function(words,fin){ return {is_final:fin, channel:{alternatives:[{transcript:words.map(function(w){ return w.punctuated_word; }).join(' '), words:words}]}}; };
+  T.dg(M(W('Hello who is this',0),true));      o.dg_first=[T.dgYou(), T.lines().slice(-1)[0].spk];
+  T.dg(M(W(st,1),true));                       o.dg_you=[T.dgYou(), T.lines().slice(-1)[0].spk];
+  T.cool(); var f1=T.fires().length;
+  T.dg(M(W('I am not interested',1),false));   o.dg_you_quiet=T.fires().length-f1;
+  T.dg(M(W('I am not interested',0),false));   o.dg_them_fire=T.fires().slice(f1).map(function(x){ return x.id; });
+  var n0=T.lines().length;
+  T.dg(M(W('so what I do is help owners',1).concat(W('please stop calling me',0)),true));
+  o.dg_split=T.lines().slice(n0).map(function(l){ return l.spk; }); o.dg_stop=card()&&card().kind;
+  o.dg_eng=$('eng').textContent;
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -188,6 +202,10 @@ o.voice=[V('honestly I wasn’t expecting you to be'), V('no thank you seriously
 var LD=function(id,n,l,es){ var x=fcLadder(id,n,l,es); return x?x.who+'|'+x.say:null; };
 o.ladder=[LD('notint',1,{},false), LD('notint',2,{auction:'2099-01-02'},false), LD('notint',2,{},false), LD('obj:v2',2,{},false),
           LD('notint',3,{},false), LD('notint',2,{auction:'2099-01-02'},true)];
+var RW=function(a){ return a.map(function(x){ return {word:x[0], speaker:x[1]}; }); };
+o.runs=[fcRuns(RW([['hi',0],['there',0],['no',1],['thanks',1]])), fcRuns(RW([['i',0],['help',0],['uh',1],['owners',0],['see',0]])),
+        fcRuns(RW([['hello',null]])), fcRuns([])];
+o.youvoice=[fcYouVoice({}), fcYouVoice({'0':1,'1':3}), fcYouVoice({'2':1})];
 o.board_v=fcFacts(fcBoard({case:'A-1',equity:50000},'?case=A-1&eq=clear')).equity.v;
 o.say=[fcFactSay('owe',none,false).say, fcFactSay('owe',rec,false).say, fcFactSay('equity',rec,false).say, fcFactSay('equity',ver,false).say,
        fcFactSay('sale',rec,false).say, fcFactSay('sale',none,false).say, fcFactSay('equity',unk,true).say, fcFactSay('owe',unk,true).say];
@@ -247,6 +265,10 @@ else:
         chk('$' not in ''.join(x or '' for x in ld) and 'sale set for' not in ld[2] and 'One question' in ld[3],
             'no date on file: no date said; other cards get the general second pass', [ld[2], ld[3]])
         chk('third time' in ld[4] and 'leave it there' in ld[4] and 'subasta' in ld[5], 'the third time lets them go; Spanish follows', [ld[4], ld[5]])
+        chk(p['runs'] == [[{'spk': '0', 'text': 'hi there'}, {'spk': '1', 'text': 'no thanks'}], [{'spk': '0', 'text': 'i help uh owners see'}],
+                          [{'spk': '', 'text': 'hello'}], []],
+            'Deepgram words split where the voice changes; a one-word blip is folded in', p['runs'])
+        chk(p['youvoice'] == [None, '1', '2'], 'you are the voice with the most script reads, nobody until one is heard', p['youvoice'])
         b = p['board']
         chk(b[0] == ['priced', 120000, True, True], "the board's quotable net replaces the raw estimate", b[0])
         chk(b[1] == ['clear', None, False, False] and 'no figure' in p['board_v'], 'a verified state with no quotable net shows no number', [b[1], p['board_v']])
@@ -299,6 +321,12 @@ else:
         chk(o['lad_2'] == [True, True, True, 2], 'they cut in with the same objection mid-card: a new second-pass line, on partial words', o['lad_2'])
         chk(o['lad_tag'] == 'them?', 'that mixed line is treated as theirs', o['lad_tag'])
         chk(o['lad_3'] == [True, True, 3], 'the third time shows the let-them-go line', o['lad_3'])
+        chk(o['dg_first'] == [None, 'them?'], 'Deepgram: their hello first does not make them you', o['dg_first'])
+        chk(o['dg_you'] == ['1', 'you'], 'Deepgram: the voice that reads the opener is you', o['dg_you'])
+        chk(o['dg_you_quiet'] == 0 and o['dg_them_fire'] == ['obj:notint'],
+            'Deepgram: trigger words in your voice raise nothing; in theirs, the card, on partial words', [o['dg_you_quiet'], o['dg_them_fire']])
+        chk(o['dg_split'] == ['you', 'them'] and o['dg_stop'] == 'stop', 'Deepgram: one result with two voices is two lines, and their half is answered', [o['dg_split'], o['dg_stop']])
+        chk('live speaker labels' in o['dg_eng'], 'the engine line says when your voice is known', o['dg_eng'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
 print()
