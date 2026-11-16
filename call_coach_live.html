@@ -876,10 +876,12 @@ var FC_SECOND={
 };
 function fcLadder(id, n, lead, es){
   if(!(n>=2)) return null;
-  if(n>=3) return {who:'third time · let them go',
-    say:es?'Entendido, y lo respeto. Lo dejo ahí. Si algo cambia antes de la subasta, tiene mi número. Que esté bien.'
-          :'Understood, and I respect that. I’ll leave it there. If anything changes before the sale, you have my number. Take care.',
-    act:'End the call. Log the outcome in Call Mode.'};
+  /* The third time is worked, not released (Alex, 11-16: "he never said stop or no, keep objecting
+     around it"). Only a stop request ends a call, and that is the stop card, not this ladder. */
+  if(n>=3) return {who:'third time \u00b7 isolate it',
+    say:es?'Lo escucho. Se lo pregunto de otra forma: si cinco minutos no le cuestan nada y nadie lo puede obligar a nada, \u00bfhay alguna otra raz\u00f3n para no escuchar sus opciones?'
+          :'I hear you. Let me ask it a different way: if five minutes cost you nothing and nobody could make you do anything, is there any other reason not to hear your options?',
+    act:'Wait for the answer. Only a stop request ends the call.'};
   var d=(lead&&lead.auction)?String(lead.auction):'';
   var f=FC_SECOND[String(id).replace(/^obj:/,'')];
   var s=f?f(d):['I hear you, and I’m not asking you to change anything. One question and I’ll leave it with you: what would you want to know before the sale that nobody has told you yet?',

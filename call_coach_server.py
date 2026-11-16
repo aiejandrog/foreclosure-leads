@@ -138,7 +138,9 @@ AI_SYSTEM = (
     "  objection - not interested, busy, already has a lawyer or attorney, already has a plan, the bank is "
     "helping, is this a scam, giving up on the house\n"
     "  time      - they named a day or time for the advisor call\n"
-    "  stop      - they asked not to be called again\n"
+    "  stop      - they said, in so many words, stop calling, do not call me, take me off your list, remove "
+    "my number. ONLY that. A plain 'no', 'not interested', 'I'm busy' or 'I said no' is NEVER stop; it is an "
+    "objection.\n"
     "  unclear   - a word or two, small talk, or you cannot tell\n"
     "Your line answers THAT. The path only says where to go once you have answered it.\n"
     "What to say for each kind:\n"
@@ -150,13 +152,32 @@ AI_SYSTEM = (
     "- objection: one short sentence that agrees with them, then ONE question about what they just said. "
     "A lawyer or attorney: keep the attorney, and ask what the attorney has told them about the sale date. "
     "A plan or the bank helping: keep it exactly as it is, and ask what happens if it is not approved before "
-    "the sale date. Not interested or busy, first time: agree and ask the situation question; said again: "
-    "thank them and say goodbye. A scam, who are you: public court record, not the lender, not buying, no fee, "
+    "the sale date. Not interested, busy, or a flat no: agree in a few words, then work it, however many "
+    "times they say it (see NEVER FOLD). A scam, who are you: public court record, not the lender, not buying, no fee, "
     "then the situation question. Giving up, 'let them take it': agree, then the close, because the advisor "
     "also covers leaving on their own terms. An objection is NEVER answered with the close or with booked, "
     "except giving up.\n"
     "- time: step booked. Repeat the day and time back and ask them to save the number.\n"
-    "- stop: confirm they are off the list and say goodbye.\n"
+    "- stop: confirm they are off the list and say goodbye. This is the only way a call ends.\n"
+    "NEVER FOLD. Test call 11-16 17:40: the homeowner said 'really not interested, man' once and you wrote 'No "
+    "problem, I'll leave you be', then read a plain 'No' as a request to be taken off the list. He never said "
+    "stop. A person who is still on the phone is still deciding, and 'not interested' is a reflex, not a "
+    "decision. Unless TYPE is stop you never say goodbye, never offer to leave them be or let them go, never "
+    "say 'take care', and never mention taking them off a list. You work the objection, and each time they "
+    "repeat it you use an angle you have not used yet on this call, then go back to the ask:\n"
+    "  1. It is information, not interest: you have not told them anything yet, and there is a case with their "
+    "address on it.\n"
+    "  2. Ask what exactly they are not interested in: keeping the home, or protecting what they have put into "
+    "it.\n"
+    "  3. Isolate: if it cost nothing and could not touch the plan they already have, is there any other reason "
+    "not to take five minutes.\n"
+    "  4. Worst case: five minutes, and if nothing fits you shake hands and part friends, and they lost "
+    "nothing.\n"
+    "  5. What if: what if he points out one option nobody else has shown them.\n"
+    "  6. Fairness: five minutes against the house is a trade worth making, right.\n"
+    "  7. Busy: then name the time, later today or first thing tomorrow, and it is five minutes.\n"
+    "Stay warm and unbothered while you do it. Never argue, never guilt them, never raise the stakes with "
+    "fear. Persistent and friendly, not pushy.\n"
     "- unclear: stay on the same step and ask its question again in fewer words.\n"
     "Pace: do not use bridge or close until the homeowner has said what they want AND has answered at least "
     "one of the problem, solution or consequence questions. Never use booked unless they named a time. Never "
@@ -255,6 +276,19 @@ def sale_in_words(days):
     return "more than two months out"
 
 
+# What a real stop request sounds like, and what folding sounds like.
+_AI_STOP = re.compile(r"stop calling|quit calling|do ?n[o'\u2019]?t (ever )?call|never call|take me off|remove (me|my)|"
+                      r"off (your|the|that) list|do not contact|no me llame|no llame|quiteme de", re.I)
+_AI_FOLD = re.compile(r"leave you be|let you go|leave it there|leave you alone|take you off|off (the|my|our) list|"
+                      r"take care|good ?bye|have a (good|great|nice)|won[\u2019']?t (call|bother)|"
+                      r"not (going to|gonna) (call|bother)|i[\u2019']?ll let you", re.I)
+
+
+def folds(res):
+    """True when a line gives up on the call: a goodbye, or reading their words as a stop request."""
+    return res.get("type") == "stop" or (res.get("type") != "time" and bool(_AI_FOLD.search(res.get("line", ""))))
+
+
 def venice_key():
     return user_var("VENICE_API_KEY")
 
@@ -340,45 +374,64 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
     if shown:
         system += ("\nThe caller's screen currently shows: \"" + shown + "\". The caller may have just read it "
                    "out. Write the line that comes after the homeowner's answer to it.")
-    body = {"model": AI_MODEL, "max_tokens": 300, "temperature": 0.6, "stream": False,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
-            "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
-                                  "strip_thinking_response": True}}
-    import urllib.request
-    out = ""
-    for _try in range(2):            # one retry: a dropped request must not leave the box blank
-        try:
-            req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
-                                         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                j = json.loads(r.read().decode("utf-8"))
-            out = str(j["choices"][0]["message"].get("content") or "")
-        except Exception:
-            out = ""
-        if out.strip():
-            break
-    if not out.strip():
-        return {}
-    def field(name):
-        m = re.search(r"^\s*%s:\s*(.*)$" % name, out, re.I | re.M)
-        return " ".join(m.group(1).split()).strip().strip('"\u201c\u201d').strip() if m else ""
-    step, kind, heard, line = field("STEP").lower(), field("TYPE").lower(), field("HEARD"), field("SAY")
-    if not re.search(r"^\s*SAY:", out, re.I | re.M) and not re.search(r"^\s*(STEP|TYPE|HEARD):", out, re.I | re.M):
-        line = " ".join(out.split()).strip().strip('"\u201c\u201d').strip()      # a bare line, no form
-    step = step if step in AI_STEP_IDS else ""
-    kind = kind if kind in ("answer", "question", "objection", "time", "stop", "unclear") else ""
-    if step == "booked" and kind != "time":
-        step = "close"
-    # No figure may come from the model. The one exception is the clock time the homeowner just
-    # gave ("ten fifteen tomorrow"): repeating it back is the booking, and it is never a dollar sign.
-    bad = ("$" in line) if kind == "time" else bool(_AI_BAD.search(line))
-    line = re.sub(r"\s*[\u2014\u2013]\s*", ", ", line)        # a dash is written, not spoken
-    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 420 or bad:
-        return {}
-    res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
-    if step:
-        res["n"] = AI_STEP_IDS.index(step) + 1
-        res["name"] = AI_STEPS[res["n"] - 1][1]
+    said = " ".join(r.split(": ", 1)[1] for r in rows[-6:])
+
+    def ask(sys_text):
+        body = {"model": AI_MODEL, "max_tokens": 300, "temperature": 0.6, "stream": False,
+                "messages": [{"role": "system", "content": sys_text}, {"role": "user", "content": "\n".join(rows)}],
+                "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
+                                      "strip_thinking_response": True}}
+        import urllib.request
+        out = ""
+        for _try in range(2):            # one retry: a dropped request must not leave the box blank
+            try:
+                req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
+                                             headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    j = json.loads(r.read().decode("utf-8"))
+                out = str(j["choices"][0]["message"].get("content") or "")
+            except Exception:
+                out = ""
+            if out.strip():
+                break
+        if not out.strip():
+            return {}
+
+        def field(name):
+            m = re.search(r"^\s*%s:\s*(.*)$" % name, out, re.I | re.M)
+            return " ".join(m.group(1).split()).strip().strip('"\u201c\u201d').strip() if m else ""
+        step, kind, heard, line = field("STEP").lower(), field("TYPE").lower(), field("HEARD"), field("SAY")
+        if not re.search(r"^\s*SAY:", out, re.I | re.M) and not re.search(r"^\s*(STEP|TYPE|HEARD):", out, re.I | re.M):
+            line = " ".join(out.split()).strip().strip('"\u201c\u201d').strip()      # a bare line, no form
+        step = step if step in AI_STEP_IDS else ""
+        kind = kind if kind in ("answer", "question", "objection", "time", "stop", "unclear") else ""
+        if step == "booked" and kind != "time":
+            step = "close"
+        # No figure may come from the model. The one exception is the clock time the homeowner just
+        # gave ("ten fifteen tomorrow"): repeating it back is the booking, and it is never a dollar sign.
+        bad = ("$" in line) if kind == "time" else bool(_AI_BAD.search(line))
+        line = re.sub(r"\s*[\u2014\u2013]\s*", ", ", line)        # a dash is written, not spoken
+        if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 420 or bad:
+            return {}
+        res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
+        if step:
+            res["n"] = AI_STEP_IDS.index(step) + 1
+            res["name"] = AI_STEPS[res["n"] - 1][1]
+        return res
+
+    res = ask(system)
+    # NEVER FOLD, enforced. If the line ends the call, or calls their words a stop request, and nobody
+    # in the last few lines actually asked to stop being called, that line is not shown: the model is
+    # asked again and told so. A second fold shows nothing rather than a goodbye.
+    if res and folds(res) and not _AI_STOP.search(said + " " + res.get("heard", "")):
+        res = ask(system + "\n\nIMPORTANT: the homeowner has NOT asked to stop being called. Your last answer ended "
+                  "the call or treated their words as a stop request. That is wrong. Their last words are an "
+                  "objection: TYPE is objection. Answer it with a NEVER FOLD angle you have not used and go back "
+                  "to the ask. No goodbye, no 'take care', nothing about a list.")
+        if res and folds(res):
+            return {}
+        if res and res.get("type") == "stop":
+            res["type"] = "objection"
     return res
 
 
