@@ -392,7 +392,8 @@ var CARDS = [
   m:['already have a plan','modification going','working with someone','got it handled','have it handled','plan in place','tengo un plan'],
   body:'Good — keep it. I don’t want to be your bank or your middleman… I want to be your parachute. You’re betting the house on that plan landing on time. Keep it exactly as-is… and let our advisor look at postponing the sale in parallel, for free. If your plan lands first, I did you a favor and you owe me a coffee. If it slips a day — and here a day is everything — you’ve already got backup. Fair?\n\n(still flat? skeptical tone:) Can I ask you something?… How can I point out that you MIGHT be missing something here… without you getting upset with me?'},
  {id:'legit', who:'“How do I know you’re legit?” — a concern in disguise', s:2,
-  m:['legit','a scam','how do i know you','references','are you licensed','who are you really','sounds like a scam'],
+  m:['legit','a scam','how do i know you','references','are you licensed','who are you really','sounds like a scam',
+     'someone i dont know','someone that i dont know','dont know you','dont know who you are','a stranger'],
   body:'Totally fair — what specifically would you want to be sure of, so I point you to the right thing?\n\n(answer THAT, then re-ask for the five minutes)'},
  {id:'price', who:'Price / “what’s this cost?”', s:2,
   m:['how much does','what does it cost','what do you charge','your fee','cost me','cuanto cuesta'],
@@ -786,10 +787,19 @@ function fcRuns(words){
 /* WHICH VOICE IS YOU. Not "whoever spoke first": on an outbound call they say hello first. The
    voice that reads the screen is you. votes: {speaker: lines that were a script read}. Returns the
    speaker with the most votes, or null while nobody has read anything yet. */
-function fcYouVoice(votes){
+function fcYouVoice(votes, words){
   var best=null, n=0;
   Object.keys(votes||{}).forEach(function(k){ if(votes[k]>n){ n=votes[k]; best=k; } });
-  return best;
+  if(best!==null) return best;
+  /* Nobody has sounded like the caller yet (you went off the script). With two voices heard, the
+     one that sounded like the homeowner is not you; failing that, the caller is the one doing
+     most of the talking. */
+  var w=words||{}, ks=Object.keys(w).sort(function(x,y){ return w[y]-w[x]; });
+  if(typeof fcTwoVoices!=='function'||!fcTwoVoices(w)) return null;
+  var a=ks[0], b=ks[1], va=(votes||{})[a]||0, vb=(votes||{})[b]||0;
+  if(va<0&&vb>=0) return b;
+  if(vb<0&&va>=0) return a;
+  return (w[a]+w[b]>=40&&w[a]>=2*w[b])?a:null;
 }
 /* ARE THERE TWO VOICES AT ALL. Deepgram numbers the voices it can tell apart. Through one microphone
    it often cannot: test call 11-15 22:00 came back 182 words on one number and 3 on the other, the
@@ -799,7 +809,7 @@ function fcTwoVoices(words){
   var tot=0, a=[];
   Object.keys(words||{}).forEach(function(k){ tot+=words[k]; a.push(words[k]); });
   a.sort(function(x,y){ return y-x; });
-  return a.length>1&&a[1]>=8&&a[1]/tot>=0.1;
+  return a.length>1&&a[1]>=5&&a[1]/tot>=0.08;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1278,7 +1288,7 @@ function guessSpeaker(nline){
 }
 
 /* =========================== TRANSCRIPT =========================== */
-function pushFinal(text,spk,joinSpk){
+function pushFinal(text,spk,dgSpk,canJoin){
   text=String(text||'').trim();
   if(!text) return;
   var nline=norm(text);
@@ -1286,9 +1296,9 @@ function pushFinal(text,spk,joinSpk){
   // Before the line joins S.finals, so it is still "the newest words". Usually the card is
   // already up from the partial; this catches what only the final wording matched.
   var fired=fcHear(text,true,tag);
-  var o=S.dgOpen, ln=(joinSpk!=null&&o&&o.spk===joinSpk&&o.i===S.lines.length-1&&now()-o.at<4000)?S.lines[o.i]:null;
+  var o=S.dgOpen, ln=(canJoin&&o&&o.spk===dgSpk&&o.i===S.lines.length-1&&now()-o.at<6000)?S.lines[o.i]:null;
   if(ln){ ln.text+=' '+text; ln.spk=spk||guessSpeaker(norm(ln.text)); }
-  else S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
+  else S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag,dg:(dgSpk==null?'':dgSpk)});
   S.finals+=' '+text;
   S.lastSpeech=now();
   if(tag!=='them'&&tag!=='them?') scanFlags(text);    // the guardrails are about YOUR words
@@ -1360,6 +1370,15 @@ function setKey(){
    Deepgram hears one voice (fcTwoVoices), the content guess stands in: a wrong "you" on their
    words silences the coach, which is worse than no label. */
 function dgLive(){ return S.dgYou!==null&&fcTwoVoices(S.dgWords); }
+/* How much one finished piece says about whose voice it is: a script read or your own name and
+   company is you (3); a line that only reads like you is a weak yes (1); like them, a no (-1). */
+function dgVote(text){
+  var nt=norm(text);
+  if(fcVoice(nt, fcRef()).all==='you') return 3;
+  for(var i=0;i<YOU_PAT.length;i++) if(YOU_PAT[i]&&nt.indexOf(YOU_PAT[i])>=0) return 3;
+  var q=guessSpeaker(nt);
+  return q==='you?'?1:(q==='them?'?-1:0);
+}
 function dgTag(k){
   if(k===''||!dgLive()) return '';
   return k===S.dgYou?'you':'them';
@@ -1376,15 +1395,15 @@ function dgMessage(j){
     S.interim='';
     (alt.words||[]).forEach(function(w){ if(w.speaker!=null) S.dgWords[w.speaker]=(S.dgWords[w.speaker]||0)+1; });
     runs.forEach(function(r,i){
-      if(r.spk!==''&&fcVoice(norm(r.text), fcRef()).all==='you'){
-        S.dgVotes[r.spk]=(S.dgVotes[r.spk]||0)+1; S.dgYou=fcYouVoice(S.dgVotes);
-      }
-      pushFinal(r.text, dgTag(r.spk), i===0?r.spk:null);
+      if(r.spk!==''){ S.dgVotes[r.spk]=(S.dgVotes[r.spk]||0)+dgVote(r.text); S.dgYou=fcYouVoice(S.dgVotes, S.dgWords); }
+      pushFinal(r.text, dgTag(r.spk), r.spk, i===0);
       /* Deepgram cuts a sentence wherever you breathe. A piece with no full stop stays open, and
          the next piece in the same voice joins its line. */
-      S.dgOpen=(!j.speech_final&&!/[.?!]$/.test(r.text))?{i:S.lines.length-1, spk:r.spk, at:now()}:null;
+      S.dgOpen=/[.?!]$/.test(r.text)?null:{i:S.lines.length-1, spk:r.spk, at:now()};
     });
-    $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice (read the opener)':'one voice heard, telling you apart by what is said');
+    /* Once the voices are known, every earlier line gets its real label, not the guess it was given. */
+    if(dgLive()) S.lines.forEach(function(l){ if(l.dg!=null&&l.dg!=='') l.spk=(l.dg===S.dgYou?'you':'them'); });
+    $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice':'one voice heard, telling you apart by what is said');
   } else {
     var last=runs[runs.length-1];
     S.interim=txt; S.lastSpeech=now(); fcHear(last.text,false,dgTag(last.spk)); renderTranscript();
@@ -1560,7 +1579,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, dgYou:function(){ return S.dgYou; },
-            dgReset:function(){ S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            youVoice:function(v,w){ return fcYouVoice(v,w); }, dgReset:function(){ S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

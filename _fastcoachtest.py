@@ -181,6 +181,22 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   var n1=T.lines().length;
   T.dg(M(W('I just',1),true)); T.dg(M(W('wanted to ask what he showed you.',1),true)); T.dg(M(W('Okay.',1),true));
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
+
+  /* 14. Two real voices and you never read the script (test call 11-15 23:25): your name and
+     company say which voice is you, earlier lines are relabelled, their objection gets its card. */
+  T.reset(); T.dgReset(); C.jump(1);
+  var n2=T.lines().length;
+  T.dg(M(W('Hey there.',0),true));
+  T.dg(M(W('This is Alejandro with Biscayne Solutions Group.',0),true));
+  T.dg(M(W('I am not like everybody else that calls about your property.',0),true));
+  o.two_before=[T.dgYou(), T.lines().slice(-1)[0].spk==='you'];
+  T.cool(); var h1=T.fires().length;
+  T.dg(M(W('I don’t wanna talk about this with',1),true));
+  T.dg(M(W('someone that I don’t know.',1),true));
+  o.two_card=T.fires().slice(h1).map(function(x){ return x.id; });
+  o.two_lines=T.lines().slice(n2).map(function(l){ return l.spk; }); o.two_last=T.lines().slice(-1)[0].text;
+  o.two_eng=$('eng').textContent;
+  o.you_talks=[T.youVoice({},{0:60,1:12}), T.youVoice({},{0:30,1:25}), T.youVoice({1:-1},{0:20,1:9}), T.youVoice({0:3,1:1},{0:5,1:50}), T.youVoice({},{0:60,1:2})];
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -348,6 +364,12 @@ else:
         chk(len(o['one_law']) == 1, 'one voice: "I already have a lawyer" still raises a card', o['one_law'])
         chk('one voice heard' in o['one_eng'], 'the engine line says Deepgram hears one voice', o['one_eng'])
         chk(o['one_join'] == ['I just wanted to ask what he showed you.', 'Okay.'], 'a sentence Deepgram cut in two is one transcript line', o['one_join'])
+        chk(o['two_before'] == ['0', False], 'two voices: your name and company mark your voice, no label while only one voice is heard', o['two_before'])
+        chk(o['two_card'] == ['obj:legit'], 'two voices: "someone I don’t know" raises the trust card', o['two_card'])
+        chk(o['two_lines'] == ['you', 'you', 'you', 'them'] and o['two_last'].endswith('someone that I don’t know.'),
+            'two voices: earlier lines get their real label, and her sentence is one line', [o['two_lines'], o['two_last']])
+        chk('live speaker labels' in o['two_eng'], 'two voices: the engine line goes to live speaker labels', o['two_eng'])
+        chk(o['you_talks'] == ['0', None, '0', '0', None], 'who is you with no script read: the talker, the one who is not them, never on one voice', o['you_talks'])
         chk('live speaker labels' in o['dg_eng'], 'the engine line says when your voice is known', o['dg_eng'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
