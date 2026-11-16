@@ -117,7 +117,7 @@ with tempfile.TemporaryDirectory() as d:
                     'owners': 'DOE, JANE', 'AuctionDate': '2099-01-02'}], f)
     port = free_port()
     proc = subprocess.Popen([sys.executable, os.path.join(d, 'call_coach_server.py')], cwd=d,
-                            env=dict(os.environ, COACH_PORT=str(port)),
+                            env=dict(os.environ, COACH_PORT=str(port), DEEPGRAM_API_KEY='test-not-a-real-key'),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         h = {}
@@ -141,6 +141,22 @@ with tempfile.TemporaryDirectory() as d:
         chk(all(os.path.exists(os.path.join(sd, n)) for n in ('audio.webm', 'transcript.txt', 'meta.json')),
             'session folder has audio.webm, transcript.txt, meta.json')
         chk(e['meta'].get('consent_ack') is True, 'meta.json records consent_ack')
+
+        # The Deepgram key route: the page's own request gets it, nobody else, and health only says yes/no.
+        def keyreq(hdr):
+            req = urllib.request.Request('http://127.0.0.1:%d/api/dgkey' % port, headers=hdr)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, json.loads(r.read()), r.headers.get('Access-Control-Allow-Origin')
+            except urllib.error.HTTPError as ex:
+                return ex.code, {}, ex.headers.get('Access-Control-Allow-Origin')
+        own = 'http://127.0.0.1:%d' % port
+        chk(keyreq({'Origin': own, 'Sec-Fetch-Site': 'same-origin'}) == (200, {'key': 'test-not-a-real-key'}, None),
+            'the coach page gets the key from the variable, with no CORS grant on the reply')
+        chk(keyreq({'Origin': 'https://example.com', 'Sec-Fetch-Site': 'cross-site'})[:2] == (403, {}), 'another site is refused the key')
+        chk(keyreq({'Sec-Fetch-Site': 'cross-site'})[0] == 403 and keyreq({'Host': 'evil.example:%d' % port})[0] == 403,
+            'a cross-site request with no Origin, or a foreign Host, is refused')
+        chk(h.get('deepgram') is True and 'test-not-a-real-key' not in json.dumps(h), 'health says a key is set and never carries it')
     finally:
         proc.terminate()
         proc.wait(timeout=5)

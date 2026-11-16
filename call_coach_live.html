@@ -506,7 +506,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgYou:null, dgVotes:{}, dgGot:false,
+  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgGot:false,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -1328,7 +1328,14 @@ function startSR(){
    Key saved in THIS browser's localStorage only (never the repo, never the server).
    Streams the same mic through a second 250ms MediaRecorder to Deepgram's websocket with
    diarization on. Which voice is YOU is learned from who reads the screen (see dgMessage). */
-function dgKey(){ try{ return localStorage.getItem('coachDgKey')||''; }catch(e){ return ''; } }
+function dgKey(){ var k=''; try{ k=localStorage.getItem('coachDgKey')||''; }catch(e){} return k||S.dgKeyMem||''; }
+/* A key pasted in the gear menu wins. Otherwise ask this computer's coach server, which reads the
+   DEEPGRAM_API_KEY variable. The key stays in memory for the session; it is not stored here. */
+function dgKeyAny(){
+  var k=dgKey(); if(k) return Promise.resolve(k);
+  return fetch('/api/dgkey').then(function(r){ return r.ok?r.json():{}; })
+    .then(function(j){ S.dgKeyMem=(j&&j.key)||''; return S.dgKeyMem; }).catch(function(){ return ''; });
+}
 function setKey(){
   var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, about 1 cent a minute. Stored only in this browser.');
   if(k===null) return;
@@ -1489,8 +1496,7 @@ function start(){
       startRecorder(stream);
       enterApp();
       fcMeter(stream);
-      var k=dgKey();
-      if(!k||!startDG(stream,k)) startSR();
+      dgKeyAny().then(function(k){ if(!k||!startDG(stream,k)) startSR(); });
     }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); stream.getTracks().forEach(function(t){t.stop();}); });
   }).catch(function(){ gateErr('Mic permission denied. Chrome needs the mic for recording + transcript. Use Plain Call Mode otherwise.'); });
 }
