@@ -189,7 +189,11 @@ class FindANumberFlow(unittest.TestCase):
         self.assertIn('Recorded debt found, total unresolved', dated)
         self.assertIn('Filed 11/09/2026', filing)
         self.assertIn('no sale date on file', filing)
-        self.assertIn('judgment not posted', filing)
+        # 2026-11-16: a fresh filing has no judgment; what is owed is in the complaint. The card
+        # says the complaint has not been read rather than "judgment not posted".
+        self.assertNotIn('judgment not posted', filing)
+        self.assertIn('Recorded liens checked', filing)
+        self.assertIn('Complaint not read yet', filing)
         self.assertIn('Property value $400,000', filing)
         self.assertEqual(self.ev("lkAsDial(COV.find(r => r.c === '%s'), '').v" % LK2), 400000)
         self.assertEqual(self.errors, [])
