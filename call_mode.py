@@ -8788,6 +8788,41 @@ function coachDock(url){
   }
   d.style.display = 'flex'; document.body.classList.add('coachon');
 }
+/* COACH HANDOFF (2026-11-16, Alex: "we have to have a follow through system for when we put an
+   appointment"). Everything after an appointment already lives here: the Appointment stage, the
+   calendar link, the confirm / reminder / missed texts, the callback date. The coach was not wired to
+   any of it, so a time booked on a coached call had to be remembered and typed in again. The docked
+   coach now posts its outcome and the day and time it heard; this keeps it for that lead only, shows
+   it on the outcome screen, and logOutcome / afterCall use it. Nothing is logged without his tap.
+   coachDonePick is the whole trust boundary: our coach's origin, a known outcome, plain short text. */
+var COACH_OC = {appointment:'appt', callback:'callback', talked:'talked', not_interested:'notint', voicemail:'voicemail', bad_number:'badnum'};
+var _coachDone = null;
+function coachDonePick(d, origin, nowMs){
+  if(origin !== COACH_ORIGIN || !d || d.src !== 'bsg-coach') return null;
+  var k = COACH_OC[String(d.outcome||'')];
+  var c = String(d['case']||'');
+  if(!k || !c || c.length > 40 || /[<>"'&]/.test(c)) return null;
+  var iso = /^\d{4}-\d{2}-\d{2}$/.test(String(d.iso||'')) ? String(d.iso) : '';
+  var hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(d.hm||'')) ? String(d.hm) : '';
+  var when = String(d.when||'').replace(/[^A-Za-z0-9 :]/g, '').slice(0, 60).trim();
+  return {c:c, k:k, when:when, iso:iso, hm:hm, at:nowMs};
+}
+/* The handoff for THIS lead, while it is still the call just made (30 minutes). */
+function coachDoneFor(r){
+  var d = _coachDone;
+  return (d && r && d.c === r.c && Date.now() - d.at < 30*60*1000) ? d : null;
+}
+function coachDoneLabel(d){
+  var t = '';
+  for(var i=0;i<OUTCOMES.length;i++) if(OUTCOMES[i].k === d.k) t = OUTCOMES[i].t;
+  return t + (d.when ? ' \u00b7 ' + d.when : '');
+}
+window.addEventListener('message', function(e){
+  var d = coachDonePick(e.data, e.origin, Date.now());
+  if(!d) return;
+  _coachDone = d;
+  try{ if(SCREEN === 'outcome' && cur && cur.c === d.c) screenOutcome(); }catch(x){}
+});
 document.addEventListener('click', function(e){
   var a = e.target && e.target.closest ? e.target.closest('a[href^="' + COACH_ORIGIN + '/"]') : null;
   if(!a || !_coachDockable() || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -9577,10 +9612,14 @@ function screenOutcome(){
   // Captured BEFORE any outcome is written — see advance(). Once logOutcome runs, pool() may no
   // longer contain either this lead or the same neighbours, so there is nothing left to read it from.
   var nextC = (function(){ var P=pool(); for(var k=0;k<P.length;k++) if(P[k].c===r.c) return (P[k+1]||{}).c; return null; })();
+  var _cd = coachDoneFor(r);
   var btns=OUTCOMES.map(function(o){
     var cls=o.k==='dnc'?'dnc':(o.k==='wrong'||o.k==='notint')?'warn':'';
-    return '<button class="'+cls+'" data-oc="'+o.k+'">'+esc(o.t)+'</button>';
+    var hot=(_cd && _cd.k===o.k) ? ' style="outline:3px solid #4aa3ff;outline-offset:2px"' : '';
+    return '<button class="'+cls+'" data-oc="'+o.k+'"'+hot+'>'+esc(o.t)+'</button>';
   }).join('');
+  if(_cd) btns = '<div class="nc" id="coachdone" style="border-color:#4aa3ff;color:#bcdcff">Coach: '+esc(coachDoneLabel(_cd))
+    +'. Tap the lit outcome to log it.</div>' + btns;
   // Use the resolved first name, not the raw roll string — `(r.o).split(' ')[0]` on the county's
   // "GORDON,STEVE" has no space to split on, so the question read "How did it go with GORDON,STEVE?"
   /* THE DIALOGUE, ON the screen he stares at for the whole call — not behind a tap. Same named/
@@ -10964,7 +11003,11 @@ function afterCall(r, o, nextC){
            + '&attendeePhoneNumber=' + encodeURIComponent('+1' + String(num||'').replace(/\D/g,'').slice(-10))
            + '&notes=' + encodeURIComponent((r.a||'') + (r.c ? (' | case ' + r.c) : '')
                + (r.x && r.d != null && r.d < 9000 ? (' | sale ' + r.x) : ''));
+    var _cda = coachDoneFor(r);
+    if(_cda && _cda.iso) bq += '&date=' + _cda.iso + '&month=' + _cda.iso.slice(0,7);
     book = '<div class="afterlab">Put it on the calendar</div>'
+         + (_cda && _cda.when ? '<div class="nc" style="border-color:#4aa3ff;color:#bcdcff">Coach heard: ' + esc(_cda.when)
+             + (_cda.iso ? ' (' + esc(_md(_cda.iso)) + (_cda.hm ? ' ' + esc(_cda.hm) : '') + '). The calendar opens on that day.' : '.') + '</div>' : '')
          + '<a class="btn" id="bk" href="' + BOOKURL + '?' + bq + '" target="_blank" rel="noopener">'
          + '&#128197; Book it now &mdash; they are still on the line</a>'
          + '<div class="mut" style="font-size:12px;margin-top:6px">Their name and this number are '
@@ -11239,6 +11282,22 @@ function logOutcome(r,o,digits){
      outcome logged on that serve; a real conversation (talked / appointment / callback) clears the
      retirement outright -- they re-engaged, so ordinary cadence applies again. */
   if(_ns.soft && _ns.open && n.no !== 'hard') n.resurf = (n.resurf||0) + 1;
+  /* The day and time the coach heard, for an appointment or a callback on this lead: a line in the
+     note (what the board and the phone both show), the callback date on n.next the way setCallback
+     writes it, and for an appointment on VERIFIED equity the next step itself. On unverified equity
+     the next step stays "Verify equity" (ayBookedUnverified below): that rule is older than this. */
+  var _cdn = (o.k==='appt' || o.k==='callback') ? coachDoneFor(r) : null;
+  if(_cdn && _cdn.when){
+    var _cl = today() + (o.k==='appt' ? ' advisor call booked: ' : ' callback asked: ') + _cdn.when + ' (coach)';
+    n.note = n.note ? (n.note.indexOf(_cl) >= 0 ? n.note : (n.note + '\n' + _cl)) : _cl;
+    if(_cdn.iso && _cdn.iso >= today()){
+      n.next = _cdn.iso;
+      if(_cdn.hm){ var _p = _cdn.iso.split('-'), _q = _cdn.hm.split(':');
+        n.nextTs = new Date(+_p[0], +_p[1]-1, +_p[2], +_q[0], +_q[1]).getTime(); }
+      if(o.k==='appt' && eqFact(r) && !(n.nextStep && n.nextStep.date))
+        n.nextStep = {date:_cdn.iso, what:('Advisor call ' + _cdn.when).slice(0,120)};
+    }
+  }
   if(o.k==='appt'){
     if(AY_STAGES.indexOf(n.status) < 1) n.status='Appointment';   /* never walk Offer made / Under contract back */
     if(!eqFact(r)) ayBookedUnverified(n, today(), Date.now());

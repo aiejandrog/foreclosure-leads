@@ -178,6 +178,10 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
+  /* a Monday, 16 Nov 2026, 12:30 local */
+  var NOW=new Date(2026,10,16,12,30).getTime(), WA=function(s){ var x=T.whenAt(s,NOW); return x.iso+' '+x.hm; };
+  o.whenat=[WA('tomorrow at 9'), WA('Tomorrow morning at 10:15 AM'), WA('later today around 4'), WA('friday at 2 pm'),
+            WA('monday at 9 am'), WA('around 7 pm'), WA('tomorrow'), WA('el martes a las 3 de la tarde'), WA('in two days at noon')];
   var shown='it sounds like youre feeling confident about things what steps have you taken so far';
   o.readback=[T.readBack('it sounds like youre feeling confident about things what steps have you taken so far', shown),
               T.readBack('sounds like youre feeling confident what steps have you taken', shown),
@@ -360,6 +364,10 @@ else:
         chk(o['one_hard'] == 0, 'one mic: no line ever carries a hard YOU or THEM label', o['one_hard'])
         chk(o['ch_lines'] == ['them:Hello?', 'you:Hey,', 'them:No.', 'them:I'], 'two channels: mic is you, laptop sound is them, their echo in the mic is dropped', o['ch_lines'])
         chk(o['ch_you_quiet'] == 0 and o['ch_them'] == ['obj:notint'], 'two channels: only their channel raises a card, on partial words', [o['ch_you_quiet'], o['ch_them']])
+        chk(o['whenat'] == ['2026-11-17 09:00', '2026-11-17 10:15', '2026-11-16 16:00', '2026-11-20 14:00',
+                            '2026-11-23 09:00', ' 19:00', '2026-11-17 ', '2026-11-17 15:00', '2026-11-18 12:00'],
+            'the day and time they gave becomes a calendar date for Call Mode, and what cannot be placed stays empty', o['whenat'])
+        chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
         chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')
         chk('var AI_PAUSE=600' in src and 'S.ai.n=n0; aiAsk(); return;' in src and 'line:j.line' in src, 'the AI is asked 0.6 s after the last word, an answer to half a sentence is thrown away, and each line is saved with the call')
