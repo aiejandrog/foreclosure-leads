@@ -56,7 +56,7 @@ PARSER_VERSION = 1
 DEFAULT_LIMIT = 60
 PAUSE_S = 1.2
 RETRY_GAP_DAYS = 14          # a document the county would not serve is asked for again after this
-RESOLVE_CASES = 25           # Broward name searches per run, to find a row's instrument number
+RESOLVE_CASES = 60           # Broward name searches per run, to find a row's instrument number (443 cases waited on 11-16)
 MIN_FIGURE = 100.0
 MAX_FIGURE = 50_000_000.0
 

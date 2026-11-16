@@ -110,6 +110,10 @@ src = open(os.path.join(HERE, 'complaint_reader.py'), encoding='utf-8').read()
 body = src[src.index('def read_broward_notice('):src.index('def foreclosed_face(')]
 rec('4d: a notice never keeps a pleaded balance', "e['principal'] = None" in body and "'lp_notice'" in body)
 
+run_src = src[src.index('def run('):src.index('def for_board(')]
+rec('4e: the nightly limit is per county, so Miami cannot use up Broward's share',
+    run_src.count('n = 0   ') >= 2 and run_src.index("if 'BROWARD' in counties") < run_src.rindex('n = 0   '))
+
 # ---- 5. board fields -------------------------------------------------------------------------------------
 entry = dict(p, status='read', kind='complaint', pages=3, pages_read=3)
 b = CR.for_board(entry)
