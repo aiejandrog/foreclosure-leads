@@ -178,6 +178,10 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
+  var shown='it sounds like youre feeling confident about things what steps have you taken so far';
+  o.readback=[T.readBack('it sounds like youre feeling confident about things what steps have you taken so far', shown),
+              T.readBack('sounds like youre feeling confident what steps have you taken', shown),
+              T.readBack('me and my wife decided to get a lawyer', shown), T.readBack('yeah', shown), T.readBack('anything', '')];
 
   /* 15. Two channels (Phone Link): channel 0 is you, channel 1 is them, from the first word.
      Their words leaking into the mic are dropped; a one-word answer on their channel is theirs. */
@@ -355,6 +359,8 @@ else:
         chk(o['one_hard'] == 0, 'one mic: no line ever carries a hard YOU or THEM label', o['one_hard'])
         chk(o['ch_lines'] == ['them:Hello?', 'you:Hey,', 'them:No.', 'them:I'], 'two channels: mic is you, laptop sound is them, their echo in the mic is dropped', o['ch_lines'])
         chk(o['ch_you_quiet'] == 0 and o['ch_them'] == ['obj:notint'], 'two channels: only their channel raises a card, on partial words', [o['ch_you_quiet'], o['ch_them']])
+        chk(o['readback'] == [True, True, False, False, False], 'reading the AI line back is not a reason to change it; their answer is', o['readback'])
+        chk('AI_PAUSE' in src and 'AI_HOLD' in src and "shown:S.ai.line" in src, 'the AI line waits for a pause, holds long enough to read, and tells the model what is on screen')
         chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 

@@ -127,7 +127,7 @@ def venice_key():
     return user_var("VENICE_API_KEY")
 
 
-def ai_line(lines, lang=""):
+def ai_line(lines, lang="", shown=""):
     """The next line for the caller, or '' (no key, nothing to answer, a slow or failed call, or a
     reply that breaks the no-numbers rule). Never raises: a dead model must not touch the call."""
     key = venice_key()
@@ -143,6 +143,11 @@ def ai_line(lines, lang=""):
     if not rows:
         return ""
     system = AI_SYSTEM + ("\nReply in Spanish." if str(lang).lower().startswith("es") else "")
+    shown = " ".join(str(shown or "").split())[:320]
+    if shown:
+        system += ("\nThe caller's screen currently shows this line from you: \"" + shown + "\". If the newest "
+                   "transcript lines are the caller saying it and the homeowner has not answered yet, reply SKIP. "
+                   "Never repeat that line; move the conversation forward from the homeowner's answer.")
     body = {"model": AI_MODEL, "max_tokens": 200, "temperature": 0.4, "stream": False,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
             "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
@@ -428,7 +433,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            line = ai_line(b.get("lines"), b.get("lang") or "")
+            line = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "")
             return self._send(200, {"line": line, "ms": int((time.time() - t0) * 1000)}, private=True)
 
         # /api/session/start
