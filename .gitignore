@@ -101,6 +101,7 @@ pb_court_filings.json
 !_lienamountstest.py
 !_complaintreadertest.py
 !_pbcourttest.py
+!_pbnametest.py
 # _codelienamounttest: parser/estimate/board-bake checks on invented lien text only.
 !_codelienamounttest.py
 !_fieldsheettest.py

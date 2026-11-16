@@ -176,7 +176,10 @@ def build():
         mail_trace = ''
         if (conf == 'medium' and not addr and not unanchored and not mismatch and not _cands
                 and not a.get('ownerMismatch')
-                and str(a.get('county') or lp.get('county') or '').upper() == 'BROWARD'):
+                # Palm Beach joined 2026-11-16: fl_lp/palmbeach_resolve.py grades by the same rule
+                # (one parcel in the county carries every token of the name), so it gets the same
+                # treatment the 2026-10-15 and 2026-10-27 decisions gave Broward.
+                and str(a.get('county') or lp.get('county') or '').upper() in ('BROWARD', 'PALM BEACH')):
             mail_trace = str(a.get('mailAddr') or '').strip()
             if mail_trace:
                 nmailtrace += 1

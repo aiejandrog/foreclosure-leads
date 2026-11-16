@@ -172,6 +172,9 @@ def main():
     # folio match. Bounded (40 rows / 15 min, cached per case) and optional — it exits 2 when AcclaimWeb or
     # Windows OCR is unavailable, which must not stop the chain. Before lp_values so a promoted row is priced.
     run('RESOLVE BROWARD PARCEL (mortgage PIN)', [os.path.join('fl_lp', 'broward_pin.py')], ok=(0, 2))
+    # 2026-11-16: Palm Beach filings now come from the court's case search (pb_court_filings.py) and
+    # carry a name, not a parcel. Same name ladder as Broward, against the free state roll.
+    run('RESOLVE PALM BEACH (owner name on the state roll)', [os.path.join('fl_lp', 'palmbeach_resolve.py')])
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])
