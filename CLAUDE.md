@@ -227,6 +227,12 @@ NOTICE due +14, file closes +28, and that +28 date is the call-by date the notic
 `deal_desk.py` put a due or overdue mailing at the top of the daily sheets. A bare `EST` in the owner name
 is an estate and is dropped from every mail pool.
 
+**Day 0 notice (2026-11-16):** `bsg_mail_variants.py --notice` prints new leads as the plain NOTICE: RESPONSE
+REQUESTED sheet instead of the A/B/C variants and keeps the printed call-by date in the ledger so touches 2
+and 3 repeat it. A fresh run never re-deals a case that is `in_print_file` or has a mail date. After mailing:
+`mail_followups.py --mark-mailed --touch 1 --from <the built .html>`. Follow-ups pick the due batch on their
+own; `--batch YYYY-MM-DD` builds one early.
+
 ## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
 
 Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the

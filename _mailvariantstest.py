@@ -478,7 +478,9 @@ with redirect_stdout(io.StringIO()):
     V.main(args)
 led3 = json.load(open(led_p, encoding='utf-8'))
 rec('a normal run keeps the print-file marks on a ledger entry and its arm, code and page',
-    all(v.get('in_print_file') is True and v.get('print_file') == 'frozen.pdf' for v in led3['cases'].values())
+    all(v.get('in_print_file') is True and v.get('print_file') == 'frozen.pdf'
+        for c, v in led3['cases'].items() if c in hand['cases'])   # 2026-11-16: a new case may be dealt, never a printed one
+    and all(led3['cases'][c] == v for c, v in hand['cases'].items())
     and all((led3['cases'][c]['assigned'], led3['cases'][c]['code'], led3['cases'][c]['page'])
             == (v['assigned'], v['code'], v['page']) for c, v in led2['cases'].items()))
 with open(led_p, 'w', encoding='utf-8') as fh:

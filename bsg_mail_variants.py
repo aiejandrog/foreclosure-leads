@@ -1059,6 +1059,26 @@ _SALE = {
           'interesa explorar una venta antes de esa fecha.**'}
 
 NOTICE = {
+    1: {
+        'head': ('NOTICE: RESPONSE REQUESTED', 'AVISO: SOLICITAMOS SU RESPUESTA'),
+        'sub': ('Please call about your property and the case listed above.',
+                'Por favor, llame para hablar sobre su propiedad y el caso indicado arriba.'),
+        'cta': ('CALL TODAY', 'LLAME HOY'),
+        'envelope': 'Personal correspondence from %s',
+        'en': ["{recopen} I'm {signer} with {co}, a South Florida home buyer.",
+               '{salepara}',
+               'Tell me what you want to do with the property. If you want to sell, we can discuss a '
+               'possible purchase. If your goal is to keep the home or ask for more time, say that first.',
+               'Call **{phone}** and mention BSG File No. {fileno}. We close our outreach file on '
+               '**{callby}**. Calling gives us a chance to speak before our mailings end.'],
+        'es': ['{recopen} Soy {signer}, de {co}, una empresa que compra casas en el sur de la Florida.',
+               '{salepara}',
+               'Dígame qué desea hacer con la propiedad. Si desea vender, podemos hablar de una posible '
+               'compra. Si busca conservar su casa o pedir más tiempo, dígamelo primero.',
+               'Llame al **{phone}** y mencione el archivo de BSG {fileno}. Cerraremos nuestro '
+               'seguimiento el **{callby}**. Su llamada nos permite conversar antes de que terminemos '
+               'los envíos.'],
+    },
     2: {
         'head': ('SECOND NOTICE: WE HAVE NOT HEARD FROM YOU', 'SEGUNDO AVISO: NO HEMOS RECIBIDO SU RESPUESTA'),
         'sub': ('Our first letter concerned {street}. We are following up.',
@@ -1119,10 +1139,14 @@ def _bold(text):
 
 
 def call_by(r, today, override=None, sent=None):
-    """The day we close the outreach file: --call-by, else the day touch 1 was MAILED + 28 days
-    (mail_followups' log), else the ledger's first print date + 28. Same date on touch 2 and 3."""
+    """The day we close the outreach file, the same date on all three touches: --call-by, else the
+    date the day 0 notice printed (kept in the ledger), else the day touch 1 was MAILED + 28 days
+    (mail_followups' log), else the ledger's first print date + 28, else today + 28."""
     if override:
         return override
+    kept = parse_date(r.get('ledger_call_by') or '')
+    if kept:
+        return kept
     import mail_followups as MF
     base = (MF.t1_date(r.get('case'), sent) or parse_date(r.get('ledger_date') or '') or today)
     return base + dt.timedelta(days=CALL_BY_DAYS)
@@ -1136,13 +1160,19 @@ def notice_vals(r, today, lang, cb):
     sale = sale if sale and sale >= today else None
     rec = ''
     recsent = ''
+    recopen = ('Hay un caso de ejecución hipotecaria relacionado con su propiedad en el registro público '
+               'de la corte.' if es else
+               'A foreclosure case concerning your property is on the public court record.')
     if filed:
+        recopen = ('El **%s** se registró un aviso de un caso de ejecución hipotecaria relacionado con '
+                   'su propiedad.' if es else 'A foreclosure case notice concerning your property was '
+                   'recorded on **%s**.') % fmt(filed)
         rec = (' registrado el %s' if es else ' recorded on %s') % fmt(filed)
         recsent = ('El aviso del caso se registró el **%s**. ' if es else
                    'The case notice was recorded on **%s**. ') % fmt(filed)
     return {'signer': M.SENDER['name'], 'co': _co(), 'phone': M.contact_phone(),
             'street': M.street_case(r['addr'].split(',')[0]), 'callby': fmt(cb),
-            'fileno': show_code(r['code']), 'rec': rec, 'recsent': recsent,
+            'fileno': show_code(r['code']), 'rec': rec, 'recsent': recsent, 'recopen': recopen,
             'salepara': (_SALE[lang].replace('{sale}', fmt(sale, True)) if sale else _NO_SALE[lang])}
 
 
@@ -1257,7 +1287,7 @@ def build_notices(rows, today, info, touch, cb_override=None):
              '<li>Pull anyone who called, answered or said stop since the last letter before you stuff.</li>'
              '</ul><div class="note">%d of %d in the ledger built. Nothing here is recorded as mailed.</div></div>'
              '<div class="ft">%s<span class="fr">Operator sheet</span></div></section>'
-             % ('Second notice' if touch == 2 else 'Final notice', n, _e(date_en(today)), n + 1, touch,
+             % ({1: 'Notice (day 0)', 2: 'Second notice', 3: 'Final notice'}[touch], n, _e(date_en(today)), n + 1, touch,
                 _e(' / '.join(date_en(c) for c in cbs)), _e(NOTICE_HOURS) or 'not printed (no --hours)',
                 M.PER_LETTER, n * M.PER_LETTER, n + 1, _e(_co()), _e(NOTICE[touch]['envelope'] % _co()),
                 n, info.get('eligible', n), _e(_co())))
@@ -1698,6 +1728,7 @@ def from_ledger_rows(path, data_dir, today):
         r['fallback'] = e.get('fallback') or ''
         r['code'], r['slug'] = e['code'], e['page']
         r['ledger_date'] = e.get('date') or ''
+        r['ledger_call_by'] = e.get('call_by') or ''
         out.append(r)
     order = {c: n for n, c in enumerate(want)}
     out.sort(key=lambda r: order[r['case']])
@@ -1747,6 +1778,30 @@ def sample_rows(today):
     ]
 
 
+def due_rows(rows, touch, today, batch=None):
+    """Of the ledger's rows, the ones this follow-up goes to: first letter recorded as mailed, this
+    touch not yet mailed, and either the named batch or a batch whose touch is due within 2 days.
+    With no mail log at all the rows pass through (the first batch was built before the log existed)."""
+    import mail_followups as MF
+    sent = MF.load_sent()
+    if not sent:
+        return rows, ''
+    keep = []
+    for r in rows:
+        e = sent.get(r['case']) if isinstance(sent.get(r['case']), dict) else {}
+        t1 = MF.t1_date(r['case'], sent)
+        if not t1 or e.get('t%d' % touch):
+            continue
+        if (t1 == batch) if batch else (t1 + dt.timedelta(days=MF.STEP[touch]) <= today + dt.timedelta(days=2)):
+            keep.append(r)
+    if keep:
+        return keep, 'touch %d goes to %d of %d ledger pieces (first letter mailed, this touch not yet)' % (
+            touch, len(keep), len(rows))
+    days = sorted({MF.t1_date(r['case'], sent) for r in rows if MF.t1_date(r['case'], sent)})
+    return [], ('nothing is due for touch %d within 2 days. To build early name the batch: --batch %s'
+                % (touch, ' or '.join(d.isoformat() for d in days) or 'YYYY-MM-DD'))
+
+
 # ════════════════════════════ run ════════════════════════════
 def run(a):
     today = dt.date.today()
@@ -1757,16 +1812,17 @@ def run(a):
     NOTICE_HOURS = (getattr(a, 'hours', '') or '').strip()
     NOTICE_HOURS_ES = (getattr(a, 'hours_es', '') or '').strip()
     cb_override = None
-    if touch > 1:
-        if not (sample or from_ledger):
-            print('REFUSED: --touch 2 and 3 go to the pieces already printed. Add --from-ledger <ledger>.')
-            return 2
+    notice = touch > 1 or bool(getattr(a, 'notice', False))
+    if touch > 1 and not (sample or from_ledger):
+        print('REFUSED: --touch 2 and 3 go to the pieces already printed. Add --from-ledger <ledger>.')
+        return 2
+    if notice:
         if getattr(a, 'call_by', ''):
             cb_override = parse_date(a.call_by)
             if not cb_override or cb_override <= today:
                 print('REFUSED: --call-by must be a future date, YYYY-MM-DD.')
                 return 2
-        a.no_pages = True                     # a follow-up never rewrites the private pages
+        a.no_pages = True                     # a notice never rewrites the private pages
     tag = 'SAMPLE' if sample else today.isoformat() + ('_from_ledger' if from_ledger else '')
     data_dir = os.path.abspath(a.data_dir) if a.data_dir else M.data_dir()
 
@@ -1806,11 +1862,26 @@ def run(a):
             info['ledger'] = os.path.basename(a.from_ledger)
             print("from ledger: %d marked in_print_file, %d built, %d left out by today's checks"
                   % (wanted, len(rows), held))
+            if touch > 1:
+                rows, why = due_rows(rows, touch, today, parse_date(getattr(a, 'batch', '') or ''))
+                if why:
+                    print(why)
             if not rows:
                 return 0
         else:
             ledger = load_ledger(ledger_path)
             rows, drops, eligible, counts = select(a.days, data_dir, today, a.trigger_days)
+            # 2026-11-16: a fresh run never re-deals a case that is already in a print file or has a
+            # mail date. Without this the 11-16 notice run picked 63 of the 90 mailed that morning.
+            import mail_followups as MF
+            _sent = MF.load_sent()
+            _had = {c for c, v in ledger.items() if isinstance(v, dict) and v.get('in_print_file') is True}
+            _had |= {c for c in _sent if MF.t1_date(c, _sent)}
+            _n0 = len(rows)
+            rows = [r for r in rows if r['case'] not in _had]
+            if _n0 - len(rows):
+                drops['already printed or mailed'] = _n0 - len(rows)
+                eligible -= _n0 - len(rows)
             info['eligible'] = eligible
             n = a.limit if a.limit else int(a.budget // M.PER_LETTER)
             rows = rows[:n]
@@ -1832,14 +1903,14 @@ def run(a):
         if a.with_qr and not qr_svg('https://example.invalid/'):
             print('WARNING: --with-qr asked for but no QR library is importable (segno). Pieces carry '
                   'the phone number instead.')
-        if touch > 1:
+        if notice:
             doc, pieces = build_notices(rows, today, info, touch, cb_override)
         else:
             doc, pieces = build_html(rows, today, info)
 
         if not a.no_pages:
             write_pages(rows, today, pages_dir, a.voice_en, a.voice_es)
-        stem = 'BSG_Mail_Variants' if touch == 1 else 'BSG_Mail_Notice%d' % touch
+        stem = 'BSG_Mail_Notice%d' % touch if notice else 'BSG_Mail_Variants'
         p_html = P.out('%s_%s.html' % (stem, tag))
         p_pdf = P.out('%s_%s.pdf' % (stem, tag))
         with open(p_html, 'w', encoding='utf-8') as fh:
@@ -1859,6 +1930,8 @@ def run(a):
                 ledger[r['case']] = {**keep, 'assigned': r['assigned'], 'variant': r['variant'],
                                      'date': today.isoformat(), 'code': r['code'], 'page': r['slug'],
                                      **({'fallback': r['fallback']} if r['fallback'] else {}),
+                                     **({'style': 'notice', 'call_by': call_by(r, today, cb_override).isoformat()}
+                                        if notice else {}),
                                      **({'event': r['event']} if isinstance(r.get('event'), str) else {})}
             save_ledger(ledger_path, ledger)
     except DataError as e:
@@ -1890,11 +1963,11 @@ def run(a):
     print('wrote', pdf_note)
     if not a.no_pages:
         print('wrote %d private pages under %s (not published)' % (len(rows), pages_dir))
-    if touch > 1:
-        print('touch %d notice: call-by %s; hours line %s; ledger not rewritten'
+    if notice:
+        print('touch %d notice: call-by %s; hours line %s'
               % (touch, ' / '.join(sorted({date_en(call_by(r, today, cb_override)) for r in rows})),
                  'printed' if NOTICE_HOURS else 'NOT printed (pass --hours "Mon to Fri 9 am to 6 pm")'))
-    elif from_ledger:
+    if from_ledger or touch > 1:
         print('ledger not rewritten (--from-ledger only reads it)')
     else:
         print('wrote', ledger_path, '(assignment only; nothing is marked as mailed)')
@@ -1923,6 +1996,9 @@ def main(argv=None):
                     help='rebuild exactly the cases this ledger marks in_print_file (same arms, codes, pages)')
     ap.add_argument('--touch', type=int, choices=(1, 2, 3), default=1,
                     help='1 = the variants; 2 = SECOND NOTICE (day 7); 3 = FINAL NOTICE (day 14). 2 and 3 need --from-ledger')
+    ap.add_argument('--notice', action='store_true',
+                    help='day 0 as the plain NOTICE: RESPONSE REQUESTED sheet instead of the A/B/C variants')
+    ap.add_argument('--batch', default='', help='touch 2/3: only the batch whose first letter was mailed on YYYY-MM-DD')
     ap.add_argument('--call-by', default='', help='YYYY-MM-DD the outreach file closes (default: first print date + 28 days)')
     ap.add_argument('--hours', default='', help='office hours printed under the call line; omitted when blank')
     ap.add_argument('--hours-es', default='', help='the same hours in Spanish (default: the --hours text)')

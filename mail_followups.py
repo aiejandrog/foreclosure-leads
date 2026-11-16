@@ -10,8 +10,9 @@ The D+28 date is the call-by date printed on the notices, so the log is also whe
 
 Run:
   python mail_followups.py                                   # what is due, counts only
-  python mail_followups.py --mark-mailed --touch 1 [--date YYYY-MM-DD]
-        every case the ledger marks in_print_file went out on that day (default: today)
+  python mail_followups.py --mark-mailed --touch 1 [--date YYYY-MM-DD] [--from <built .html>]
+        the pieces in that built file went out on that day (and are flagged in_print_file); with no
+        --from, every in_print_file case that has no mail date yet. A recorded date is never changed.
   python mail_followups.py --mark-mailed --touch 2 [--date ...] [--from <notice .html>]
         the cases in that built notice file went out (default: the newest BSG_Mail_Notice2_*.html)
 
@@ -80,7 +81,25 @@ def ledger_cases():
 
 def cases_in(html_path):
     with open(html_path, encoding='utf-8') as fh:
-        return re.findall(r'<section class="pc pn" data-case="([^"]+)"', fh.read())
+        return re.findall(r'<section class="pc p\w+" data-case="([^"]+)"', fh.read())
+
+
+def flag_printed(cases, src):
+    """Mark these ledger cases in_print_file, so the follow-ups (--from-ledger) go to them."""
+    path = P.out(LEDGER)
+    d = _read(LEDGER, None)
+    if not isinstance(d, dict) or not isinstance(d.get('cases'), dict):
+        raise SystemExit('REFUSED: %s is missing or unreadable; nothing recorded.' % LEDGER)
+    miss = [c for c in cases if not isinstance(d['cases'].get(c), dict)]
+    if miss:
+        raise SystemExit('REFUSED: %d case(s) in that file are not in %s.' % (len(miss), LEDGER))
+    for c in cases:
+        d['cases'][c]['in_print_file'] = True
+        d['cases'][c]['print_file'] = os.path.basename(src)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(d, fh, indent=1)
+    os.replace(tmp, path)
 
 
 def newest_notice(touch):
@@ -91,8 +110,14 @@ def newest_notice(touch):
 def mark_mailed(touch, day, src=''):
     """Record that a touch went out. Returns (cases marked, source)."""
     sent = load_sent()
-    if touch == 1:
-        cases, src = ledger_cases(), LEDGER
+    if touch == 1 and src:
+        if not os.path.isfile(src):
+            raise SystemExit('REFUSED: %s not found.' % src)
+        cases = [c for c in cases_in(src) if not t1_date(c, sent)]
+        if cases:
+            flag_printed(cases, src)
+    elif touch == 1:                        # every printed piece with no mail date yet, never a re-date
+        cases, src = [c for c in ledger_cases() if not t1_date(c, sent)], LEDGER
     else:
         src = src or newest_notice(touch)
         if not src or not os.path.isfile(src):
@@ -158,9 +183,9 @@ def status_lines(today=None):
                 L.append('  %s: mailed to %d.' % (NAME[s['touch']], s['done']))
             else:
                 L.append('  %s: mail %s (%s). Build that morning: python bsg_mail_variants.py --touch %d '
-                         '--from-ledger <ledger>, then --mark-mailed --touch %d.'
+                         '--batch %s --from-ledger <ledger>, then --mark-mailed --touch %d.'
                          % (NAME[s['touch']], s['due'].strftime('%a %b %d'), _when(s['left']),
-                            s['touch'], s['touch']))
+                            s['touch'], b['t1'].isoformat(), s['touch']))
     return L
 
 
