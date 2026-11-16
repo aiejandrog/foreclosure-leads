@@ -28,12 +28,11 @@ ROW = {'case': 'T-1', 'owner': 'DOE,JANE', 'first': 'Jane', 'addr': '1 NW 2 ST, 
 t = B.letter(ROW)
 mars = D.mars_part('govt', 'may_agree', 'may_stop', company=B.SENDER['co'], as_html=False)
 
-chk('letter carries the three mandated MARS sentences from disclaimer.py', mars and mars in t)
-chk('mars text names the sender company, not a placeholder', '{co}' not in t and B.SENDER['co'] in mars)
-chk('letter carries the English opt-out line from outreach_copy', OC.OPTOUT_LINE_EN in t)
-chk('letter carries the Spanish opt-out line from outreach_copy', OC.OPTOUT_LINE_ES in t)
-chk('opt-out comes after the MARS block and before the signature',
-    t.index(mars) < t.index(OC.OPTOUT_LINE_EN) < t.index(B.SENDER['name'], t.index(OC.OPTOUT_LINE_ES)))
+# 2026-11-16, Alex: the MARS block and the opt-out line are OUT of every mailed letter.
+chk('letter carries no MARS block', mars and mars not in t and 'not associated with the government' not in t)
+chk('letter carries no opt-out line, EN or ES', OC.OPTOUT_LINE_EN not in t and OC.OPTOUT_LINE_ES not in t)
+chk('letter still opens with the four denials and ends on the signer and phone',
+    "I'm not with the government or your lender" in t and t.rstrip().endswith(B.contact_phone()))
 chk('the street sentence and the buy offer are still there',
     "I saw the court filing on 1 NW 2 St." in t and "I buy houses in this situation" in t)
 chk("the offer leads with keep-or-sell options, no sale-date assumption",
@@ -41,8 +40,9 @@ chk("the offer leads with keep-or-sell options, no sale-date assumption",
 chk('printed variant is the same words', B.letter_printed(ROW) == t)
 import html as H                      # noqa: E402
 book = B.build([ROW], 80, 14, {}, 1)
-chk('handwritten book carries them too (HTML-escaped)',
-    H.escape(OC.OPTOUT_LINE_EN) in book and H.escape(OC.OPTOUT_LINE_ES) in book and H.escape(mars) in book)
+chk('handwritten book carries neither (HTML-escaped)',
+    H.escape(OC.OPTOUT_LINE_EN) not in book and H.escape(OC.OPTOUT_LINE_ES) not in book
+    and H.escape(mars) not in book)
 
 # the detector must not treat our own opt-out sentence, quoted back, as a stop
 try:

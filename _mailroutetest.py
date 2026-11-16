@@ -77,7 +77,8 @@ a = [r for r in rows if r['case'] == 'ABS1'][0]
 rec('absentee: envelope goes to the mailing address', a['to_line1'] == '9 Elm Rd' and a['city'] == 'ORLANDO' and a['zip'] == '32801', a)
 body = B.letter(a)
 rec('absentee: the letter body still names the property', '100 NW 1ST Ave' in body and 'Elm' not in body, body[:200])
-rec('letter carries the opt-out line EN and ES', OC.OPTOUT_LINE_EN in body and OC.OPTOUT_LINE_ES in body)
+rec('letter carries no opt-out line, EN or ES (2026-11-16)',
+    OC.OPTOUT_LINE_EN not in body and OC.OPTOUT_LINE_ES not in body)
 rec('letter carries no dollar figure and no equity word', '$' not in body and 'equity' not in body.lower())
 html = B.build_route(rows, held)
 rec('hand-write book: absentee envelope labelled', "OWNER'S MAILING ADDRESS" in html and '9 Elm Rd' in html)

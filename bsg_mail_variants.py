@@ -17,8 +17,8 @@ WHAT IT NEVER DOES
   * It never marks anything as mailed and never touches mail_route_printed.json. The ledger records
     which arm a case was assigned to, nothing else, and carries no name and no address.
   * It prints no dollar figure. None of the three pieces has a place for one.
-  * It never writes compliance text. The three MARS sentences come from disclaimer.mars_part(), the
-    opt-out lines from outreach_copy, and every piece is checked for both before a file is written.
+  * The mailed pieces carry no MARS block and no opt-out line (Alex, 2026-11-16), and a piece that
+    carries either is refused. The private pages still take both from disclaimer / outreach_copy.
   * It never names a court event the data does not carry. A date that does not parse is no date: the
     lead gets no event line and no calendar, it does not get a guessed one.
   * QR codes print only with --with-qr, because the pages are not live until someone publishes them.
@@ -594,10 +594,8 @@ def letter_es(r):
             'Vi el caso que se presentó en la corte sobre %s. Si vender es algo que usted '
             'consideraría, yo compro casas en esta situación, o le puedo ayudar a vender antes de que '
             'le pongan fecha de venta.\n\n'
-            '%s\n\n'
-            '%s\n\n'
             '%s\n%s'
-            % (r['first'], M.SENDER['name'], _co(), street, mars('es'), optout('es'),
+            % (r['first'], M.SENDER['name'], _co(), street,
                M.SENDER['name'], M.contact_phone()))
 
 
@@ -776,8 +774,9 @@ def _paras(text):
     return ''.join('<p>%s</p>' % _e(p).replace('\n', '<br>') for p in text.split('\n\n') if p.strip())
 
 
+# 2026-11-16, Alex: mailed letters carry NO MARS block and NO opt-out line. Do not add them back.
 def _legal(lang):
-    return '<p>%s</p><p>%s</p>' % (_e(mars(lang)), _e(optout(lang)))
+    return ''
 
 
 def _col(lang, inner):
@@ -1016,13 +1015,16 @@ def build_html(rows, today, info):
 def check_pieces(pieces, rows, never=()):
     """Refuse to write a run in which any piece is missing a mandated line or carries something it
     must not. `never` is a list of strings that may not appear (the return address's second line)."""
-    need = [_e(mars('en')), _e(mars('es')), _e(optout('en')), _e(optout('es')), _e(M.contact_phone())]
+    need = [_e(M.contact_phone())]
+    gone = [_e(mars('en')), _e(mars('es')), _e(optout('en')), _e(optout('es'))]
     bad = []
     for r, p in zip(rows, pieces):
         text = re.sub(r'<svg.*?</svg>', '', p, flags=re.S)
         why = []
         if any(x not in text for x in need):
-            why.append('a MARS or opt-out line or the phone is missing')
+            why.append('the phone is missing')
+        if any(x in text for x in gone):
+            why.append('a MARS or opt-out line (removed from mail 2026-11-16)')
         if '$' in text:
             why.append('a dollar sign')
         # The homeowner's own street may carry a unit ("# 4"); everything else on the sheet may not.
