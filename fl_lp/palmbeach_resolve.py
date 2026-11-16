@@ -39,7 +39,11 @@ from lp_resolve2 import owner_agrees, toks             # noqa: E402  (the wrong-
 
 SRC = os.path.join(REPO, 'lis_pendens.json')
 OUT = os.path.join(REPO, 'lp_addresses.json')
-CO_NO = 60
+CO_NO = 60                # Palm Beach; the default for every function below
+# County numbers on the FL DOR roll. Miami-Dade was added 2026-11-16 for the case-walk rows (md_case_walk.py),
+# which carry a defendant name and no legal description, exactly like Palm Beach court filings.
+COUNTIES = {'PALM BEACH': (60, 'pb-name'), 'MIAMI-DADE': (53, 'md-name')}
+RUNGS = ('pb-name', 'md-name')
 PAGE = 60                 # rows asked per query; a full page on a bare last name = too common
 PAUSE_S = 0.35
 ENTITY_RE = re.compile(r'\b(LLC|INC|CORP|TRUST|ASSN|ASSOC|CO|LP|LTD|DMCC|PLLC|BANK|ESTATE)\b')
@@ -105,12 +109,12 @@ def queries(owner):
     return out
 
 
-def roll_name(prefix, fetch=None):
+def roll_name(prefix, fetch=None, co_no=CO_NO):
     """Parcels in Palm Beach whose owner of record starts with `prefix`. None = the roll did not
     answer (unknown, never 'no such owner')."""
     fetch = fetch or FC._q
     try:
-        got = fetch("CO_NO=%d AND OWN_NAME LIKE '%s%%'" % (CO_NO, prefix), PAGE)
+        got = fetch("CO_NO=%d AND OWN_NAME LIKE '%s%%'" % (co_no, prefix), PAGE)
     except Exception:
         return None
     return got if isinstance(got, list) else None
@@ -121,12 +125,12 @@ def _site(h):
             str(h.get('PHY_CITY') or '').strip().title(), str(h.get('PHY_ZIPCD') or '').strip()[:5])
 
 
-def resolve_row(rec, fetch=None, pause=PAUSE_S):
+def resolve_row(rec, fetch=None, pause=PAUSE_S, co_no=CO_NO, rung='pb-name'):
     owner = rec.get('owner') or ''
     qs = queries(owner)
     hits, tried, unreachable = [], [], True
     for i, q in enumerate(qs):
-        got = roll_name(q, fetch)
+        got = roll_name(q, fetch, co_no)
         tried.append(q)
         if got is None:
             continue
@@ -156,7 +160,7 @@ def resolve_row(rec, fetch=None, pause=PAUSE_S):
                             % (len(hits), tried)}
     if len(matches) > 1:
         return {'confidence': 'low', 'needsHuman': True,
-                'evidence': 'state roll: %d Palm Beach parcels carry the full name; the name cannot '
+                'evidence': 'state roll: %d parcels in the county carry the full name; the name cannot '
                             'pick one' % len(matches),
                 'candidates': [{'folio': str(h.get('PARCEL_ID') or ''), 'addr': _site(h)[0],
                                 'city': _site(h)[1], 'owner': (h.get('OWN_NAME') or '').strip()}
@@ -167,11 +171,11 @@ def resolve_row(rec, fetch=None, pause=PAUSE_S):
     row = {'folio': str(h.get('PARCEL_ID') or '').strip(), 'addr': a1, 'city': city, 'zip': zc,
            'paOwner': (h.get('OWN_NAME') or '').strip(), 'candidates': [], 'ownerMismatch': False,
            'value': int(cad.get('market_value') or 0), 'hs': bool(cad.get('homestead')),
-           'rung': 'pb-name'}
+           'rung': rung}
     mail = ' '.join(str(cad.get('mail_addr') or '').split())
     if mail:
         row['mailAddr'] = mail
-    ev = 'state roll: exactly one Palm Beach parcel carries every token of %r' % owner
+    ev = 'state roll: exactly one parcel in the county carries every token of %r' % owner
     if not a1:
         row.update(confidence='low', needsHuman=True,
                    evidence=ev + ', but the roll lists no street address for it (vacant land?)')
@@ -189,7 +193,7 @@ def _due(prev_entry, today):
     """A Palm Beach case is (re)asked when it has no entry, or a 'none' older than the retry wait."""
     if not isinstance(prev_entry, dict):
         return True
-    if prev_entry.get('rung') != 'pb-name' and prev_entry.get('confidence') in ('high', 'medium', 'low'):
+    if prev_entry.get('rung') not in RUNGS and prev_entry.get('confidence') in ('high', 'medium', 'low'):
         return False                                   # another rung settled it: never overwritten
     if prev_entry.get('confidence') != 'none':
         return False
@@ -203,12 +207,16 @@ def _due(prev_entry, today):
     return age >= RETRY_NONE_DAYS
 
 
-def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=print):
+def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=print, county='PALM BEACH'):
     import datetime
     today = today or datetime.date.today()
+    co_no, rung = COUNTIES[county]
     recs = [r for r in json.load(open(src, encoding='utf-8'))
-            if isinstance(r, dict) and (r.get('county') or '').upper() == 'PALM BEACH'
-            and r.get('case') and r.get('owner')]
+            if isinstance(r, dict) and (r.get('county') or 'MIAMI-DADE').upper() == county
+            and r.get('case') and r.get('owner')
+            # Miami-Dade rows that came off the recorder carry a legal description and are placed by
+            # lp_resolve; only the case-walk rows (no legal, src court-walk) are this resolver's
+            and (county != 'MIAMI-DADE' or (r.get('src') == 'court-walk' and not r.get('legal')))]
     prev = {}
     if os.path.exists(out):
         try:
@@ -218,10 +226,10 @@ def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=pr
     todo = [r for r in recs if _due(prev.get(r['case']), today)]
     if limit:
         todo = todo[:limit]
-    say('%d PALM BEACH LP rows, %d to resolve by owner name' % (len(recs), len(todo)))
+    say('%d %s LP rows, %d to resolve by owner name' % (len(recs), county, len(todo)))
     counts, dead = {}, 0
     for i, rec in enumerate(todo, 1):
-        res = resolve_row(rec, fetch=fetch, pause=pause)
+        res = resolve_row(rec, fetch=fetch, pause=pause, co_no=co_no, rung=rung)
         if res.get('unreachable'):
             dead += 1
             if dead >= 8:
@@ -230,7 +238,7 @@ def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=pr
         else:
             dead = 0
         res.update({'case': rec['case'], 'lpOwner': rec.get('owner') or '',
-                    'legal': rec.get('legal') or '', 'county': 'PALM BEACH',
+                    'legal': rec.get('legal') or '', 'county': county,
                     'asked': today.isoformat()})
         prev[rec['case']] = res
         counts[res['confidence']] = counts.get(res['confidence'], 0) + 1
@@ -251,8 +259,9 @@ def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=pr
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--county', default='palm-beach', choices=['palm-beach', 'miami'])
     a = ap.parse_args()
-    run(limit=a.limit)
+    run(limit=a.limit, county={'palm-beach': 'PALM BEACH', 'miami': 'MIAMI-DADE'}[a.county])
     return 0
 
 
