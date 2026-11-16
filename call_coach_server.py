@@ -102,24 +102,59 @@ def deepgram_key():
 # from the lead file is ever put in the prompt.
 AI_URL = os.environ.get("COACH_AI_URL", "https://api.venice.ai/api/v1/chat/completions")
 AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-flash")
+# The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
+# this prompt only said "reflect and ask a question", and on test call 11-16 11:34 it circled:
+# "sounds like you're feeling overwhelmed, what would a good outcome look like" three times and
+# never asked for the appointment. The model now has to say where the call is on the path and
+# move it ONE step toward the close on every line.
+AI_STEPS = [
+    ("opener", "Opener", "Say who you are: with Biscayne Solutions Group, not the lender, not calling to buy the house."),
+    ("situation", "Situation", "Before I get into any of it, what is it you're actually hoping happens with the house?"),
+    ("problem", "Problem", "Has anybody actually explained what happens to your balance every time that sale date gets pushed back?"),
+    ("solution", "What they've tried", "Before today, were you out there looking at options so this didn't go to sale, or what were you doing about it?"),
+    ("consequence", "Consequence", "Let me ask you straight: if nothing changes and that date comes and goes, where does that leave you and your family?"),
+    ("bridge", "Bridge", "Okay, based on what you just told me, this is exactly the kind of thing we can help with. You said [what they want], and it has you feeling [their word for it]."),
+    ("close", "Book the advisor", "So here's the one thing I'd want for you before that date hits: our senior advisor takes about five minutes and lays your real options out. Worst case, you know more than you did this morning. Let me get you on his calendar. Is later today better, or first thing tomorrow?"),
+    ("booked", "Lock the time", "Repeat the day and time back, ask them to save your number, and end the call."),
+]
+AI_STEP_IDS = [x[0] for x in AI_STEPS]
 AI_SYSTEM = (
     "You coach a caller live, during a phone call with a homeowner who has a foreclosure case filed against "
     "their property. The caller is Alejandro with Biscayne Solutions Group. He is not the lender, he is not "
-    "buying the house, and there is no fee. The only thing he wants from this call is a free five-minute call "
-    "between the homeowner and a senior advisor who lays out every option the owner has.\n"
+    "buying the house, and there is no fee. The ONE goal of the call is to book a free five-minute call between "
+    "the homeowner and the senior advisor, at a set time. Every line you write moves toward that booking.\n"
     "You get the live transcript. Labels are CALLER, THEM or ?. They come from one microphone and are often "
     "wrong or missing, so work out who said each line from what it says.\n"
-    "Write the ONE next thing the caller should say out loud, answering the last thing the homeowner said.\n"
-    "Rules:\n"
-    "- One or two short spoken sentences, plain words, the way a person talks on the phone.\n"
-    "- First reflect what they just said in their own words, then end on ONE question.\n"
-    "- The question is open and about their situation, or it assumes the next step. Never a yes/no question "
-    "that hands them an exit, such as 'would you be open to' or 'do you have a minute'.\n"
-    "- No digits, no dollar amounts, no dates, no promises of any outcome, no legal advice, nothing about "
-    "what the bank or the court will do.\n"
+    "The call follows this path. Each step has the caller's own script line:\n"
+    + "".join("%d. %s (%s): %s\n" % (n + 1, sid, name, line) for n, (sid, name, line) in enumerate(AI_STEPS)) +
+    "How to write the next line:\n"
+    "- Work out which steps the call has already covered. Pick the NEXT step that is not done. Never go back, "
+    "never ask again something the homeowner already answered, never ask two questions of the same kind.\n"
+    "- Move fast. A step counts as done as soon as the homeowner gave any answer to it. Skip steps that no "
+    "longer matter. Once the homeowner has said what they want, what they fear, or that they have no plan, "
+    "go straight to bridge and then close. By the caller's fourth question at the latest, the line is the close.\n"
+    "- The line is: at most six words that pick up the homeowner's own words, then the step's script line. "
+    "Keep the script line's own wording; change only what must change to fit what they said. For bridge and "
+    "close, say the script line nearly word for word. Do not open with 'It sounds like' or 'I hear'. "
+    "Do not talk about feelings unless the step is bridge.\n"
+    "- Objections get one short sentence that agrees with them, then the path continues:\n"
+    "  not interested or busy, first time: agree, then the next step's question. Said again: thank them, "
+    "tell them the number is theirs if anything changes, and say goodbye.\n"
+    "  already has a lawyer, a plan, or the bank is helping: tell them to keep it exactly as it is, then the "
+    "next step's question.\n"
+    "  is this a scam, who are you, how did you get this: one sentence (public court record, not the lender, "
+    "not buying, no fee), then the next step's question.\n"
+    "  giving up, 'let them take it', does not care anymore: agree, then go straight to the close, because "
+    "the advisor also covers leaving on their own terms.\n"
+    "- The close asks for the time with two ways to say yes (later today or first thing tomorrow). That is "
+    "the only either/or allowed. Never ask whether they want the call.\n"
+    "- If they named a time, the step is booked: repeat it back and ask them to save the number.\n"
+    "- One or two short spoken sentences. Plain words. Write every number as a word. No dollar amounts, no "
+    "promises of any outcome, no legal advice, nothing about what the bank or the court will do.\n"
     "- If they ask to stop being called, the line confirms they are off the list and says goodbye.\n"
-    "- If the last line of the transcript is the caller speaking, reply with the single word SKIP.\n"
-    "Reply with the line only. No quotes, no label, no explanation.")
+    "Reply in exactly this form and nothing else:\n"
+    "STEP: <one step id from the path>\n"
+    "SAY: <the line>")
 _AI_BAD = re.compile(r"[\d$]")
 
 
@@ -127,28 +162,32 @@ def venice_key():
     return user_var("VENICE_API_KEY")
 
 
-def ai_line(lines, lang="", shown=""):
-    """The next line for the caller, or '' (no key, nothing to answer, a slow or failed call, or a
-    reply that breaks the no-numbers rule). Never raises: a dead model must not touch the call."""
+def ai_line(lines, lang="", shown="", asked=None):
+    """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
+    to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
+    dead model must not touch the call."""
     key = venice_key()
     if not key:
-        return ""
+        return {}
     rows = []
-    for l in (lines or [])[-16:]:
+    for l in (lines or [])[-24:]:
         t = str((l or {}).get("text") or "").strip()
         if not t:
             continue
         spk = str((l or {}).get("spk") or "")
         rows.append(("CALLER" if spk.startswith("you") else "THEM" if spk.startswith("them") else "?") + ": " + t[:400])
     if not rows:
-        return ""
-    system = AI_SYSTEM + ("\nReply in Spanish." if str(lang).lower().startswith("es") else "")
+        return {}
+    system = AI_SYSTEM + ("\nWrite the SAY line in Spanish." if str(lang).lower().startswith("es") else "")
     shown = " ".join(str(shown or "").split())[:320]
+    prior = [" ".join(str(x or "").split())[:320] for x in (asked or [])[-5:] if str(x or "").strip()]
+    if prior:
+        system += ("\nLines you already gave on this call, oldest first:\n" + "\n".join("- " + x for x in prior)
+                   + "\nNever repeat one of them or ask the same thing in other words. The new line is a later step.")
     if shown:
-        system += ("\nThe caller's screen currently shows this line from you: \"" + shown + "\". If the newest "
-                   "transcript lines are the caller saying it and the homeowner has not answered yet, reply SKIP. "
-                   "Never repeat that line; move the conversation forward from the homeowner's answer.")
-    body = {"model": AI_MODEL, "max_tokens": 200, "temperature": 0.4, "stream": False,
+        system += ("\nThe caller's screen currently shows: \"" + shown + "\". The caller may have just read it "
+                   "out. Write the line that comes after the homeowner's answer to it.")
+    body = {"model": AI_MODEL, "max_tokens": 220, "temperature": 0.2, "stream": False,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
             "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                   "strip_thinking_response": True}}
@@ -160,11 +199,24 @@ def ai_line(lines, lang="", shown=""):
             j = json.loads(r.read().decode("utf-8"))
         out = str(j["choices"][0]["message"].get("content") or "")
     except Exception:
-        return ""
-    out = " ".join(out.split()).strip().strip('"\u201c\u201d').strip()
-    if not out or out.upper().rstrip(".") == "SKIP" or len(out) > 320 or _AI_BAD.search(out):
-        return ""
-    return out
+        return {}
+    step, line = "", out
+    m = re.search(r"STEP:\s*([a-z_]+)", out, re.I)
+    if m and m.group(1).lower() in AI_STEP_IDS:
+        step = m.group(1).lower()
+    m = re.search(r"SAY:\s*(.+)", out, re.I | re.S)
+    if m:
+        line = m.group(1)
+    elif re.search(r"STEP:", out, re.I):
+        line = ""
+    line = " ".join(line.split()).strip().strip('"\u201c\u201d').strip()
+    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 360 or _AI_BAD.search(line):
+        return {}
+    res = {"line": line, "step": step, "of": len(AI_STEPS)}
+    if step:
+        res["n"] = AI_STEP_IDS.index(step) + 1
+        res["name"] = AI_STEPS[res["n"] - 1][1]
+    return res
 
 
 def lead_card(r):
@@ -433,8 +485,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            line = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "")
-            return self._send(200, {"line": line, "ms": int((time.time() - t0) * 1000)}, private=True)
+            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [])
+            res = dict(res or {"line": ""}, ms=int((time.time() - t0) * 1000))
+            return self._send(200, res, private=True)
 
         # /api/session/start
         if p == "/api/session/start":

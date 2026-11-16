@@ -200,6 +200,12 @@ with tempfile.TemporaryDirectory() as d:
         chk('100 NW 1st' not in prompt and '2026-000001-CA-01' not in prompt and 'DOE' not in prompt, 'no address, case number or owner name from the lead file is in the prompt')
         AI['reply'] = 'You could walk away with $50,000. Want that?'
         chk(suggest(talk)[1].get('line') == '', 'a model reply with a number in it is dropped')
+        AI['reply'] = 'STEP: close\nSAY: Let me get you on his calendar. Is later today better, or first thing tomorrow?'
+        j2 = suggest(talk)[1]
+        chk(j2.get('step') == 'close' and j2.get('n') == 7 and j2.get('of') == 8 and j2.get('line', '').startswith('Let me get you on his calendar'),
+            'the model names the step of the path its line belongs to: %s' % j2)
+        chk('Book the advisor' in json.dumps(AI['seen'][-1]['body']) and 'later today' in json.dumps(AI['seen'][-1]['body']),
+            'the model is given the path to the booking, with the script line of each step')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

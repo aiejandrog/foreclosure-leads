@@ -81,8 +81,14 @@ code{color:var(--accent)}
 #objection.on{display:block}
 #ailine{display:none;margin:0 0 14px;background:#0b1c2c;border:1px solid #1d4468;border-left:4px solid #4aa3ff;border-radius:0 10px 10px 0;padding:12px 16px}
 #ailine.on{display:block} #ailine.old{opacity:.45}
-#ailine .who{color:#4aa3ff;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
-#ailine .body{font-size:18px;line-height:1.5}
+#ailine .who{color:#4aa3ff;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+#ailine .body{font-size:22px;line-height:1.45;color:#fff}
+#aisteps{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+#aisteps span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:10px;background:#12283c;color:#56708a}
+#aisteps span.done{background:#143a2a;color:#5fd99a}
+#aisteps span.now{background:#4aa3ff;color:#04121f;font-weight:700}
+#ailine .heard{font-size:12px;color:#8aa2b8;margin-bottom:6px;font-style:italic}
+#objection.behind,#sayline.behind,#saynote.behind{opacity:.4}
 #ailine .prev{font-size:12px;line-height:1.4;color:#6f8296;margin-top:8px}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
 #objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
@@ -250,14 +256,14 @@ code{color:var(--accent)}
       </div>
     </div>
 
+    <div id="ailine"><div class="who" id="aiwho">Say this next</div><div id="aisteps"></div><div class="heard" id="aiheard"></div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
+
     <div id="objection">
       <button class="x" title="dismiss (D)" onclick="Coach.dismissObjection()">&times;</button>
       <div class="who" id="objwho"></div>
       <div class="back">&#8617; say this back</div>
       <div class="body" id="objbody"></div>
     </div>
-
-    <div id="ailine"><div class="who" id="aiwho">AI &middot; next line</div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
 
     <div id="chips"></div>
 
@@ -521,7 +527,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -1196,6 +1202,7 @@ function showCard(who,body){
   $('objwho').textContent=who;
   $('objbody').textContent=body;
   $('objection').className='on';
+  if(typeof aiFocus==='function') aiFocus('card');
   fcSaid(body);
 }
 function dismissObjection(){
@@ -1273,7 +1280,7 @@ function guessSpeaker(nline){
   // Fall back to script overlap: a line mostly made of the words you're supposed to be
   // reading is you. Two real words is enough ("can you hear me" is three).
   var ref=norm($('saytext').textContent+' '+$('saynote').textContent+' '
-               +($('objection').className==='on'?$('objbody').textContent:''));
+               +($('objection').className.indexOf('on')===0?$('objbody').textContent:''));
   var toks=nline.split(' ').filter(function(w){return w.length>2;});
   if(toks.length<2) return '';
   var hit=0;
@@ -1329,14 +1336,43 @@ function aiCheck(){
   if(!fresh||fcReadBack(norm(fresh), norm(S.ai.line))||fcVoice(norm(fresh), fcRef()).all==='you') return;
   var seq=++S.ai.seq, n=S.lines.length, t0=now();
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lines:S.lines.slice(-16).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||''})})
+    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
     if(seq!==S.ai.seq||!j||!j.line) return;
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
     S.ai.line=j.line; S.ai.shownAt=now();
-    $('aibody').textContent=j.line; $('ailine').className='on';
-    S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, behind:S.lines.length-n});
+    S.ai.hist.push(j.line); if(S.ai.hist.length>5) S.ai.hist.shift();
+    $('aibody').textContent=j.line;
+    $('aiheard').textContent=fresh?('they said: \u201c'+(fresh.length>90?'\u2026'+fresh.slice(-90):fresh)+'\u201d'):'';
+    aiSteps(j);
+    aiFocus('ai');
+    S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, behind:S.lines.length-n, step:j.step||''});
   }).catch(function(){});
+}
+/* WHERE THE CALL IS. The model names the step its line belongs to; the strip shows the whole path
+   with the done steps green and the current one lit, and the script panel underneath moves to the
+   same stage so the two never show different places in the call. */
+var AI_PATH=[['opener','Opener'],['situation','Situation'],['problem','Problem'],['solution','Tried'],['consequence','Consequence'],['bridge','Bridge'],['close','Book it'],['booked','Lock time']];
+function aiSteps(j){
+  var at=-1, h='';
+  AI_PATH.forEach(function(p,i){ if(p[0]===j.step) at=i; });
+  if(at<0) at=S.ai.at; else S.ai.at=at;
+  AI_PATH.forEach(function(p,i){ h+='<span class="'+(i<at?'done':i===at?'now':'')+'">'+p[1]+'</span>'; });
+  $('aisteps').innerHTML=h;
+  $('aiwho').textContent='Say this next'+(at>=0?' \u00b7 step '+(at+1)+' of '+AI_PATH.length:'');
+  var id=at>=0?(AI_PATH[at][0]==='booked'?'close':AI_PATH[at][0]):'';
+  for(var k=0;k<STAGES.length;k++) if(STAGES[k].id===id&&k>S.stage){ jump(k); break; }
+}
+/* ONE BRIGHT BOX. Three boxes at full brightness was three things to read (test call 11-16
+   11:34: "I was confused on what to say"). Whichever spoke last, the AI line or an objection
+   card, is the bright one; the others go dim until they have something new. */
+function aiFocus(who){
+  var ai=(who==='ai');
+  if($('ailine').className.indexOf('on')>=0||ai) $('ailine').className=ai?'on':'on old';
+  ['objection','sayline','saynote'].forEach(function(id){
+    var c=$(id).className.replace(/\s*behind/,'');
+    $(id).className=(ai&&S.ai.line)?(c+' behind').trim():c;
+  });
 }
 function renderTranscript(){
   var el=$('transcript'),h='';
@@ -1635,7 +1671,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; $('aiheard').textContent=heard||''; aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
