@@ -83,6 +83,7 @@ code{color:var(--accent)}
 #ailine.on{display:block} #ailine.old{opacity:.45}
 #ailine .who{color:#4aa3ff;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
 #ailine .body{font-size:18px;line-height:1.5}
+#ailine .prev{font-size:12px;line-height:1.4;color:#6f8296;margin-top:8px}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
 #objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
 #objection .body{font-size:16px;line-height:1.55;white-space:pre-wrap}
@@ -256,7 +257,7 @@ code{color:var(--accent)}
       <div class="body" id="objbody"></div>
     </div>
 
-    <div id="ailine"><div class="who" id="aiwho">AI &middot; next line</div><div class="body" id="aibody"></div></div>
+    <div id="ailine"><div class="who" id="aiwho">AI &middot; next line</div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
 
     <div id="chips"></div>
 
@@ -520,7 +521,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -788,6 +789,21 @@ function fcEcho(nline, nother){
   var hit=0;
   w.forEach(function(x){ if(o.indexOf(' '+x+' ')>=0) hit++; });
   return hit/w.length>=0.7;
+}
+/* YOU READING THE AI LINE BACK. nline: what was just said; nshown: the AI line on screen (both
+   norm()ed). Most of the shown line's words turning up in what was said means it is being read,
+   so nothing new is asked for while you are mid-sentence. But only when that is ALL that was
+   said: test call 11-16 11:25, you read the line and they answered in the same breath ("we hope
+   they give us a modification so we can pay our mortgage"), the answer was counted as part of
+   the read, and the box stayed blank for the rest of the call. Four or more words that are not
+   in the shown line are somebody answering. */
+function fcReadBack(nline, nshown){
+  var a=String(nshown||'').split(' ').filter(Boolean), w=String(nline||'').split(' ').filter(Boolean);
+  if(a.length<4) return false;
+  var said=' '+w.join(' ')+' ', shown=' '+a.join(' ')+' ', hit=0, extra=0;
+  a.forEach(function(x){ if(said.indexOf(' '+x+' ')>=0) hit++; });
+  w.forEach(function(x){ if(shown.indexOf(' '+x+' ')<0) extra++; });
+  return hit/a.length>=0.6&&extra<4;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1286,28 +1302,41 @@ function pushFinal(text,spk,dgSpk,canJoin){
     if(nx>S.stage) jump(nx);
   }
   if(S.fc.card&&!fired&&tag!=='you'&&tag!=='you?') S.fc.card.newer++;
-  if(tag!=='you'&&text.split(' ').length>=2) aiAsk();
+  if(tag!=='you') aiAsk();
   renderTranscript();
 }
-/* AI NEXT LINE. The cards answer set phrases. This answers whatever was actually said: after each
-   finished line the transcript goes to the coach server, which asks the model (the key stays on
-   the server) and sends back one sentence. It never replaces a card or the script; it sits in its
-   own blue box, goes dim when the talk has moved past it, and stays silent when there is no key,
-   the model is slow, or the last words were yours. */
+/* AI NEXT LINE. The cards answer set phrases. This answers whatever was actually said: the
+   transcript goes to the coach server, which asks the model (the key stays on the server) and
+   sends back one sentence. It never replaces a card or the script; it sits in its own blue box.
+   A line has to stay long enough to be read (test call 11-16 11:12: 72 lines in 5 minutes, one
+   every 4 seconds, unreadable). So a new one is asked for only when
+     - the talking has stopped for a moment (a turn ended, not a breath),
+     - what was just said is not you reading the line on screen (fcReadBack), and
+     - the line on screen has had AI_HOLD ms to be read.
+   The line it replaces stays underneath, small, so a swap never takes words out of your mouth. */
+var AI_PAUSE=1300, AI_HOLD=7000;
 function aiAsk(){
   if(S.plain||!S.sid) return;
   clearTimeout(S.ai.t);
-  S.ai.t=setTimeout(function(){
-    var seq=++S.ai.seq, n=S.lines.length, t0=now();
-    if($('ailine').className.indexOf('on')>=0) $('ailine').className='on old';
-    fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({lines:S.lines.slice(-16).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang})})
-    .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
-      if(seq!==S.ai.seq||!j||!j.line) return;
-      $('aibody').textContent=j.line; $('ailine').className='on';
-      S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, behind:S.lines.length-n});
-    }).catch(function(){});
-  },350);
+  S.ai.t=setTimeout(aiCheck,400);
+}
+function aiCheck(){
+  var t=now(), quiet=t-(S.fc.lastWord||0), held=t-(S.ai.shownAt||0);
+  if(quiet<AI_PAUSE){ S.ai.t=setTimeout(aiCheck, AI_PAUSE-quiet+50); return; }
+  if(S.ai.line&&held<AI_HOLD){ S.ai.t=setTimeout(aiCheck, AI_HOLD-held+50); return; }
+  var fresh=S.lines.slice(S.ai.n).map(function(l){ return l.text; }).join(' ');
+  S.ai.n=S.lines.length;
+  if(!fresh||fcReadBack(norm(fresh), norm(S.ai.line))||fcVoice(norm(fresh), fcRef()).all==='you') return;
+  var seq=++S.ai.seq, n=S.lines.length, t0=now();
+  fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({lines:S.lines.slice(-16).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||''})})
+  .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
+    if(seq!==S.ai.seq||!j||!j.line) return;
+    $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
+    S.ai.line=j.line; S.ai.shownAt=now();
+    $('aibody').textContent=j.line; $('ailine').className='on';
+    S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, behind:S.lines.length-n});
+  }).catch(function(){});
 }
 function renderTranscript(){
   var el=$('transcript'),h='';
@@ -1606,7 +1635,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
