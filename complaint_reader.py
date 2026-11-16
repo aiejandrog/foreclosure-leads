@@ -376,7 +376,9 @@ def broward_inbox_files(folder=None):
         import paths
         folder = os.path.join(paths.DEALFLOW_DIR, 'documents', 'BROWARD', '_court_inbox')
     out = {}
-    for path in glob.glob(os.path.join(folder, '*_COMPLAINT*.pdf')):
+    for path in glob.glob(os.path.join(folder, '*.[pP][dD][fF]')):      # case-insensitive: Linux CI is case-sensitive
+        if '_COMPLAINT' not in os.path.basename(path).upper():
+            continue
         m = re.match(r'([A-Z]{4}-?\d{2}-?\d{6})_', os.path.basename(path).upper())
         if m:
             raw = re.sub(r'[^A-Z0-9]', '', m.group(1))
