@@ -55,3 +55,26 @@ of whatever is in the inbox.
 - Landmark search (route 1). New Palm Beach filings come from the court (route 5) instead.
 - An unattended nightly court pull. The court site turns a scripted browser away, and making a
   script look like a person to get past that check is not something this project does.
+
+## Broward court route (measured 2026-11-16, corrected the same day)
+
+An earlier test recorded Broward's court search as "refused". That test submitted the search while
+the site's own check was still running. Done properly, in the operator's own Chrome on the engine
+laptop, it works with no interaction beyond a normal search:
+
+1. `https://www.browardclerk.org/Web2`, Case Number tab, type the case with no dashes
+   (`CACE26018549`). **Wait** until the Cloudflare box under the field says `Success!`, then Search.
+2. Click the case in the results. The docket lists `Complaint (eFiled)` with a page count.
+3. Click its document button. A viewer tab opens; **View all Pages** loads the whole PDF in a frame
+   (`WebForms/PDF.aspx`). An 18-page complaint came back as 18 pages, 683 KB.
+4. Save it as `<CASE>_COMPLAINT.pdf` into `~/DEALFLOW/documents/BROWARD/_court_inbox/`
+   (a page-triggered download lands in Downloads on the same machine; move it).
+5. `python complaint_reader.py --county broward` reads every page. A complaint from this inbox
+   replaces the recorded-notice reading for that case.
+
+Two traps:
+- **Which Chrome.** The Claude extension may be connected on the other machine. Anything local
+  (the inbox on 127.0.0.1, Downloads, the clipboard) only works when the Chrome in use is the one
+  on this laptop: check `list_connected_browsers` and select the one marked `onThisComputer`.
+- **Scans.** The court serves watermarked page images; amounts in a private note are often written
+  in words. `complaint_reader.words_to_number` reads them; a garbled word is never guessed.

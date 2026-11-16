@@ -1984,7 +1984,7 @@ def _cmp_slim(d):
     Figures and counts only. None when there is nothing to say."""
     c = d.get('cmp') if isinstance(d.get('cmp'), dict) else {}
     out = {}
-    for src, dst in (('p', 'p'), ('face', 'fc'), ('dd', 'dd'), ('jr', 'jr'), ('pg', 'pg'), ('rd', 'rd')):
+    for src, dst in (('p', 'p'), ('o', 'o'), ('face', 'fc'), ('dd', 'dd'), ('jr', 'jr'), ('pg', 'pg'), ('rd', 'rd')):
         if c.get(src):
             out[dst] = c[src]
     try:
@@ -7140,6 +7140,12 @@ function lookupList(){
                  + (+m.jr > 0 ? '. ' + m.jr + ' other lienholder' + (m.jr === 1 ? '' : 's') + ' named in the complaint' : '')
                  + (m.pg ? '. Read ' + (m.rd || 0) + ' of ' + m.pg + ' pages' : '');
         if(typeof r.v === 'number' && r.v > 0) owedLine += '. Value less that principal: ' + money(r.v - (+m.p));
+      } else if(+m.o > 0){
+        eq = 'Complaint: original loan ' + money(+m.o);
+        owedLine = 'The complaint states no balance as a figure. That is the amount borrowed'
+                 + (m.dd ? '. In default since ' + esc(String(m.dd)) : '')
+                 + (+m.jr > 0 ? '. ' + m.jr + ' other lienholder' + (m.jr === 1 ? '' : 's') + ' named in the complaint' : '')
+                 + (m.pg ? '. Read ' + (m.rd || 0) + ' of ' + m.pg + ' pages' : '');
       } else if(+m.fc > 0){
         eq = 'Foreclosed mortgage recorded at ' + money(+m.fc);
         owedLine = 'Recorded amount of the loan, not the balance. Complaint not read';
