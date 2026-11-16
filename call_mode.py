@@ -8845,7 +8845,11 @@ function coachDonePick(d, origin, nowMs){
   var iso = /^\d{4}-\d{2}-\d{2}$/.test(String(d.iso||'')) ? String(d.iso) : '';
   var hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(d.hm||'')) ? String(d.hm) : '';
   var when = String(d.when||'').replace(/[^A-Za-z0-9 :]/g, '').slice(0, 60).trim();
-  return {c:c, k:k, when:when, iso:iso, hm:hm, at:nowMs};
+  /* The wrap-up note is free text he read and edited in the coach; it goes into n.note, which is free
+     text too. Markup characters are dropped, never escaped twice. */
+  var plain = function(v, n){ return String(v||'').replace(/[<>&"`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, n); };
+  var want = String(d.want||''); want = (want==='keep'||want==='sell'||want==='undecided') ? want : '';
+  return {c:c, k:k, when:when, iso:iso, hm:hm, note:plain(d.note, 320), want:want, objection:plain(d.objection, 80), at:nowMs};
 }
 /* The handoff for THIS lead, while it is still the call just made (30 minutes). */
 function coachDoneFor(r){
@@ -9663,7 +9667,7 @@ function screenOutcome(){
     return '<button class="'+cls+'" data-oc="'+o.k+'"'+hot+'>'+esc(o.t)+'</button>';
   }).join('');
   if(_cd) btns = '<div class="nc" id="coachdone" style="border-color:#4aa3ff;color:#bcdcff">Coach: '+esc(coachDoneLabel(_cd))
-    +'. Tap the lit outcome to log it.</div>' + btns;
+    +'. Tap the lit outcome to log it.' + (_cd.note ? '<br><span style="color:#8aa2b8">Note that will be saved: '+esc(_cd.note)+'</span>' : '') + '</div>' + btns;
   // Use the resolved first name, not the raw roll string — `(r.o).split(' ')[0]` on the county's
   // "GORDON,STEVE" has no space to split on, so the question read "How did it go with GORDON,STEVE?"
   /* THE DIALOGUE, ON the screen he stares at for the whole call — not behind a tap. Same named/
@@ -11330,6 +11334,16 @@ function logOutcome(r,o,digits){
      note (what the board and the phone both show), the callback date on n.next the way setCallback
      writes it, and for an appointment on VERIFIED equity the next step itself. On unverified equity
      the next step stays "Verify equity" (ayBookedUnverified below): that rule is older than this. */
+  /* The coach's call wrap-up, for whatever outcome he tapped: the note he kept goes on the lead, and
+     what the owner said they want fills keepOrSell when nothing is recorded there yet. */
+  var _cdw = coachDoneFor(r);
+  if(_cdw && _cdw.k === o.k){
+    if(_cdw.note){
+      var _wl = today() + ' coach: ' + _cdw.note + (_cdw.objection ? ' [pushback: ' + _cdw.objection + ']' : '');
+      n.note = n.note ? (n.note.indexOf(_wl) >= 0 ? n.note : (n.note + '\n' + _wl)) : _wl;
+    }
+    if(_cdw.want && !n.keepOrSell) n.keepOrSell = _cdw.want;
+  }
   var _cdn = (o.k==='appt' || o.k==='callback') ? coachDoneFor(r) : null;
   if(_cdn && _cdn.when){
     var _cl = today() + (o.k==='appt' ? ' advisor call booked: ' : ' callback asked: ') + _cdn.when + ' (coach)';

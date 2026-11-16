@@ -161,6 +161,10 @@ def main():
         # which is NOT benign and stops the chain on the spot.
         run('SWEEP (lis_pendens, all 3 counties)',
             ['lis_pendens.py', '--days', str(a.days), '--county', 'all'], ok=(0, 4))
+    # 2026-11-16: new Miami-Dade filings by walking case numbers on the court's free lookup. The paid
+    # recorder sweep above is refused while the monthly paid cap is $0 and never covered a plaintiff off
+    # its 59-name list. Exit 3 = the court did not answer; the chain continues on what it has.
+    run('MIAMI-DADE CASE WALK (court lookup, free)', ['md_case_walk.py'], ok=(0, 3))
     run('RESOLVE (lp_resolve)', ['lp_resolve.py'])
     run('RESOLVE PASS 2 (lp_resolve2)', ['lp_resolve2.py'])
     # Broward rows carry no legal description, so the MD ladder above skips them — the BCPA
@@ -175,6 +179,8 @@ def main():
     # 2026-11-16: Palm Beach filings now come from the court's case search (pb_court_filings.py) and
     # carry a name, not a parcel. Same name ladder as Broward, against the free state roll.
     run('RESOLVE PALM BEACH (owner name on the state roll)', [os.path.join('fl_lp', 'palmbeach_resolve.py')])
+    run('RESOLVE MIAMI-DADE case-walk rows (owner name on the state roll)',
+        [os.path.join('fl_lp', 'palmbeach_resolve.py'), '--county', 'miami'])
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])

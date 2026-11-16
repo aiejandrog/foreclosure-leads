@@ -367,6 +367,9 @@ else:
         chk(o['whenat'] == ['2026-11-17 09:00', '2026-11-17 10:15', '2026-11-16 16:00', '2026-11-20 14:00',
                             '2026-11-23 09:00', ' 19:00', '2026-11-17 ', '2026-11-17 15:00', '2026-11-18 12:00'],
             'the day and time they gave becomes a calendar date for Call Mode, and what cannot be placed stays empty', o['whenat'])
+        chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
+            'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
+        chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
         chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
         chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')

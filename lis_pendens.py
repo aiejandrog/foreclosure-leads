@@ -912,6 +912,11 @@ def main():
         if k not in merged:
             merged[k] = x
             fresh += 1
+        elif merged[k].get('src') in ('court-walk', 'court') and x.get('legal') and not merged[k].get('legal'):
+            # 2026-11-16: the case-walk (md_case_walk.py) and court-search rows carry no legal description.
+            # When the recorder returns the same case WITH one, that row is the better record: it is what
+            # lp_resolve places a parcel from. Nothing else about an existing row is ever replaced.
+            merged[k] = x
     out = list(merged.values())
     from collections import Counter
     kinds = Counter(x['kind'] for x in out)

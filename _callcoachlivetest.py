@@ -63,7 +63,8 @@ chk("' advisor call booked: '" in cm and "'&date=' + _cda.iso" in cm and 'Tap th
 if shutil.which('node'):
     pick = cm[cm.index('var COACH_OC = '):cm.index('/* The handoff for THIS lead')]
     hjs = "var COACH_ORIGIN='http://127.0.0.1:8777';\n" + pick + r"""
-var ok={src:'bsg-coach', 'case':'CACE-26-000001', outcome:'appointment', when:'tomorrow at 9 AM', iso:'2026-11-17', hm:'09:00'};
+var ok={src:'bsg-coach', 'case':'CACE-26-000001', outcome:'appointment', when:'tomorrow at 9 AM', iso:'2026-11-17', hm:'09:00',
+        note:'Wants to <keep> it.   Call set for 9.', want:'keep', objection:'has an "attorney"'};
 var o=[coachDonePick(ok,'http://127.0.0.1:8777',5),
        coachDonePick(ok,'https://evil.example',5),
        coachDonePick(Object.assign({},ok,{src:'x'}),'http://127.0.0.1:8777',5),
@@ -77,10 +78,13 @@ console.log(JSON.stringify(o));
         chk(False, 'coach handoff check runs in node: %s' % rr.stderr[-300:])
     else:
         ho = json.loads(rr.stdout.strip().splitlines()[-1])
-        chk(ho[0] == {'c': 'CACE-26-000001', 'k': 'appt', 'when': 'tomorrow at 9 AM', 'iso': '2026-11-17', 'hm': '09:00', 'at': 5},
+        chk(ho[0] == {'c': 'CACE-26-000001', 'k': 'appt', 'when': 'tomorrow at 9 AM', 'iso': '2026-11-17', 'hm': '09:00',
+                      'note': 'Wants to keep it. Call set for 9.', 'want': 'keep', 'objection': 'has an attorney', 'at': 5},
             'a handoff from our coach is accepted: %s' % ho[0])
         chk(ho[1] is None and ho[2] is None and ho[3] is None and ho[4] is None,
             'another origin, another sender, an unknown outcome or markup in the case number is refused')
+        chk(ho[1] is None and "' coach: ' + _cdw.note" in cm and '_cdw.k === o.k' in cm,
+            'the wrap-up note is saved only for the outcome he tapped, with markup characters dropped')
         chk(ho[5] and ho[5]['when'] == 'b9b x' and ho[5]['iso'] == '' and ho[5]['hm'] == '',
             'the time text is stripped to plain characters and a malformed date or time is dropped: %s' % ho[5])
 
@@ -165,6 +169,15 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(d, 'leads_final.json'), 'w', encoding='utf-8') as f:
         json.dump([{'Case #': '2026-000001-CA-01', 'Address': '100 NW 1st Ave, Miami, FL 33128',
                     'owners': 'DOE, JANE', 'AuctionDate': '2099-01-02'}], f)
+    with open(os.path.join(d, 'lp_leads.json'), 'w', encoding='utf-8') as f:
+        json.dump([{'case': 'CACE-26-999999', 'addr': '9 Test Ter, Davie, FL', 'oname': 'ROE RICHARD', 'st': 'LP', 'ctype': 'Bank/Mortgage',
+                    'county': 'BROWARD', 'days': 9999, 'auction': '', 'eq': 123456}], f)
+    with open(os.path.join(d, 'balloon_leads.json'), 'w', encoding='utf-8') as f:
+        json.dump([{'case': 'BAL-000042', 'addr': '7 Fund Way, Hollywood, FL', 'oname': 'ACME HOLDINGS LLC', 'st': 'BAL',
+                    'ctype': 'Hard-money balloon', 'county': 'BROWARD', 'days': 9999}], f)
+    with open(os.path.join(d, 'broward_leads.json'), 'w', encoding='utf-8') as f:
+        json.dump([{'case': 'TD-55', 'addr': '3 Tax Ln', 'oname': 'POE PAT', 'st': 'TD', 'ctype': 'Tax Deed', 'county': 'BROWARD', 'days': 20, 'auction': '2099-01-02'},
+                   {'case': '2026-000001-CA-01', 'addr': 'DUPLICATE OF THE RICH ROW', 'st': 'FC', 'county': 'BROWARD', 'days': 5}], f)
     with open(os.path.join(d, 'pb.md'), 'w', encoding='utf-8') as f:
         f.write('---\ndate: x\n---\n\n# Notes for people\nNOT-FOR-THE-MODEL\n\n---\n\n## What this call sells\nPLAYBOOK-MARKER five minutes with [[the senior advisor]].\n')
     port = free_port()
@@ -180,7 +193,14 @@ with tempfile.TemporaryDirectory() as d:
                 break
             except Exception:
                 time.sleep(0.1)
-        chk(h.get('ok') and h.get('leads') == 1, 'server up from a temp copy with 1 lead')
+        chk(h.get('ok') and h.get('leads') == 4, 'server up from a temp copy: 1 rich lead and 3 from the other lane files, the duplicate case counted once: %s' % h.get('leads'))
+        lp = (call(port, '/api/lead?q=CACE-26-999999').get('matches') or [{}])[0]
+        chk(lp.get('lane') == 'filing' and lp.get('days') is None and lp.get('equity') is None and lp.get('owners') == 'ROE RICHARD',
+            'a new filing opens in the coach: its lane, no sale date, and no unverified number: %s' % {k: lp.get(k) for k in ('lane', 'days', 'equity')})
+        chk((call(port, '/api/lead?q=BAL-000042').get('matches') or [{}])[0].get('lane') == 'investor'
+            and (call(port, '/api/lead?q=TD-55').get('matches') or [{}])[0].get('lane') == 'taxdeed', 'the investor and tax sale lanes open too')
+        dup = (call(port, '/api/lead?q=2026-000001-CA-01').get('matches') or [{}])
+        chk(len(dup) == 1 and dup[0].get('address', '').startswith('100 NW'), 'a case in two files opens the rich row')
         chk('Coach.start()' in call(port, '/'), 'server serves call_coach_live.html at /')
         m = call(port, '/api/lead?q=nw+1st').get('matches') or []
         chk(len(m) == 1 and m[0]['case'] == '2026-000001-CA-01', 'lead lookup by address fragment')
@@ -265,6 +285,34 @@ with tempfile.TemporaryDirectory() as d:
         chk(j4.get('step') == 'booked' and '10:15' in j4.get('line', ''), 'the time they gave can be said back; that is the booking: %s' % j4)
         AI['reply'] = 'HEARD: tomorrow\nTYPE: time\nSTEP: booked\nSAY: Tomorrow, and you keep $5,000.'
         chk(suggest(talk)[1].get('line') == '', 'a dollar amount is dropped even on a booking line')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': talk, 'days': 12, 'lane': 'filing'}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        lane_p = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('NO sale date has been set' in lane_p and 'the sale is set in about' not in lane_p, 'a new filing tells the model there is no sale date, and none is passed')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': talk, 'lane': 'investor'}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('Talk business, not family' in AI['seen'][-1]['body']['messages'][0]['content'], 'the investor lane gets the investor conversation')
+
+        # The call wrap-up: a draft of the log entry from the whole transcript.
+        def wrap(hdr=None):
+            req = urllib.request.Request('http://127.0.0.1:%d/api/wrapup' % port, data=json.dumps({'lines': talk, 'lane': 'auction'}).encode(),
+                                         headers=dict({'Content-Type': 'application/json'}, **(hdr or {})))
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as ex:
+                return ex.code, {}
+        AI['reply'] = ('OUTCOME: appointment\nWANT: keep\nOBJECTION: has an attorney\nWHEN: tomorrow at nine\n'
+                       'NOTE: Wants to keep the house, attorney is filing next week. Advisor call set for tomorrow morning.')
+        st, w = wrap({'Origin': own, 'Sec-Fetch-Site': 'same-origin'})
+        chk(st == 200 and w == {'outcome': 'appointment', 'want': 'keep', 'objection': 'has an attorney', 'when': 'tomorrow at nine',
+                                'note': 'Wants to keep the house, attorney is filing next week. Advisor call set for tomorrow morning.'},
+            'the wrap-up drafts outcome, want, pushback, time and note: %s' % w)
+        AI['reply'] = 'OUTCOME: sold the house to us\nNOTE: x'
+        chk(wrap()[1].get('outcome') == '', 'an outcome the system does not have is not a draft')
+        chk(wrap({'Origin': 'https://example.com', 'Sec-Fetch-Site': 'cross-site'})[0] == 403, 'another site cannot ask for a wrap-up')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

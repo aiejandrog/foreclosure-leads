@@ -104,6 +104,9 @@ pb_court_filings.json
 !_pbnametest.py
 !_caseagetest.py
 !_stucklistingtest.py
+!_mdwalktest.py
+md_walk_state.json
+md_walk_state.json.tmp
 # _codelienamounttest: parser/estimate/board-bake checks on invented lien text only.
 !_codelienamounttest.py
 !_fieldsheettest.py

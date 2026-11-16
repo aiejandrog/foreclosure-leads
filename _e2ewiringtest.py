@@ -147,6 +147,9 @@ function noState(r){ return {hard:false, soft:false, open:false, why:''}; }
 function stopEverywhere(){} function retireFromWorkerQ(){} function _ftsaCapToast(){ return false; }
 function _wasLp(){ return false; } function queueSync(){} function logErr(){}
 function _absorbStored(){ return 0; }
+/* coachDoneFor (coach -> Call Mode handoff, 2026-11-16): logOutcome reads it for a booked time; no coach
+   call is in flight in this harness, so it answers null exactly as the page does without one. */
+function coachDoneFor(r){ return null; }
 function lang(){ return 'en'; } function firstName(r){ return 'Ana'; }
 """ + html[html.index('var AY_STAGES'):html.index('\n', html.index('var AY_STAGES'))] + '\n' \
     + fn('esc') + one('eqFact') + '\n' + one('_inbound') + '\n' \

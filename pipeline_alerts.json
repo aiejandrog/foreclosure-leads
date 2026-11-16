@@ -1,52 +1,58 @@
 {
  "alerts": [
   {
-   "at": "2026-11-15T21:11:11-05:00",
+   "at": "2026-11-16T13:33:13-05:00",
+   "key": "bounce-rate",
+   "severity": "fail",
+   "text": "Trailing 7-day lower bound 18.3% (raw 27.7%, 18 of 65) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
+  },
+  {
+   "at": "2026-11-16T13:33:13-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-15T21:11:11-05:00",
+   "at": "2026-11-16T13:33:13-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 11-15 21:11): on battery; battery 34% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DealFlow Daily Routes); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-11-15T21:11:11-05:00",
+   "at": "2026-11-16T13:33:13-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-15T21:11:11-05:00",
+   "at": "2026-11-16T13:33:13-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-15T21:11:11-05:00",
+ "published_at": "2026-11-16T13:33:13-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
-   "filings": 3114,
-   "holds": 743,
+   "errors": 7,
+   "filings": 3134,
+   "holds": 755,
    "last_http_status": 0,
-   "leads_checked": 39,
-   "match_s": 2,
-   "needing_search": 2993,
+   "leads_checked": 29,
+   "match_s": 3,
+   "needing_search": 3513,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 1.44,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "time_budget",
-   "requests_used": 100,
-   "searched_this_run": 39,
+   "reason": "network",
+   "requests_used": 98,
+   "searched_this_run": 29,
    "starved_runs": 0,
    "truncated": 0
   },
@@ -59,7 +65,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 0,
+   "dead": 18,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -71,22 +77,22 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.0,
-   "mailed": 41,
+   "lb": 0.18293439815390553,
+   "mailed": 65,
    "measured_day_blocked": false,
-   "measured_post_trailing_blocked": false,
+   "measured_post_trailing_blocked": true,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 0,
-   "post_lb": 0.0,
-   "post_mailed": 41,
-   "post_rate": 0.0,
+   "post_dead": 18,
+   "post_lb": 0.18293439815390553,
+   "post_mailed": 65,
+   "post_rate": 0.27692307692307694,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.0,
+   "rate": 0.27692307692307694,
    "readable": true,
-   "trailing_blocked": false,
+   "trailing_blocked": true,
    "window": 7
   },
   "captcha": {
@@ -110,8 +116,8 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-15",
-   "eligible": 41,
+   "date": "2026-11-16",
+   "eligible": 33,
    "judged": true,
    "paused": false,
    "readable": true,
@@ -122,25 +128,24 @@
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "no_email": 5,
+     "no_email": 6,
      "open_requested": 1,
      "run_end": 1,
-     "send_answer": 99,
+     "send_answer": 57,
      "task_open": 1,
-     "worker_loaded": 3
+     "worker_loaded": 9
     },
     "no_email": {
-     "none": 5
+     "none": 6
     },
-    "queued": 28,
+    "queued": 17,
     "readable": true,
     "refused": {
-     "bounce_scan_stale": 27,
-     "followups_off": 2,
-     "http_409": 29,
-     "merge_fields": 1
+     "bounce_scan_stale": 23,
+     "followups_off": 6,
+     "merge_fields": 4
     },
-    "rows": 112,
+    "rows": 77,
     "skipped": {}
    }
   },
@@ -149,12 +154,12 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-15",
+   "date": "2026-11-16",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1794744903,
+   "started_at": 1794839060,
    "state": "finished"
   },
   "paid_reads": {
