@@ -111,7 +111,7 @@ body = src[src.index('def read_broward_notice('):src.index('def foreclosed_face(
 rec('4d: a notice never keeps a pleaded balance', "e['principal'] = None" in body and "'lp_notice'" in body)
 
 run_src = src[src.index('def run('):src.index('def for_board(')]
-rec('4e: the nightly limit is per county, so Miami cannot use up Broward's share',
+rec('4e: the nightly limit is per county, so Miami cannot use up the Broward share',
     run_src.count('n = 0   ') >= 2 and run_src.index("if 'BROWARD' in counties") < run_src.rindex('n = 0   '))
 
 # ---- 5. board fields -------------------------------------------------------------------------------------
