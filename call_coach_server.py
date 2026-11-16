@@ -72,6 +72,22 @@ def _days_to(auction):
     return None
 
 
+def deepgram_key():
+    """The Deepgram key from the DEEPGRAM_API_KEY variable, or ''. Read on each request, so a key
+    saved in Windows after this server started is still found (the user variable lives in the
+    registry; a running process never sees it change). It goes only to the coach page over
+    loopback (/api/dgkey). Never logged, never written to disk, never in /api/health."""
+    k = os.environ.get("DEEPGRAM_API_KEY") or ""
+    if not k and os.name == "nt":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as h:
+                k = winreg.QueryValueEx(h, "DEEPGRAM_API_KEY")[0] or ""
+        except OSError:
+            k = ""
+    return str(k).strip()
+
+
 def lead_card(r):
     """The fields the coach actually shows on a call."""
     return {
@@ -229,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("[coach] %s\n" % (fmt % args))
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", private=False):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
         elif isinstance(body, str):
@@ -237,9 +253,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        if not private:      # private = no CORS grant, so another site's script cannot read the reply
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         if self.command != "HEAD":
@@ -283,7 +300,18 @@ class Handler(BaseHTTPRequestHandler):
                 "leads": len(load_leads()),
                 "sessions_dir": SESSIONS,
                 "port": PORT,
+                "deepgram": bool(deepgram_key()),     # whether a key is set. Never the key.
             })
+
+        if p == "/api/dgkey":
+            # The coach page's own request only: our Host (no DNS rebinding), our Origin when one
+            # is sent, same-origin per the browser, and no CORS grant on the reply.
+            own = ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
+            origin, site = self.headers.get("Origin"), self.headers.get("Sec-Fetch-Site")
+            if (self.headers.get("Host") not in own or (origin and origin not in ["http://" + o for o in own])
+                    or (site and site != "same-origin")):
+                return self._send(403, {"error": "same-origin only"}, private=True)
+            return self._send(200, {"key": deepgram_key()}, private=True)
 
         if p == "/api/lead":
             q = (qs.get("q") or [""])[0]
