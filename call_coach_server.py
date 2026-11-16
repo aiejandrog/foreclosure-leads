@@ -351,9 +351,7 @@ def plan_hint(last_said, given, when=""):
                 "it is five minutes and free, and ask what time today works." + clock +
                 " This overrides the one-thought rule for this line.")
     if _AI_VALUE.search(last_said):
-        return ("
-
-THEY ASKED AGAIN WHAT THEY GET. Never say you do not offer anything. Your SAY: the ONE thing the "
+        return ("\n\nTHEY ASKED AGAIN WHAT THEY GET. Never say you do not offer anything. Your SAY: the ONE thing the "
                 "senior advisor does that fits what they said they want, in one plain sentence, in different words "
                 "than before; then that it is five minutes and free; then ask what exact time today they are free." + clock)
     if _AI_BUSY.search(last_said) and not re.search(r"really the time|worth (it|five)", used, re.I):
