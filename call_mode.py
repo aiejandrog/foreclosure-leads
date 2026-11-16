@@ -1973,6 +1973,29 @@ def _mail_to(d):
     return m[:90]
 
 
+def _cmp_slim(d):
+    """WHAT A FRESH FILING OWES (2026-11-16, Alex: "the judgment is not going to be posted ... it's
+    all inside of the complaint document first"). A lis pendens row has no judgment by definition,
+    so "judgment not posted" told the caller nothing. This ships what the complaint reader took off
+    the complaint (complaint_reader.for_board, baked as d['cmp']) plus the recorded open mortgage
+    face (loan_balance, d['orestface']) for a filing whose complaint has not been read.
+    p principal claimed, dd default date, jr other lienholders named, pg/rd pages/pages read,
+    fc recorded face of the foreclosed mortgage (Broward notice), rm recorded open mortgage(s).
+    Figures and counts only. None when there is nothing to say."""
+    c = d.get('cmp') if isinstance(d.get('cmp'), dict) else {}
+    out = {}
+    for src, dst in (('p', 'p'), ('face', 'fc'), ('dd', 'dd'), ('jr', 'jr'), ('pg', 'pg'), ('rd', 'rd')):
+        if c.get(src):
+            out[dst] = c[src]
+    try:
+        rm = int(round(float(d.get('orestface') or 0)))
+    except (TypeError, ValueError):
+        rm = 0
+    if rm > 0:
+        out['rm'] = rm
+    return out or None
+
+
 def _eqc_slim(c):
     """The baked equity card, trimmed for the handset. None when the lead has none (the page then falls
     back to eqv, which is the same clear/priced test). Amounts are RECORDED amounts, never payoffs."""
@@ -2553,6 +2576,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
                            # through lkAsDial, and without its equity card isEquity() was false, so a
                            # No answer on a pasted number could never route it to mail.
                            'eqc': _eqc_slim(d.get('eqc')),
+                           'cm': _cmp_slim(d),
                            'v': d.get('value') or None,
                            'ab': 1 if ((d.get('mail') or '').split(',')[0].strip().upper()
                                        and (d.get('addr') or '').split(',')[0].strip().upper()
@@ -2762,6 +2786,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # q may_quote, j judgment, js its source, li recorded liens [type, amount, recorded, source],
             # b basis, bs basis source, n net. Call Mode reads this and never recomputes value - judgment.
             'eqc': _eqc_slim(d.get('eqc')),
+            'cm': _cmp_slim(d),
             'ss': (d.get('orsurvsen') if isinstance(d.get('orsurvsen'), (int, float)) else None),
             # Back-taxes DOLLARS. NAMED 'txd', NOT 'td': 'td' is the tax-deed flag above, and as a second
             # 'td' in this literal the dollars replaced the flag, so a foreclosure with back taxes was
@@ -3427,7 +3452,7 @@ def mark_lookup(cov, lookup, crew_sb=None):
         r['lk'] = 1
         # a replied lookup lead stays on seat 0; its person's dial rows were pinned there too
         r['sb'] = 0 if x.get('rp') else crew_sb.get(x.get('pk'), x['sb'])
-        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp', 'eqc', 'v', 'ab', 'ma'):
+        for k in ('pk', 'bq', 'bu', 'x', 'xf', 'd', 'lp', 'z', 'pl', 'pcs', 'rp', 'eqc', 'cm', 'v', 'ab', 'ma'):
             if x.get(k) not in (None, '', []):
                 r[k] = x[k]
         n += 1
@@ -7011,7 +7036,7 @@ function lkAsDial(r, num){
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
   /* eqc / ab / ma (2026-11-11): the equity card, absentee flag and mailing address, so a No answer on a
      pasted number can route the lead to mail like any traced lead (noAnswerRoute). */
-  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu','eqc','v','ab','ma'].forEach(function(k){
+  ['ag','aw','xf','lp','e','ct','fo','z','pl','pcs','bq','bu','ne','st','rp','le','ln','lt','lu','eqc','cm','v','ab','ma'].forEach(function(k){
     if(r[k] !== undefined && r[k] !== null && r[k] !== '') o[k] = r[k]; });
   // dial rows carry st only for balloons; a tax deed keeps st so the text button picks the
   // tax-deed text (textFlags reads r.st === 'TD', and dial-row td is the back-taxes amount)
@@ -7101,6 +7126,31 @@ function lookupList(){
       if(c.f && c.j == null) eqStatus = 'Recorded liens checked, judgment not posted';
       else if(!c.f && c.lb) eqStatus = esc(c.lb);
     }
+    /* FRESH FILING (2026-11-16, Alex). A lis pendens case has no judgment yet: what is owed is in the
+       COMPLAINT. So a new filing says what the complaint claims, or says plainly that the complaint
+       has not been read and falls back to the recorded mortgage. "Judgment not posted" is kept for a
+       case that should have one (a dated sale). A pleaded principal is not a payoff, and says so. */
+    var owedLine = '';
+    if(r.lp && !(c && c.j != null)){
+      var m = r.cm || {};
+      if(+m.p > 0){
+        eq = 'Complaint claims ' + money(+m.p) + ' principal';
+        owedLine = (m.dd ? 'In default since ' + esc(String(m.dd)) + '. ' : '')
+                 + 'Interest and fees are on top of that'
+                 + (+m.jr > 0 ? '. ' + m.jr + ' other lienholder' + (m.jr === 1 ? '' : 's') + ' named in the complaint' : '')
+                 + (m.pg ? '. Read ' + (m.rd || 0) + ' of ' + m.pg + ' pages' : '');
+        if(typeof r.v === 'number' && r.v > 0) owedLine += '. Value less that principal: ' + money(r.v - (+m.p));
+      } else if(+m.fc > 0){
+        eq = 'Foreclosed mortgage recorded at ' + money(+m.fc);
+        owedLine = 'Recorded amount of the loan, not the balance. Complaint not read';
+      } else if(+m.rm > 0){
+        eq = 'Recorded open mortgage ' + money(+m.rm);
+        owedLine = 'Complaint not read yet. That is the recorded amount, not the balance';
+      } else {
+        owedLine = 'Complaint not read yet, so what is owed is not known';
+      }
+      if(eqStatus === 'Recorded liens checked, judgment not posted') eqStatus = 'Recorded liens checked';
+    }
     var links = fileLinks({fo:r.fo, ct:r.ct, o:(r.o || r.on || ''), a:(r.a || ''), c:r.c, z:r.z}).filter(function(x){
       return /Whitepages|People search|Coach/.test(x[0]); });
     var _g = _lkGroup(r), _on = (LKFOCUS === r.c);
@@ -7110,6 +7160,7 @@ function lookupList(){
          + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
          + (typeof r.v === 'number' && r.v > 0 ? '<div class="sub">Property value ' + money(r.v) + '</div>' : '')
+         + (owedLine ? '<div class="sub">' + owedLine + '</div>' : '')
          + (eqStatus ? '<div class="sub">' + eqStatus + '</div>' : '')
          + (r.bq ? '<div class="sub" style="color:var(--gold)">Bankruptcy not checked. Ask first: Have you filed for bankruptcy?</div>' : '')
          + '<div class="flinks" style="margin-top:8px">' + links.map(function(x){
