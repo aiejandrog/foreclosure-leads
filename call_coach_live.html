@@ -161,6 +161,11 @@ code{color:var(--accent)}
       <span>I read that line and I'm recording this call. I accept responsibility for consent on this line.</span>
     </label>
 
+    <label class="ack" title="For calls placed through Phone Link on this laptop. Chrome asks you to share a screen: pick Entire screen and switch on Also share system audio. Your mic becomes YOU and the laptop sound becomes THEM, exact from the first word. Needs the speed/speaker key.">
+      <input type="checkbox" id="sysaud" onchange="Coach.setSys(this.checked)">
+      <span>Phone Link call: also capture this laptop&rsquo;s sound, so their voice is its own channel.</span>
+    </label>
+
     <div class="row">
       <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
@@ -507,7 +512,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgWords:{}, dgOpen:null, dgGot:false,
+  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgWords:{}, dgOpen:null, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -810,6 +815,16 @@ function fcTwoVoices(words){
   Object.keys(words||{}).forEach(function(k){ tot+=words[k]; a.push(words[k]); });
   a.sort(function(x,y){ return y-x; });
   return a.length>1&&a[1]>=5&&a[1]/tot>=0.08;
+}
+/* THEIR VOICE IN YOUR MICROPHONE. On two channels the laptop speakers leak their words into the
+   mic, so the same sentence comes back on your channel a moment later. A mic line whose words are
+   nearly all in what their channel just said is that leak, not you. Both arguments are norm()ed. */
+function fcEcho(nline, nother){
+  var w=String(nline||'').split(' ').filter(Boolean), o=' '+String(nother||'')+' ';
+  if(!w.length||o.length<3) return false;
+  var hit=0;
+  w.forEach(function(x){ if(o.indexOf(' '+x+' ')>=0) hit++; });
+  return hit/w.length>=0.7;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1389,6 +1404,7 @@ function dgMessage(j){
   var txt=alt.transcript||'';
   if(!txt) return;
   S.dgGot=true;
+  if(S.dgTwo){ dgTwoMessage(j, txt); return; }
   var runs=fcRuns(alt.words||[]);
   if(!runs.length) runs=[{spk:'', text:txt}];
   if(j.is_final){
@@ -1403,19 +1419,49 @@ function dgMessage(j){
     });
     /* Once the voices are known, every earlier line gets its real label, not the guess it was given. */
     if(dgLive()) S.lines.forEach(function(l){ if(l.dg!=null&&l.dg!=='') l.spk=(l.dg===S.dgYou?'you':'them'); });
-    $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice':'one voice heard, telling you apart by what is said');
+    if(!S.dgTwo) $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice':'one voice heard, telling you apart by what is said');
   } else {
     var last=runs[runs.length-1];
     S.interim=txt; S.lastSpeech=now(); fcHear(last.text,false,dgTag(last.spk)); renderTranscript();
   }
 }
+/* TWO CHANNELS: the mic is you, the laptop sound is them. No guessing and no learning: the
+   channel number is the speaker. Their words leaking into the mic are dropped (fcEcho). */
+function dgTwoMessage(j, txt){
+  var ch=(j.channel_index&&j.channel_index[0])||0, t=now();
+  S.dgThem=S.dgThem.filter(function(x){ return t-x.at<12000; });
+  var them=norm(S.dgThem.map(function(x){ return x.text; }).join(' '));
+  if(ch===0&&fcEcho(norm(txt), them)) return;
+  var tag=ch===0?'you':'them';
+  if(j.is_final){
+    S.interim='';
+    if(ch===1) S.dgThem.push({at:t, text:txt, fin:true});
+    pushFinal(txt, tag, 'c'+ch, true);
+    S.dgOpen=/[.?!]$/.test(txt)?null:{i:S.lines.length-1, spk:'c'+ch, at:now()};
+  } else {
+    if(ch===1){ S.dgThem=S.dgThem.filter(function(x){ return x.fin; }); S.dgThem.push({at:t, text:txt, fin:false}); }
+    S.interim=txt; S.lastSpeech=t; fcHear(txt,false,tag); renderTranscript();
+  }
+}
+/* Mic on the left channel, the laptop sound on the right, as one stream for the recorder and Deepgram. */
+function twoChannel(mic, sys){
+  var AC=window.AudioContext||window.webkitAudioContext, ctx=new AC(), m=ctx.createChannelMerger(2), d=ctx.createMediaStreamDestination();
+  d.channelCount=2; d.channelCountMode='explicit'; d.channelInterpretation='discrete';
+  ctx.createMediaStreamSource(mic).connect(m,0,0);
+  ctx.createMediaStreamSource(sys).connect(m,0,1);
+  m.connect(d);
+  S.mixCtx=ctx;
+  return d.stream;
+}
+function setSys(on){ try{ on?localStorage.setItem('coachSysAud','1'):localStorage.removeItem('coachSysAud'); }catch(e){} }
+setTimeout(function(){ try{ if(localStorage.getItem('coachSysAud')&&$('sysaud')) $('sysaud').checked=true; }catch(e){} },0);
 function startDG(stream,key){
   try{
-    S.dgGot=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null;      /* a new call, new voices */
+    S.dgGot=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; S.dgThem=[];      /* a new call, new voices */
     var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&language='+(S.lang==='es-US'?'es':'en-US')
-      +'&punctuate=true&interim_results=true&diarize=true&smart_format=true',['token',key]);
+      +'&punctuate=true&interim_results=true&smart_format=true'+(S.dgTwo?'&multichannel=true':'&diarize=true'),['token',key]);
     ws.onopen=function(){
-      $('eng').textContent='engine: Deepgram · learning your voice (read the opener)';
+      $('eng').textContent='engine: Deepgram · '+(S.dgTwo?'two channels · mic = YOU, laptop sound = THEM':'learning your voice');
       var mr=new MediaRecorder(stream,{mimeType:(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm')});
       mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&ws.readyState===1) ws.send(ev.data); };
       mr.start(250);
@@ -1522,7 +1568,19 @@ function enterApp(){
 }
 function start(){
   if(!$('ack').checked) return;
-  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
+  /* The screen-share prompt has to come straight from the click, so it goes first. Only the sound is
+     used: the picture track is switched off at once and nothing of the screen is recorded or sent. */
+  var want=$('sysaud')&&$('sysaud').checked&&navigator.mediaDevices.getDisplayMedia;
+  var sysP=want?navigator.mediaDevices.getDisplayMedia({video:true, audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}, systemAudio:'include'})
+      .catch(function(){ return null; }):Promise.resolve(null);
+  sysP.then(function(disp){
+  var sysNote='';
+  if(disp){ disp.getVideoTracks().forEach(function(t){ t.enabled=false; });
+    if(!disp.getAudioTracks().length){ disp.getTracks().forEach(function(t){ t.stop(); }); disp=null; sysNote=' · no laptop sound was shared, one mic only'; } }
+  else if(want) sysNote=' · screen share cancelled, one mic only';
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(mic){
+    var stream=mic; S.raw=[mic]; S.dgTwo=false;
+    if(disp){ try{ stream=twoChannel(mic, disp); S.raw.push(disp); S.dgTwo=true; }catch(e){ disp.getTracks().forEach(function(t){ t.stop(); }); sysNote=' · could not mix the laptop sound, one mic only'; } }
     S.stream=stream; S.plain=false;
     var lead=S.lead||{};
     fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1533,9 +1591,14 @@ function start(){
       startRecorder(stream);
       enterApp();
       fcMeter(stream);
-      dgKeyAny().then(function(k){ if(!k||!startDG(stream,k)) startSR(); });
-    }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); stream.getTracks().forEach(function(t){t.stop();}); });
-  }).catch(function(){ gateErr('Mic permission denied. Chrome needs the mic for recording + transcript. Use Plain Call Mode otherwise.'); });
+      dgKeyAny().then(function(k){
+        if(!k){ S.dgTwo=false; startSR(); if(disp) sysNote=' · two channels need the speed/speaker key'; }
+        else if(!startDG(stream,k)){ S.dgTwo=false; startSR(); }
+        if(sysNote) setTimeout(function(){ $('eng').textContent+=sysNote; },1500);
+      });
+    }).catch(function(){ gateErr('Server unreachable — is call_coach_server.py running on 127.0.0.1:8777?'); S.raw.forEach(function(x){ x.getTracks().forEach(function(t){t.stop();}); }); });
+  }).catch(function(){ if(disp) disp.getTracks().forEach(function(t){ t.stop(); }); gateErr('Mic permission denied. Chrome needs the mic for recording + transcript. Use Plain Call Mode otherwise.'); });
+  });
 }
 function plain(){
   S.plain=true; S.sid=null;
@@ -1571,7 +1634,9 @@ function finish(outcome){
     .catch(function(e){ if(e==='held') return; alert('Transcript/end POST failed — audio chunks already on disk under call_sessions/'+S.sid); });
   };
   if(S.recorder&&S.recorder.state!=='inactive'){
-    S.recorder.onstop=function(){ if(S.stream) S.stream.getTracks().forEach(function(t){t.stop();}); setTimeout(done,600); };
+    S.recorder.onstop=function(){ if(S.stream) S.stream.getTracks().forEach(function(t){t.stop();});
+      S.raw.forEach(function(x){ x.getTracks().forEach(function(t){t.stop();}); }); try{ if(S.mixCtx) S.mixCtx.close(); }catch(e){}
+      setTimeout(done,600); };
     S.recorder.stop();  // flushes the final chunk through ondataavailable
   } else done();
 }
@@ -1579,13 +1644,13 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, dgYou:function(){ return S.dgYou; },
-            youVoice:function(v,w){ return fcYouVoice(v,w); }, dgReset:function(){ S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            youVoice:function(v,w){ return fcYouVoice(v,w); }, echo:function(a,b){ return fcEcho(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 
-return {start:start,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
+return {start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
         setKey:setKey,keepGoing:keepGoing,
