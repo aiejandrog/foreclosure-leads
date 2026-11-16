@@ -361,6 +361,7 @@ else:
         chk(o['ch_lines'] == ['them:Hello?', 'you:Hey,', 'them:No.', 'them:I'], 'two channels: mic is you, laptop sound is them, their echo in the mic is dropped', o['ch_lines'])
         chk(o['ch_you_quiet'] == 0 and o['ch_them'] == ['obj:notint'], 'two channels: only their channel raises a card, on partial words', [o['ch_you_quiet'], o['ch_them']])
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
+        chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')
         chk('AI_PAUSE' in src and 'AI_HOLD' in src and "shown:S.ai.line" in src, 'the AI line waits for a pause, holds long enough to read, and tells the model what is on screen')
         chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
