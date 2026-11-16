@@ -108,7 +108,9 @@ _ENTITY = re.compile(r'\b(LLC|L L C|INC|CORP|CORPORATION|TRUST|BANK|MORTGAGE|SER
                      r'PROPERTIES|PROPERTY|INVESTMENTS?|CAPITAL|FUND|ASSOC|ASSOCIATION|LP|LLP|'
                      r'COMPANY|REALTY|HOMES|GROUP|VENTURES?|PARTNERS?|MANAGEMENT|ENTERPRISES?|'
                      r'REO|N A|NA)\b', re.I)
-_ESTATE = re.compile(r'\bEST(ATE)? OF\b|\bLIFE\s*EST\b|\bDECEASED\b|\bDEC\'?D\b', re.I)
+# 2026-11-16: the county also writes an estate as a bare token ("NIX,BAMBI M EST"). Four of those were
+# printed in the 11-14 drop with a first-name greeting. A bare EST or ESTATE in the owner is an estate.
+_ESTATE = re.compile(r'\bEST(ATE)?\b|\bLIFE\s*EST\b|\bDECEASED\b|\bDEC\'?D\b', re.I)
 _NAME_MARK = re.compile(r'\b(H/E|H&W|W/E|ET\s*AL|ETAL|ETUX|ETVIR|TRUSTEES?|TRS?|REV(OCABLE)?|'
                         r'LIV(ING)?|JT(RS)?|LE|REM)\b', re.I)
 

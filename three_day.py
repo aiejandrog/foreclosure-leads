@@ -190,6 +190,8 @@ def write_md(rows, today, days=DAYS, min_year=MIN_YEAR):
             ' / '.join('(%s) %s-%s' % (p[:3], p[3:6], p[6:]) for p in x['phones']) or '— no phone', x['status']))
     if not rows:
         L.append('(no leads qualify today)')
+    import mail_followups                       # a due or overdue mailing rides at the top of the sheet
+    L[2:2] = mail_followups.md_block(today)
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(L) + '\n')
     return path

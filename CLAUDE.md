@@ -221,6 +221,12 @@ number is the ledger code and the call-by date is the first print date + 28 days
 the hours line prints only with `--hours`. `check_notices` refuses court / government / lender wording, an
 unfilled field and a call-by date that is not in the future. First-touch pieces still refuse FINAL NOTICE.
 
+**Mail log and reminders (2026-11-16):** `mail_followups.py --mark-mailed --touch N` records the day a touch
+went out in `~/DEALFLOW/mail_variants_sent.json` (cases and dates only). From it: SECOND NOTICE due +7, FINAL
+NOTICE due +14, file closes +28, and that +28 date is the call-by date the notices print. `three_day.py` and
+`deal_desk.py` put a due or overdue mailing at the top of the daily sheets. A bare `EST` in the owner name
+is an estate and is dropped from every mail pool.
+
 ## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
 
 Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the

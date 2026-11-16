@@ -167,6 +167,8 @@ def write_md(desk, today):
         L.append('- **%s** (%s) — idle %dd, last: %s%s%s' % (
             d['owner'] or d['case'], d['status'], d['days_since'], d['last'] or 'never',
             ' · next: ' + d['next'] if d['next'] else '', ' · ' + d['note'] if d['note'] else ''))
+    import mail_followups                       # a due or overdue mailing rides at the top of the desk
+    L[2:2] = mail_followups.md_block(today)
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(L) + '\n')
     return path

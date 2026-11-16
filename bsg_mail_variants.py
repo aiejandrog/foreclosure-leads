@@ -1118,12 +1118,13 @@ def _bold(text):
     return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', _e(text))
 
 
-def call_by(r, today, override=None):
-    """The day we close the outreach file: --call-by, else the ledger's first print date + 28 days.
-    The same date prints on touch 2 and touch 3."""
+def call_by(r, today, override=None, sent=None):
+    """The day we close the outreach file: --call-by, else the day touch 1 was MAILED + 28 days
+    (mail_followups' log), else the ledger's first print date + 28. Same date on touch 2 and 3."""
     if override:
         return override
-    base = parse_date(r.get('ledger_date') or '') or today
+    import mail_followups as MF
+    base = (MF.t1_date(r.get('case'), sent) or parse_date(r.get('ledger_date') or '') or today)
     return base + dt.timedelta(days=CALL_BY_DAYS)
 
 
