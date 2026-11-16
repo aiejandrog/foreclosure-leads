@@ -1386,12 +1386,17 @@ function aiAsk(){
   clearTimeout(S.ai.t);
   S.ai.t=setTimeout(aiCheck,150);
 }
+function aiFresh(all, from){ return String(all||'').slice(from||0).replace(/\s+/g,' ').trim(); }
 function aiCheck(){
   var t=now(), quiet=t-(S.fc.lastWord||0), held=t-(S.ai.shownAt||0);
   if(quiet<AI_PAUSE){ S.ai.t=setTimeout(aiCheck, AI_PAUSE-quiet+30); return; }
   if(S.ai.line&&held<AI_HOLD){ S.ai.t=setTimeout(aiCheck, AI_HOLD-held+50); return; }
-  var n0=S.ai.n, fresh=S.lines.slice(S.ai.n).map(function(l){ return l.text; }).join(' ');
-  S.ai.n=S.lines.length;
+  /* WHAT IS NEW is measured in characters of everything said (S.finals), not in transcript lines.
+     Call 11-16 17:29: he read the line back, it was counted as read, and then her answer ("that's a
+     great question, I have no idea") was JOINED onto that same transcript line. No new line appeared,
+     so nothing was ever "new" again and the box stayed on the old line for the rest of the call. */
+  var n0=S.ai.n, fresh=aiFresh(S.finals, S.ai.n);
+  S.ai.n=S.finals.length;
   if(!fresh||fcReadBack(norm(fresh), norm(S.ai.line))||fcVoice(norm(fresh), fcRef()).all==='you') return;
   var seq=++S.ai.seq, n=S.lines.length, t0=now(), heardAt=S.fc.lastWord||0;
   $('aiwho').className='who busy';
@@ -1796,7 +1801,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

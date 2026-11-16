@@ -178,6 +178,8 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
+  var said=' Okay I mean if the sale date comes where would you and your family locate';
+  o.fresh=[T.fresh(said+' That is a great question. I have no idea.', said.length), T.fresh(said, said.length), T.fresh(' hello  there ', 0)];
   /* a Monday, 16 Nov 2026, 12:30 local */
   var NOW=new Date(2026,10,16,12,30).getTime(), WA=function(s){ var x=T.whenAt(s,NOW); return x.iso+' '+x.hm; };
   o.whenat=[WA('tomorrow at 9'), WA('Tomorrow morning at 10:15 AM'), WA('later today around 4'), WA('friday at 2 pm'),
@@ -369,6 +371,8 @@ else:
             'the day and time they gave becomes a calendar date for Call Mode, and what cannot be placed stays empty', o['whenat'])
         chk('overflow-y:auto' in html[html.index('.overlay{position:fixed'):html.index('.overlay.on')] and "if($('outcome').className.indexOf('on')>=0){ S.lastSpeech=now(); return; }" in src,
             'the outcome screen scrolls, and choosing an outcome is not treated as a silent call')
+        chk(o['fresh'] == ['That is a great question. I have no idea.', '', 'hello there'] and 'fresh=aiFresh(S.finals, S.ai.n)' in src and 'S.ai.n=S.finals.length' in src,
+            'an answer joined onto the line he just read back still counts as new, so the AI is asked', o['fresh'])
         chk("if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;" in src, 'the same line, or a line for the same words heard again, does not replace what is on screen')
         chk('TALK LIKE A PERSON' in srv and 'Do not take the wording' in srv and '"temperature": 0.6' in srv, 'the model is told to talk like a person: short, reactive, never a script sentence word for word')
         chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
