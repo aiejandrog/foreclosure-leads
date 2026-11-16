@@ -794,7 +794,8 @@ def analyze(docs, owner, judgment, ftype='', lead_case='', links=None, _legacy=F
     if not _legacy:
         import other_liens
         ol = other_liens.rows(pool, lead_case=lc, legacy_counted=_counted, legacy_released=_rel,
-                              holder_release=(county != 'palmbeach'), judgment=judgment or 0)
+                              holder_release=(county != 'palmbeach'), judgment=judgment or 0,
+                              county='PALM BEACH' if county == 'palmbeach' else 'BROWARD')
         hoa_open += ol['add']['hoa_open']; code_open += ol['add']['code_open']; irs_open += ol['add']['irs_open']
         extra = {'other': ol['other'], 'other_open_unpriced': ol['other_open_unpriced'], 'other_v': 1}
         if ol['hoa_own_in']:

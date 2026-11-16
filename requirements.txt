@@ -27,3 +27,13 @@ PyMuPDF>=1.24         # document_store: rebuild, page-count and per-page text of
 # --vision must be asked for by name and requires --max-spend.
 # Install locally with:  pip install -U "anthropic>=0.41"
 segno>=1.6            # QR codes on the business card back (bsg_cards.qr_svg)
+# winocr_py.py: Windows OCR called from Python (Windows PowerShell 5.1 does not start on the engine
+# laptop, so the PowerShell OCR bridge read nothing). Windows only; Linux CI never imports them.
+winrt-runtime>=3.0; sys_platform == "win32"
+winrt-Windows.Media.Ocr>=3.0; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging>=3.0; sys_platform == "win32"
+winrt-Windows.Storage>=3.0; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=3.0; sys_platform == "win32"
+winrt-Windows.Foundation>=3.0; sys_platform == "win32"
+winrt-Windows.Foundation.Collections>=3.0; sys_platform == "win32"
+winrt-Windows.Globalization>=3.0; sys_platform == "win32"

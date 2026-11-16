@@ -470,6 +470,18 @@ def ocr_images(paths, timeout=600):
     """-> {path: text or None}. One Windows PowerShell per call; raises OcrUnavailable if it cannot run."""
     if not paths:
         return {}
+    # 2026-11-16: Windows PowerShell 5.1 does not start on the engine laptop ("The shell cannot be
+    # started ... ServicePointManager"), so this bridge returned OcrUnavailable for every scanned page
+    # and no scan was ever read there. Same OCR engine, called from Python, first; PowerShell only when
+    # the bindings are not installed.
+    try:
+        import winocr_py
+        return winocr_py.ocr_images(list(paths), timeout=timeout)
+    except ImportError:
+        pass
+    except Exception as e:
+        if type(e).__name__ != 'Unavailable':
+            raise OcrUnavailable('winocr_py: %s' % str(e)[:200])
     try:
         r = subprocess.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
                             '-File', OCR_PS1] + list(paths), capture_output=True, timeout=timeout)

@@ -293,17 +293,42 @@ class BrowardCollector(CountyCollector):
 
 
 class PalmBeachCollector(CountyCollector):
-    """Not implemented. Landmark/eCaseView is behind reCAPTCHA and needs a headed browser."""
+    """Recorded instruments by the county's direct link; the court docket runs in the operator's Chrome.
+
+    MEASURED 2026-11-16 (this class used to say "Not implemented ... behind reCAPTCHA", which was
+    never tested and is wrong for documents):
+      * Landmark SEARCH is gated: every search endpoint answers 'Invalid Captcha' with no token.
+      * Landmark DOCUMENTS are not: /Document/GetDocumentByBookPage and /Document/GetDocumentByCFN
+        return the whole instrument as a PDF to a plain request (pb_recorded.py).
+      * The COURT site (eCaseView) rejects a scripted browser at the guest login and admits a
+        person's own Chrome. That route is pb_court_inbox.py + palmbeach_documents.py, not this
+        class, so enumerate_documents stays an access gap here.
+    """
     county = 'PALM BEACH'
 
     def refresh_session(self):
         return None
 
     def enumerate_documents(self, case):
-        raise AccessGap('Palm Beach document transport not implemented')
+        raise AccessGap('Palm Beach court docket is read in the operator\'s Chrome (pb_court_inbox), '
+                        'not by this collector')
 
     def retrieve_document(self, record):
-        raise AccessGap('Palm Beach document transport not implemented')
+        import pb_recorded as PR
+        ref = str(record.get('bp') or record.get('bookpage') or record.get('cfn') or '').strip()
+        if not ref:
+            raise AccessGap('Palm Beach recorded instrument needs a book/page or CFN')
+        try:
+            content = PR.fetch(ref)
+        except ValueError as exc:
+            raise AccessGap(str(exc))
+        except PR.Unavailable as exc:
+            raise AccessGap(str(exc))
+        # Landmark publishes no page count beside the image, so completeness is unproven and says so.
+        return {'content': content, 'transport': 'palmbeach_landmark_direct_link',
+                'source_urls': [PR.BASE + '/Document/'], 'pages_expected': None,
+                'page_count_verified': False, 'page_count_source': None,
+                'record_key': {'ref': ref}}
 
     def attachments(self, case, entry):
         raise AccessGap('Palm Beach document transport not implemented')

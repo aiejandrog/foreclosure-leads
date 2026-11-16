@@ -1536,6 +1536,17 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                'amt': round(amt) if amt > 0 else None,
                'st': 'RELEASED' if released else 'OPEN',
                'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
+        if not row['amt'] and not own_case and kind != 'lis_pendens':
+            # the index published no amount; the recorded document may have been read since
+            # (lien_amounts, 2026-11-16). Never raises, only ever adds debt.
+            try:
+                import lien_amounts
+                _read = lien_amounts.lookup('MIAMI-DADE', row)
+            except Exception:
+                _read = None
+            if _read:
+                row['amt'] = _read
+                row['amt_src'] = 'doc'
         if own_case:
             row['own_case'] = True                          # this foreclosure's own filing: never a claim
             _ob = _legacy_bucket(r, on_parcel, _legacy_sats)

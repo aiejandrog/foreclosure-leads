@@ -3002,6 +3002,26 @@ function _lpDebtEst(r){
   return +r.debtEst;
 }
 function _isLpEst(r){ return _lpDebtEst(r) > 0; }
+/* COPY-ALL OWED LINE (2026-11-16, Alex pasted a lis pendens card reading "Owed $0" while the
+   recorded chain held a $360k open mortgage and four open claims with no amount). No judgment and
+   no payoff is an UNKNOWN debt, never $0: say what the records search found instead. A recorded
+   amount is the face of the mortgage, not a payoff, and the line says so. */
+function _owedLine(r){
+  var f = (typeof fmtK === 'function') ? fmtK : function(v){ return '$' + Math.round(v); };
+  var po = _payoffOf(r);
+  if(po > 0) return 'Owed ' + f(po);
+  var parts = [];
+  var c = (r||{}).cmp;
+  if(c && +c.p > 0) parts.push('complaint claims ' + f(+c.p) + ' principal' + (c.dd ? ' (default ' + c.dd + ')' : ''));
+  else if(c && +c.face > 0) parts.push('foreclosed mortgage recorded at ' + f(+c.face));
+  if(c && +c.jr > 0) parts.push(c.jr + ' other lienholder' + (c.jr === 1 ? '' : 's') + ' named in the complaint');
+  var face = +((r||{}).orestface) || 0, n = +((r||{}).orestn) || 0;
+  if(face > 0) parts.push('Recorded open mortgage' + (n > 1 ? 's (' + n + ')' : '') + ' ' + f(face)
+    + ((+r.orest > 0) ? ' (est. balance ' + f(+r.orest) + ')' : ''));
+  var oth = +((r||{}).eqoth) || 0;
+  if(oth > 0) parts.push(oth + ' open lien' + (oth === 1 ? '' : 's') + ' with no amount');
+  return parts.length ? 'Owed not posted: ' + parts.join(' + ') : 'Owed not posted (no judgment yet)';
+}
 function _debtOf(r){ return _payoffOf(r) || _lpDebtEst(r); }
 function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
 /* DEBT UNKNOWN (2026-09-30). A foreclosure whose judgment is not posted (r.ju) and every lis pendens
@@ -19062,7 +19082,7 @@ function render(){
     gDo.push(_viewedBtn(r));
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
-      'Value '+fmtK(r.value)+' / Owed '+fmtK(_payoffOf(r))+(r.plaintiff?' / vs '+r.plaintiff:''),
+      'Value '+fmtK(r.value)+' / '+_owedLine(r)+(r.plaintiff?' / vs '+r.plaintiff:''),
       r.auc?'Verify sale: '+r.auc:'',
       r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
     ].filter(Boolean).join('\n');

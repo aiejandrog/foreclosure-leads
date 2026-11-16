@@ -116,7 +116,8 @@ def _nums(s):
     return [int(x) for x in re.findall(r'\d+', str(s or ''))]
 
 
-def rows(pool, lead_case='', legacy_counted=(), legacy_released=(), holder_release=True, judgment=0):
+def rows(pool, lead_case='', legacy_counted=(), legacy_released=(), holder_release=True, judgment=0,
+         county='BROWARD'):
     """pool: the analyzer's de-duplicated exact-name rows (broward_liens._dedupe(_exact_docs(...))).
     legacy_counted / legacy_released: id()s of rows the old summing loop counted, or skipped as
     released, so nothing it counted is counted twice and nothing it counted is dropped.
@@ -158,6 +159,20 @@ def rows(pool, lead_case='', legacy_counted=(), legacy_released=(), holder_relea
                'bp': d.get('BookPage', '') or '', 'amt': round(amt) if amt > 0 else None, 'st': 'OPEN',
                'anchor': 'parcel_index' if len(_digits(d.get('ParcelNumber'))) >= 8 else 'person'}
         row.update(extra)
+        # the instrument number addresses the document image (lien_amounts, 2026-11-16): the index
+        # mostly publishes no amount, the recorded document prints it
+        _inst = str(d.get('InstrumentNumber') or '').strip()
+        if _inst.strip('0'):
+            row['inst'] = _inst
+        if not row['amt'] and kind != 'lis_pendens':
+            try:
+                import lien_amounts
+                _read = lien_amounts.lookup(county, row)
+            except Exception:
+                _read = None
+            if _read:
+                row['amt'] = amt = _read
+                row['amt_src'] = 'doc'
         # a lender's judgment is usually the foreclosure itself (this case, an earlier refiled one,
         # or a servicer's name): already in `liens`, so adding its amount would count the first twice
         lender_suit = (kind == 'judgment' and not own and BANKISH_RE.search(holder)
