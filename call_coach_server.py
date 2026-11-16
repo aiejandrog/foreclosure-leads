@@ -295,6 +295,48 @@ AI_CHALLENGE = ("So you're not interested in saving your property, or the equity
                 "¿Entonces no le interesa salvar su propiedad, ni el patrimonio que tiene en ella?")
 
 
+# THE PLAN FACT. The numbers and the attorney questions are in the playbook, and the model would not
+# reach for them on its own (tested 11-16: five plans named, zero facts used). So when the homeowner's
+# last words name a plan, the matching fact is handed to the model for that line, once per call each.
+# (pattern in what they said, the fact or the question to use, a phrase that shows it was already used)
+AI_PLAN_FACTS = [
+    (r"not working|no job|unemploy|laid off|lost my job|out of work",
+     "nine times out of ten the bank denies a modification when there is no full-time income", r"nine times out of ten the bank"),
+    (r"modif|\bmod\b|remodif",
+     "a modification can reset the loan to today's rate, and the payment can jump thirty to fifty percent", r"thirty to fifty"),
+    (r"bankrupt|chapter (seven|thirteen|7|13)",
+     "about seven in ten people who file end up right back in foreclosure, because it pauses the sale and does not fix what "
+     "caused it, and the attorney wants two to four thousand up front", r"seven in ten"),
+    (r"realtor|real estate agent|listed|listing it|list it|on the market",
+     "most realtors are not trained for a foreclosure clock, and most have never asked the bank for more time", r"foreclosure clock|asked the bank for more time"),
+    (r"(brother|sister|mom|mother|dad|father|son|daughter|cousin|uncle|aunt|family|friend).{0,40}(money|lend|loan|giv|help|pay)"
+     r"|catch(ing)? (it )?up|reinstat|four ?oh ?one|401|retirement",
+     "money promised by family falls through or shows up late nine times out of ten", r"falls through|shows up late"),
+    (r"postpon|pushed back|push it back|rescheduled|cancel+ed the sale|sale (got|was) cancel",
+     "a postponement only delays it, and the balance keeps growing while the situation stays the same", r"only delays"),
+]
+AI_ATTY_Q = (r"lawyer|attorney|abogad",
+             "ask ONE of these, whichever has not been asked: is he a foreclosure specialist or a general attorney; what "
+             "exact steps has he taken so far; has he been in touch with the lender to actually stop the sale",
+             r"specialist|exact steps|in touch with the lender")
+
+
+def plan_hint(last_said, given):
+    """The instruction for this one line when the homeowner just named a plan, or ''."""
+    used = " ".join(given).lower()
+    for pat, fact, key in AI_PLAN_FACTS:
+        if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
+            return ("\n\nPLAN FACT FOR THIS LINE. The homeowner just named a plan. Your SAY is: a reaction of a few words, "
+                    "then this fact said your own spoken way with its numbers kept as words, then ONE question about "
+                    "their backup. The fact: " + fact + ". Say it as what usually happens, not as a promise. This "
+                    "overrides the one-thought rule for this line.")
+    pat, q, key = AI_ATTY_Q
+    if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
+        return ("\n\nATTORNEY QUESTION FOR THIS LINE. The homeowner brought up their attorney. Your SAY is: 'keep him' in a "
+                "few words, then " + q + ". One question only.")
+    return ""
+
+
 def folds(res):
     """True when a line gives up on the call: a goodbye, or reading their words as a stop request."""
     return res.get("type") == "stop" or (res.get("type") != "time" and bool(_AI_FOLD.search(res.get("line", ""))))
@@ -431,12 +473,14 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
             res["name"] = AI_STEPS[res["n"] - 1][1]
         return res
 
+    last_said = rows[-1].split(": ", 1)[1] if rows else ""
+    if not rows[-1].startswith("CALLER"):
+        system += plan_hint(last_said, prior + [shown])
     res = ask(system)
     # THE CHALLENGE, guaranteed (Alex, 11-16: "why didn't you ask, so you're not interested in saving
     # your property, your equity?"). The first "not interested" of a call gets his question, word for
     # word, whatever the model wrote. Later ones get the model's other angles. A stop request is
     # never challenged.
-    last_said = rows[-1].split(": ", 1)[1] if rows else ""
     if (_AI_NOTINT.search(last_said) and not _AI_STOP.search(said)
             and not any(_AI_CHALLENGED.search(x or "") for x in prior + [shown])):
         es = str(lang).lower().startswith("es")

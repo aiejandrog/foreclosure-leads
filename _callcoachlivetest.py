@@ -346,6 +346,19 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = 'HEARD: x\nTYPE: stop\nSTEP: close\nSAY: You are off the list. Take care.'
         j10 = suggest([{'spk': '', 'text': 'I am not interested, stop calling me.'}])[1]
         chk(j10.get('type') == 'stop' and 'not interested in saving' not in j10.get('line', ''), 'a stop request is never challenged: %s' % j10.get('line'))
+        # The plan fact: when they name a plan, the matching fact goes to the model for that line, once.
+        AI['reply'] = work
+        suggest([{'spk': 'you', 'text': 'What does taken care of look like?'}, {'spk': '', 'text': 'I am filing bankruptcy next week.'}])
+        sp1 = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('PLAN FACT FOR THIS LINE' in sp1 and 'seven in ten' in sp1, 'bankruptcy named: the model is handed the bankruptcy fact for that line')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'Like I said, bankruptcy.'}], 'asked': ['About seven in ten end up back in foreclosure. What is plan B?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('PLAN FACT FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'a fact already used on the call is not handed over again')
+        suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
+        chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named: the model is told to ask what he is doing')
+        suggest([{'spk': '', 'text': 'Who is this?'}])
+        chk('FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'no plan named: no fact is pushed')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
