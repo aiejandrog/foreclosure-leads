@@ -506,7 +506,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgGot:false,
+  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgWords:{}, dgOpen:null, dgGot:false,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -790,6 +790,16 @@ function fcYouVoice(votes){
   var best=null, n=0;
   Object.keys(votes||{}).forEach(function(k){ if(votes[k]>n){ n=votes[k]; best=k; } });
   return best;
+}
+/* ARE THERE TWO VOICES AT ALL. Deepgram numbers the voices it can tell apart. Through one microphone
+   it often cannot: test call 11-15 22:00 came back 182 words on one number and 3 on the other, the
+   whole call was labelled you, and no card showed. Its numbers are believed only once a second
+   voice holds a real share of the words. words: {speaker: words heard}. */
+function fcTwoVoices(words){
+  var tot=0, a=[];
+  Object.keys(words||{}).forEach(function(k){ tot+=words[k]; a.push(words[k]); });
+  a.sort(function(x,y){ return y-x; });
+  return a.length>1&&a[1]>=8&&a[1]/tot>=0.1;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1268,7 +1278,7 @@ function guessSpeaker(nline){
 }
 
 /* =========================== TRANSCRIPT =========================== */
-function pushFinal(text,spk){
+function pushFinal(text,spk,joinSpk){
   text=String(text||'').trim();
   if(!text) return;
   var nline=norm(text);
@@ -1276,7 +1286,9 @@ function pushFinal(text,spk){
   // Before the line joins S.finals, so it is still "the newest words". Usually the card is
   // already up from the partial; this catches what only the final wording matched.
   var fired=fcHear(text,true,tag);
-  S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
+  var o=S.dgOpen, ln=(joinSpk!=null&&o&&o.spk===joinSpk&&o.i===S.lines.length-1&&now()-o.at<4000)?S.lines[o.i]:null;
+  if(ln){ ln.text+=' '+text; ln.spk=spk||guessSpeaker(norm(ln.text)); }
+  else S.lines.push({t:mmss(now()-S.t0),text:text,spk:tag});
   S.finals+=' '+text;
   S.lastSpeech=now();
   if(tag!=='them'&&tag!=='them?') scanFlags(text);    // the guardrails are about YOUR words
@@ -1344,10 +1356,12 @@ function setKey(){
 }
 /* One Deepgram result. Words carry a speaker number on partials too, so your own partial words
    never raise a card, and a result with two voices in it becomes two transcript lines. Which
-   number is you is learned from who reads the screen (fcYouVoice); until then the content guess
-   stands in. */
+   number is you is learned from who reads the screen (fcYouVoice). Until then, and for as long as
+   Deepgram hears one voice (fcTwoVoices), the content guess stands in: a wrong "you" on their
+   words silences the coach, which is worse than no label. */
+function dgLive(){ return S.dgYou!==null&&fcTwoVoices(S.dgWords); }
 function dgTag(k){
-  if(k===''||S.dgYou===null) return '';
+  if(k===''||!dgLive()) return '';
   return k===S.dgYou?'you':'them';
 }
 function dgMessage(j){
@@ -1360,13 +1374,17 @@ function dgMessage(j){
   if(!runs.length) runs=[{spk:'', text:txt}];
   if(j.is_final){
     S.interim='';
-    runs.forEach(function(r){
+    (alt.words||[]).forEach(function(w){ if(w.speaker!=null) S.dgWords[w.speaker]=(S.dgWords[w.speaker]||0)+1; });
+    runs.forEach(function(r,i){
       if(r.spk!==''&&fcVoice(norm(r.text), fcRef()).all==='you'){
         S.dgVotes[r.spk]=(S.dgVotes[r.spk]||0)+1; S.dgYou=fcYouVoice(S.dgVotes);
       }
-      pushFinal(r.text, dgTag(r.spk));
+      pushFinal(r.text, dgTag(r.spk), i===0?r.spk:null);
+      /* Deepgram cuts a sentence wherever you breathe. A piece with no full stop stays open, and
+         the next piece in the same voice joins its line. */
+      S.dgOpen=(!j.speech_final&&!/[.?!]$/.test(r.text))?{i:S.lines.length-1, spk:r.spk, at:now()}:null;
     });
-    $('eng').textContent='engine: Deepgram · '+(S.dgYou===null?'learning your voice (read the opener)':'live speaker labels');
+    $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice (read the opener)':'one voice heard, telling you apart by what is said');
   } else {
     var last=runs[runs.length-1];
     S.interim=txt; S.lastSpeech=now(); fcHear(last.text,false,dgTag(last.spk)); renderTranscript();
@@ -1374,7 +1392,7 @@ function dgMessage(j){
 }
 function startDG(stream,key){
   try{
-    S.dgGot=false;
+    S.dgGot=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null;      /* a new call, new voices */
     var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&language='+(S.lang==='es-US'?'es':'en-US')
       +'&punctuate=true&interim_results=true&diarize=true&smart_format=true',['token',key]);
     ws.onopen=function(){
@@ -1542,7 +1560,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, dgYou:function(){ return S.dgYou; },
-            dgReset:function(){ S.dgYou=null; S.dgVotes={}; }, lines:function(){ return S.lines; },
+            dgReset:function(){ S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

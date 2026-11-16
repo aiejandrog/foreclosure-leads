@@ -155,7 +155,7 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   T.reset(); T.dgReset(); C.jump(1); var st=$('saytext').textContent.split(' ').slice(0,12).join(' ');
   var W=function(txt,spk){ return txt.split(' ').map(function(x){ return {word:x.toLowerCase(), punctuated_word:x, speaker:spk}; }); };
   var M=function(words,fin){ return {is_final:fin, channel:{alternatives:[{transcript:words.map(function(w){ return w.punctuated_word; }).join(' '), words:words}]}}; };
-  T.dg(M(W('Hello who is this',0),true));      o.dg_first=[T.dgYou(), T.lines().slice(-1)[0].spk];
+  T.dg(M(W('Hello who is this and why are you calling me',0),true));      o.dg_first=[T.dgYou(), T.lines().slice(-1)[0].spk];
   T.dg(M(W(st,1),true));                       o.dg_you=[T.dgYou(), T.lines().slice(-1)[0].spk];
   T.cool(); var f1=T.fires().length;
   T.dg(M(W('I am not interested',1),false));   o.dg_you_quiet=T.fires().length-f1;
@@ -164,6 +164,23 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   T.dg(M(W('so what I do is help owners',1).concat(W('please stop calling me',0)),true));
   o.dg_split=T.lines().slice(n0).map(function(l){ return l.spk; }); o.dg_stop=card()&&card().kind;
   o.dg_eng=$('eng').textContent;
+
+  /* 13. Deepgram hears ONE voice (test call 11-15 22:00: 182 words on one number, 3 on the other).
+     Its label is not believed, the coach still answers, and a sentence cut in two is one line. */
+  T.reset(); T.dgReset(); C.jump(1);
+  T.dg(M(W('Hey there',0),true));
+  T.dg(M(W('Hi who is this',1),true));
+  T.dg(M(W(st,1),true));                       o.one_you=[T.dgYou(), T.lines().slice(-1)[0].spk];
+  T.cool(); var g1=T.fires().length;
+  T.dg(M(W('I really don’t have time right now',1),false));
+  T.dg(M(W('I really don’t have time right now, actually.',1),true));
+  o.one_busy=T.fires().slice(g1).map(function(x){ return x.id; }); o.one_tag=T.lines().slice(-1)[0].spk;
+  T.cool(); var g2=T.fires().length;
+  T.dg(M(W('No. No. It’s alright. I’m already... I already have a lawyer on the case.',1),true));
+  o.one_law=T.fires().slice(g2).map(function(x){ return x.id; }); o.one_eng=$('eng').textContent;
+  var n1=T.lines().length;
+  T.dg(M(W('I just',1),true)); T.dg(M(W('wanted to ask what he showed you.',1),true)); T.dg(M(W('Okay.',1),true));
+  o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -326,6 +343,11 @@ else:
         chk(o['dg_you_quiet'] == 0 and o['dg_them_fire'] == ['obj:notint'],
             'Deepgram: trigger words in your voice raise nothing; in theirs, the card, on partial words', [o['dg_you_quiet'], o['dg_them_fire']])
         chk(o['dg_split'] == ['you', 'them'] and o['dg_stop'] == 'stop', 'Deepgram: one result with two voices is two lines, and their half is answered', [o['dg_split'], o['dg_stop']])
+        chk(o['one_you'] == ['1', 'you?'], 'one voice: the Deepgram "you" is not believed, the content guess labels the line', o['one_you'])
+        chk(len(o['one_busy']) == 1 and o['one_tag'] in ('them?', ''), 'one voice: "I do not have time" still raises the card', [o['one_busy'], o['one_tag']])
+        chk(len(o['one_law']) == 1, 'one voice: "I already have a lawyer" still raises a card', o['one_law'])
+        chk('one voice heard' in o['one_eng'], 'the engine line says Deepgram hears one voice', o['one_eng'])
+        chk(o['one_join'] == ['I just wanted to ask what he showed you.', 'Okay.'], 'a sentence Deepgram cut in two is one transcript line', o['one_join'])
         chk('live speaker labels' in o['dg_eng'], 'the engine line says when your voice is known', o['dg_eng'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
