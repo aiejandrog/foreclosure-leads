@@ -322,7 +322,7 @@ def sale_in_words(days):
 _AI_STOP = re.compile(r"stop calling|quit calling|do ?n[o'\u2019]?t (ever )?call|never call|take me off|remove (me|my)|"
                       r"off (your|the|that) list|do not contact|no me llame|no llame|quiteme de", re.I)
 _AI_FOLD = re.compile(r"leave you be|let you go|leave it there|leave you alone|take you off|off (the|my|our) list|"
-                      r"take care|good ?bye|have a (good|great|nice)|won[\u2019']?t (call|bother)|"
+                      r"take care(?! of)|good ?bye|have a (good|great|nice)|won[\u2019']?t (call|bother)|"
                       r"not (going to|gonna) (call|bother)|i[\u2019']?ll let you", re.I)
 
 
@@ -506,7 +506,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
     said = " ".join(r.split(": ", 1)[1] for r in rows[-6:])
 
     def ask(sys_text):
-        body = {"model": AI_MODEL, "max_tokens": 300, "temperature": 0.5, "stream": False,
+        body = {"model": AI_MODEL, "max_tokens": 420, "temperature": 0.5, "stream": False,
                 "messages": [{"role": "system", "content": sys_text}, {"role": "user", "content": "\n".join(rows)}],
                 "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                       "strip_thinking_response": True}}

@@ -370,6 +370,10 @@ with tempfile.TemporaryDirectory() as d:
             'busy: the model is told to give his objection answer (why wouldn\'t five minutes be worth it, nothing to lose, part friends, how does that sound) with the sale clock')
         suggest([{'spk': '', 'text': 'Well you guys have not even told me what you are offering.'}])
         chk('THEY ASKED WHAT THEY GET' in AI['seen'][-1]['body']['messages'][0]['content'], '"what are you offering" gets two concrete things the advisor does, not "he lays out options"')
+        # "take care of it" is not a goodbye.
+        n2 = len(AI['seen']); AI['reply'] = 'HEARD: x\nTYPE: answer\nSTEP: consequence\nSAY: Okay, so he is going to take care of it. What happens if the date comes first?'
+        j11 = suggest([{'spk': '', 'text': 'Our attorney is gonna take care of stopping the sale.'}])[1]
+        chk('take care of it' in j11.get('line', '') and len(AI['seen']) == n2 + 1, '"he will take care of it" is not read as the coach saying goodbye: %s' % j11.get('line'))
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
