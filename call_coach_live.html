@@ -792,13 +792,18 @@ function fcEcho(nline, nother){
 }
 /* YOU READING THE AI LINE BACK. nline: what was just said; nshown: the AI line on screen (both
    norm()ed). Most of the shown line's words turning up in what was said means it is being read,
-   so nothing new is asked for while you are mid-sentence. */
+   so nothing new is asked for while you are mid-sentence. But only when that is ALL that was
+   said: test call 11-16 11:25, you read the line and they answered in the same breath ("we hope
+   they give us a modification so we can pay our mortgage"), the answer was counted as part of
+   the read, and the box stayed blank for the rest of the call. Four or more words that are not
+   in the shown line are somebody answering. */
 function fcReadBack(nline, nshown){
-  var a=String(nshown||'').split(' ').filter(Boolean), said=' '+String(nline||'')+' ';
+  var a=String(nshown||'').split(' ').filter(Boolean), w=String(nline||'').split(' ').filter(Boolean);
   if(a.length<4) return false;
-  var hit=0;
+  var said=' '+w.join(' ')+' ', shown=' '+a.join(' ')+' ', hit=0, extra=0;
   a.forEach(function(x){ if(said.indexOf(' '+x+' ')>=0) hit++; });
-  return hit/a.length>=0.6;
+  w.forEach(function(x){ if(shown.indexOf(' '+x+' ')<0) extra++; });
+  return hit/a.length>=0.6&&extra<4;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
