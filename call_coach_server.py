@@ -127,32 +127,54 @@ AI_SYSTEM = (
     "wrong or missing, so work out who said each line from what it says.\n"
     "The call follows this path. Each step has the caller's own script line:\n"
     + "".join("%d. %s (%s): %s\n" % (n + 1, sid, name, line) for n, (sid, name, line) in enumerate(AI_STEPS)) +
-    "How to write the next line:\n"
-    "- Work out which steps the call has already covered. Pick the NEXT step that is not done. Never go back, "
-    "never ask again something the homeowner already answered, never ask two questions of the same kind.\n"
-    "- Move fast. A step counts as done as soon as the homeowner gave any answer to it. Skip steps that no "
-    "longer matter. Once the homeowner has said what they want, what they fear, or that they have no plan, "
-    "go straight to bridge and then close. By the caller's fourth question at the latest, the line is the close.\n"
-    "- The line is: at most six words that pick up the homeowner's own words, then the step's script line. "
-    "Keep the script line's own wording; change only what must change to fit what they said. For bridge and "
-    "close, say the script line nearly word for word. Do not open with 'It sounds like' or 'I hear'. "
-    "Do not talk about feelings unless the step is bridge.\n"
-    "- Objections get one short sentence that agrees with them, then the path continues:\n"
-    "  not interested or busy, first time: agree, then the next step's question. Said again: thank them, "
-    "tell them the number is theirs if anything changes, and say goodbye.\n"
-    "  already has a lawyer, a plan, or the bank is helping: tell them to keep it exactly as it is, then the "
-    "next step's question.\n"
-    "  is this a scam, who are you, how did you get this: one sentence (public court record, not the lender, "
-    "not buying, no fee), then the next step's question.\n"
-    "  giving up, 'let them take it', does not care anymore: agree, then go straight to the close, because "
-    "the advisor also covers leaving on their own terms.\n"
-    "- The close asks for the time with two ways to say yes (later today or first thing tomorrow). That is "
-    "the only either/or allowed. Never ask whether they want the call.\n"
-    "- If they named a time, the step is booked: repeat it back and ask them to save the number.\n"
-    "- One or two short spoken sentences. Plain words. Write every number as a word. No dollar amounts, no "
-    "promises of any outcome, no legal advice, nothing about what the bank or the court will do.\n"
-    "- If they ask to stop being called, the line confirms they are off the list and says goodbye.\n"
+    "LISTEN FIRST. Before you write anything, find the homeowner's most recent words in the transcript "
+    "(not the caller's, and not the caller reading one of your lines) and decide what kind of thing it was:\n"
+    "  answer    - they answered the caller's last question\n"
+    "  question  - they asked something (who is this, what is this about, how did you get this, what sale)\n"
+    "  objection - not interested, busy, already has a lawyer or attorney, already has a plan, the bank is "
+    "helping, is this a scam, giving up on the house\n"
+    "  time      - they named a day or time for the advisor call\n"
+    "  stop      - they asked not to be called again\n"
+    "  unclear   - a word or two, small talk, or you cannot tell\n"
+    "Your line answers THAT. The path only says where to go once you have answered it.\n"
+    "What to say for each kind:\n"
+    "- answer: open with a few of their own words (what they want, who they named: the house, the wife, the "
+    "kids), then the NEXT step's script line. Move one step at a time. Never jump two steps.\n"
+    "- question: answer it plainly in one short sentence first, then ask the current step's question.\n"
+    "- objection: one short sentence that agrees with them, then ONE question about what they just said. "
+    "A lawyer or attorney: keep the attorney, and ask what the attorney has told them about the sale date. "
+    "A plan or the bank helping: keep it exactly as it is, and ask what happens if it is not approved before "
+    "the sale date. Not interested or busy, first time: agree and ask the situation question; said again: "
+    "thank them and say goodbye. A scam, who are you: public court record, not the lender, not buying, no fee, "
+    "then the situation question. Giving up, 'let them take it': agree, then the close, because the advisor "
+    "also covers leaving on their own terms. An objection is NEVER answered with the close or with booked, "
+    "except giving up.\n"
+    "- time: step booked. Repeat the day and time back and ask them to save the number.\n"
+    "- stop: confirm they are off the list and say goodbye.\n"
+    "- unclear: stay on the same step and ask its question again in fewer words.\n"
+    "Pace: do not use bridge or close until the homeowner has said what they want AND has answered at least "
+    "one of the problem, solution or consequence questions. Never use booked unless they named a time. Never "
+    "go back to a finished step, and never ask again something they already answered.\n"
+    "SOUND LIKE A CONVERSATION, not a script being read. This is two people talking:\n"
+    "- React first, the way a person does when they were actually listening: a few natural words about what "
+    "they just said ('Yeah, that makes sense.' 'Wife and kids, of course you want to keep it.' 'Three weeks "
+    "and still nothing in writing, huh.'). If they asked how you are, answer like a person. Then ask.\n"
+    "- The script line of a step shows what that step is trying to find out. Ask it in your own everyday "
+    "words, fitted to what this homeowner has told you so far. Do not recite it. Only the close keeps its "
+    "wording: the advisor takes about five minutes and lays the real options out, then the two times.\n"
+    "- If they already told you what a step asks (they said they want to keep the house: the situation step "
+    "is done), never ask it. Use what they told you in the next question instead.\n"
+    "- Use their words and their people (the house, the wife, the kids, the attorney, the bank) so every line "
+    "could only have been said to this person. Contractions. Short. No sales words, no 'I understand that', "
+    "no 'It sounds like', no 'I hear'. Never start two lines in a row the same way.\n"
+    "- One or two short spoken sentences, one question at the end. The close asks for the time with two ways "
+    "to say yes (later today or first thing tomorrow); that is the only either/or allowed, and never ask "
+    "whether they want the call.\n"
+    "- Write every number as a word. No dollar amounts, no promises of any outcome, no legal advice, nothing "
+    "about what the bank or the court will do.\n"
     "Reply in exactly this form and nothing else:\n"
+    "HEARD: <the homeowner's most recent words, copied from the transcript>\n"
+    "TYPE: <answer, question, objection, time, stop or unclear>\n"
     "STEP: <one step id from the path>\n"
     "SAY: <the line>")
 _AI_BAD = re.compile(r"[\d$]")
@@ -160,6 +182,25 @@ _AI_BAD = re.compile(r"[\d$]")
 
 def venice_key():
     return user_var("VENICE_API_KEY")
+
+
+def _words(t):
+    return re.sub(r"[^a-z ]+", " ", str(t or "").lower().replace("'", "").replace("\u2019", "")).split()
+
+
+def _read_back(text, given):
+    """True when `text` is the caller reading out one of the lines the coach gave: most of that
+    line's words are in it and little else is."""
+    said = _words(text)
+    for g in given:
+        gw = _words(g)
+        if len(gw) < 4:
+            continue
+        hit = sum(1 for w in gw if w in said)
+        extra = sum(1 for w in said if w not in gw)
+        if hit / len(gw) >= 0.6 and extra <= max(4, len(gw) // 2):
+            return True
+    return False
 
 
 def ai_line(lines, lang="", shown="", asked=None):
@@ -175,7 +216,10 @@ def ai_line(lines, lang="", shown="", asked=None):
         if not t:
             continue
         spk = str((l or {}).get("spk") or "")
-        rows.append(("CALLER" if spk.startswith("you") else "THEM" if spk.startswith("them") else "?") + ": " + t[:400])
+        who = "CALLER" if spk == "you" else "THEM" if spk == "them" else "?"
+        if who == "?" and _read_back(t, list(asked or []) + [shown]):
+            who = "CALLER"            # one microphone: your line, read out, is the caller for certain
+        rows.append(who + ": " + t[:400])
     if not rows:
         return {}
     system = AI_SYSTEM + ("\nWrite the SAY line in Spanish." if str(lang).lower().startswith("es") else "")
@@ -187,32 +231,38 @@ def ai_line(lines, lang="", shown="", asked=None):
     if shown:
         system += ("\nThe caller's screen currently shows: \"" + shown + "\". The caller may have just read it "
                    "out. Write the line that comes after the homeowner's answer to it.")
-    body = {"model": AI_MODEL, "max_tokens": 220, "temperature": 0.2, "stream": False,
+    body = {"model": AI_MODEL, "max_tokens": 300, "temperature": 0.2, "stream": False,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
             "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                   "strip_thinking_response": True}}
-    try:
-        import urllib.request
-        req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
-                                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=6) as r:
-            j = json.loads(r.read().decode("utf-8"))
-        out = str(j["choices"][0]["message"].get("content") or "")
-    except Exception:
+    import urllib.request
+    out = ""
+    for _try in range(2):            # one retry: a dropped request must not leave the box blank
+        try:
+            req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
+                                         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                j = json.loads(r.read().decode("utf-8"))
+            out = str(j["choices"][0]["message"].get("content") or "")
+        except Exception:
+            out = ""
+        if out.strip():
+            break
+    if not out.strip():
         return {}
-    step, line = "", out
-    m = re.search(r"STEP:\s*([a-z_]+)", out, re.I)
-    if m and m.group(1).lower() in AI_STEP_IDS:
-        step = m.group(1).lower()
-    m = re.search(r"SAY:\s*(.+)", out, re.I | re.S)
-    if m:
-        line = m.group(1)
-    elif re.search(r"STEP:", out, re.I):
-        line = ""
-    line = " ".join(line.split()).strip().strip('"\u201c\u201d').strip()
-    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 360 or _AI_BAD.search(line):
+    def field(name):
+        m = re.search(r"^\s*%s:\s*(.*)$" % name, out, re.I | re.M)
+        return " ".join(m.group(1).split()).strip().strip('"\u201c\u201d').strip() if m else ""
+    step, kind, heard, line = field("STEP").lower(), field("TYPE").lower(), field("HEARD"), field("SAY")
+    if not re.search(r"^\s*SAY:", out, re.I | re.M) and not re.search(r"^\s*(STEP|TYPE|HEARD):", out, re.I | re.M):
+        line = " ".join(out.split()).strip().strip('"\u201c\u201d').strip()      # a bare line, no form
+    step = step if step in AI_STEP_IDS else ""
+    kind = kind if kind in ("answer", "question", "objection", "time", "stop", "unclear") else ""
+    if step == "booked" and kind != "time":
+        step = "close"
+    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 420 or _AI_BAD.search(line):
         return {}
-    res = {"line": line, "step": step, "of": len(AI_STEPS)}
+    res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
     if step:
         res["n"] = AI_STEP_IDS.index(step) + 1
         res["name"] = AI_STEPS[res["n"] - 1][1]

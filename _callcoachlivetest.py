@@ -189,7 +189,7 @@ with tempfile.TemporaryDirectory() as d:
                     return r.status, json.loads(r.read())
             except urllib.error.HTTPError as ex:
                 return ex.code, {}
-        talk = [{'spk': 'you?', 'text': 'This is Alejandro.'}, {'spk': '', 'text': 'We talked to the bank already.'}]
+        talk = [{'spk': 'you', 'text': 'This is Alejandro.'}, {'spk': '', 'text': 'We talked to the bank already.'}]
         st, j = suggest(talk, {'Origin': own, 'Sec-Fetch-Site': 'same-origin'})
         sent = AI['seen'][-1] if AI['seen'] else {'auth': '', 'body': {'messages': [{}, {'content': ''}]}}
         prompt = json.dumps(sent['body'])
@@ -206,6 +206,20 @@ with tempfile.TemporaryDirectory() as d:
             'the model names the step of the path its line belongs to: %s' % j2)
         chk('Book the advisor' in json.dumps(AI['seen'][-1]['body']) and 'later today' in json.dumps(AI['seen'][-1]['body']),
             'the model is given the path to the booking, with the script line of each step')
+        AI['reply'] = 'HEARD: we are talking it out with an attorney\nTYPE: objection\nSTEP: booked\nSAY: Keep your attorney. What has he told you about the sale date?'
+        j3 = suggest(talk)[1]
+        chk(j3.get('type') == 'objection' and j3.get('heard') == 'we are talking it out with an attorney' and j3.get('step') == 'close',
+            'the model reports what the homeowner said and what kind of thing it was; an objection is never the booked step: %s' % j3)
+        said = 'Keeping it for your wife and kids, I get that. Has anybody explained what happens to your balance?'
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'Keeping it for your wife and kids I get that has anybody explained what happens to your balance'},
+                                                                {'spk': '', 'text': 'No, nobody did.'}], 'asked': [said]}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        sent_tx = AI['seen'][-1]['body']['messages'][1]['content']
+        chk(sent_tx.startswith('CALLER: Keeping it for your wife') and '?: No, nobody did.' in sent_tx,
+            'one microphone: a line that is the coach\'s own earlier line read out goes to the model as the caller')
+        chk('LISTEN FIRST' in AI['seen'][-1]['body']['messages'][0]['content'] and 'CONVERSATION' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'the model is told to find the homeowner\'s words first and to talk like a person')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

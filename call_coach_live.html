@@ -1343,7 +1343,7 @@ function aiCheck(){
     S.ai.line=j.line; S.ai.shownAt=now();
     S.ai.hist.push(j.line); if(S.ai.hist.length>5) S.ai.hist.shift();
     $('aibody').textContent=j.line;
-    $('aiheard').textContent=fresh?('they said: \u201c'+(fresh.length>90?'\u2026'+fresh.slice(-90):fresh)+'\u201d'):'';
+    aiHeard(j, fresh);
     aiSteps(j);
     aiFocus('ai');
     S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, behind:S.lines.length-n, step:j.step||''});
@@ -1366,6 +1366,15 @@ function aiSteps(j){
 /* ONE BRIGHT BOX. Three boxes at full brightness was three things to read (test call 11-16
    11:34: "I was confused on what to say"). Whichever spoke last, the AI line or an objection
    card, is the bright one; the others go dim until they have something new. */
+/* WHAT IT HEARD. The model has to pick out the homeowner's last words and say what kind of thing
+   they were before it writes a line, and the box shows both, so a line that answers the wrong
+   thing is visible at a glance. */
+var AI_KIND={answer:'answered you', question:'asked you', objection:'pushed back', time:'gave a time', stop:'asked to stop', unclear:''};
+function aiHeard(j, fresh){
+  var h=String((j&&j.heard)||fresh||''), k=AI_KIND[(j&&j.type)||'']||'';
+  if(h.length>110) h='\u2026'+h.slice(-110);
+  $('aiheard').textContent=h?((k?k+': ':'they said: ')+'\u201c'+h+'\u201d'):'';
+}
 function aiFocus(who){
   var ai=(who==='ai');
   if($('ailine').className.indexOf('on')>=0||ai) $('ailine').className=ai?'on':'on old';
@@ -1671,7 +1680,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; $('aiheard').textContent=heard||''; aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
