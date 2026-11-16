@@ -164,7 +164,10 @@ AI_SYSTEM = (
     "stop. A person who is still on the phone is still deciding, and 'not interested' is a reflex, not a "
     "decision. Unless TYPE is stop you never say goodbye, never offer to leave them be or let them go, never "
     "say 'take care', and never mention taking them off a list. You work the objection, and each time they "
-    "repeat it you use an angle you have not used yet on this call, then go back to the ask:\n"
+    "repeat it you use an angle you have not used yet on this call, then go back to the ask. The FIRST time "
+    "they say they are not interested, the line is always the challenge, said calm and curious, as a real "
+    "question: 'So you're not interested in saving your property, or the equity you've got in it?' After that, "
+    "the angles:\n"
     "  1. It is information, not interest: you have not told them anything yet, and there is a case with their "
     "address on it.\n"
     "  2. Ask what exactly they are not interested in: keeping the home, or protecting what they have put into "
@@ -282,6 +285,12 @@ _AI_STOP = re.compile(r"stop calling|quit calling|do ?n[o'\u2019]?t (ever )?call
 _AI_FOLD = re.compile(r"leave you be|let you go|leave it there|leave you alone|take you off|off (the|my|our) list|"
                       r"take care|good ?bye|have a (good|great|nice)|won[\u2019']?t (call|bother)|"
                       r"not (going to|gonna) (call|bother)|i[\u2019']?ll let you", re.I)
+
+
+_AI_NOTINT = re.compile(r"not (even |really |that |at all )*interested|no interest in|no me interesa|no estoy interesad", re.I)
+_AI_CHALLENGED = re.compile(r"not interested in saving|no le interesa salvar", re.I)
+AI_CHALLENGE = ("So you're not interested in saving your property, or the equity you've got in it?",
+                "¿Entonces no le interesa salvar su propiedad, ni el patrimonio que tiene en ella?")
 
 
 def folds(res):
@@ -420,6 +429,19 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         return res
 
     res = ask(system)
+    # THE CHALLENGE, guaranteed (Alex, 11-16: "why didn't you ask, so you're not interested in saving
+    # your property, your equity?"). The first "not interested" of a call gets his question, word for
+    # word, whatever the model wrote. Later ones get the model's other angles. A stop request is
+    # never challenged.
+    last_said = rows[-1].split(": ", 1)[1] if rows else ""
+    if (_AI_NOTINT.search(last_said) and not _AI_STOP.search(said)
+            and not any(_AI_CHALLENGED.search(x or "") for x in prior + [shown])):
+        es = str(lang).lower().startswith("es")
+        res = {"line": AI_CHALLENGE[1 if es else 0], "step": (res or {}).get("step") or "close", "of": len(AI_STEPS),
+               "type": "objection", "heard": last_said[:200]}
+        res["n"] = AI_STEP_IDS.index(res["step"]) + 1
+        res["name"] = AI_STEPS[res["n"] - 1][1]
+        return res
     # NEVER FOLD, enforced. If the line ends the call, or calls their words a stop request, and nobody
     # in the last few lines actually asked to stop being called, that line is not shown: the model is
     # asked again and told so. A second fold shows nothing rather than a goodbye.
