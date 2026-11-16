@@ -1336,7 +1336,7 @@ function aiCheck(){
   if(!fresh||fcReadBack(norm(fresh), norm(S.ai.line))||fcVoice(norm(fresh), fcRef()).all==='you') return;
   var seq=++S.ai.seq, n=S.lines.length, t0=now();
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist})})
+    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
     if(seq!==S.ai.seq||!j||!j.line) return;
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';

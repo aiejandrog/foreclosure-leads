@@ -136,10 +136,12 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(d, 'leads_final.json'), 'w', encoding='utf-8') as f:
         json.dump([{'Case #': '2026-000001-CA-01', 'Address': '100 NW 1st Ave, Miami, FL 33128',
                     'owners': 'DOE, JANE', 'AuctionDate': '2099-01-02'}], f)
+    with open(os.path.join(d, 'pb.md'), 'w', encoding='utf-8') as f:
+        f.write('---\ndate: x\n---\n\n# Notes for people\nNOT-FOR-THE-MODEL\n\n---\n\n## What this call sells\nPLAYBOOK-MARKER five minutes with [[the senior advisor]].\n')
     port = free_port()
     proc = subprocess.Popen([sys.executable, os.path.join(d, 'call_coach_server.py')], cwd=d,
                             env=dict(os.environ, COACH_PORT=str(port), DEEPGRAM_API_KEY='test-not-a-real-key',
-                                     VENICE_API_KEY='test-ai-key', COACH_AI_URL='http://127.0.0.1:%d/v1' % fake.server_address[1]),
+                                     VENICE_API_KEY='test-ai-key', COACH_PLAYBOOK=os.path.join(d, 'pb.md'), COACH_AI_URL='http://127.0.0.1:%d/v1' % fake.server_address[1]),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         h = {}
@@ -220,6 +222,20 @@ with tempfile.TemporaryDirectory() as d:
             'one microphone: a line that is the coach\'s own earlier line read out goes to the model as the caller')
         chk('LISTEN FIRST' in AI['seen'][-1]['body']['messages'][0]['content'] and 'CONVERSATION' in AI['seen'][-1]['body']['messages'][0]['content'],
             'the model is told to find the homeowner\'s words first and to talk like a person')
+        sys_p = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('PLAYBOOK-MARKER five minutes with the senior advisor.' in sys_p and 'NOT-FOR-THE-MODEL' not in sys_p,
+            'the playbook note goes to the model: only the part under the last rule, wiki-links flattened')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': talk, 'days': 12}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('the sale is set in about two weeks' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'the court sale reaches the model as words, never a date')
+        chk(h.get('playbook', 0) > 20, 'health says how much playbook the AI reads: %s' % h.get('playbook'))
+        AI['reply'] = 'HEARD: tomorrow at ten\nTYPE: time\nSTEP: booked\nSAY: Tomorrow at 10:15, got it. Save my number for me.'
+        j4 = suggest(talk)[1]
+        chk(j4.get('step') == 'booked' and '10:15' in j4.get('line', ''), 'the time they gave can be said back; that is the booking: %s' % j4)
+        AI['reply'] = 'HEARD: tomorrow\nTYPE: time\nSTEP: booked\nSAY: Tomorrow, and you keep $5,000.'
+        chk(suggest(talk)[1].get('line') == '', 'a dollar amount is dropped even on a booking line')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

@@ -179,6 +179,57 @@ AI_SYSTEM = (
     "SAY: <the line>")
 _AI_BAD = re.compile(r"[\d$]")
 
+# THE PLAYBOOK. The prompt above knows the path of the call; it does not know the sales system.
+# That lives in one note the caller can edit (Jesse's CIOC, the objection moves, the questions, what
+# is true about a Florida foreclosure, the never-say list). It is kept OUT of this public repo: the
+# default is the note in the private vault, COACH_PLAYBOOK points somewhere else. Everything after
+# the last line that is only "---" is sent to the model. Re-read when the file changes, so an edit
+# is live on the next line with no restart. No file: the coach runs on the prompt alone.
+PLAYBOOK = os.environ.get("COACH_PLAYBOOK") or os.path.join(
+    os.path.expanduser("~"), "projects", "obsidian-vault", "5-projects", "MSG Sales", "Call Coach AI Playbook.md")
+_playbook = {"mtime": None, "text": ""}
+
+
+def playbook_text():
+    try:
+        mt = os.path.getmtime(PLAYBOOK)
+    except OSError:
+        return ""
+    if mt != _playbook["mtime"]:
+        try:
+            with open(PLAYBOOK, encoding="utf-8") as f:
+                raw = f.read()
+        except OSError:
+            return ""
+        body = re.split(r"(?m)^---\s*$", raw)[-1]
+        _playbook.update(mtime=mt, text=re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", body).strip()[:16000])
+    return _playbook["text"]
+
+
+def sale_in_words(days):
+    """How far off the court sale is, in words (the line may not carry a digit). '' when unknown."""
+    try:
+        d = int(days)
+    except (TypeError, ValueError):
+        return ""
+    if d < 0:
+        return ""
+    if d <= 1:
+        return "today or tomorrow"
+    if d <= 6:
+        return "in a few days"
+    if d <= 10:
+        return "in about a week"
+    if d <= 17:
+        return "in about two weeks"
+    if d <= 24:
+        return "in about three weeks"
+    if d <= 38:
+        return "in about a month"
+    if d <= 70:
+        return "in about two months"
+    return "more than two months out"
+
 
 def venice_key():
     return user_var("VENICE_API_KEY")
@@ -203,7 +254,7 @@ def _read_back(text, given):
     return False
 
 
-def ai_line(lines, lang="", shown="", asked=None):
+def ai_line(lines, lang="", shown="", asked=None, days=None):
     """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
     to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
     dead model must not touch the call."""
@@ -223,6 +274,16 @@ def ai_line(lines, lang="", shown="", asked=None):
     if not rows:
         return {}
     system = AI_SYSTEM + ("\nWrite the SAY line in Spanish." if str(lang).lower().startswith("es") else "")
+    pb = playbook_text()
+    if pb:
+        system += ("\n\nPLAYBOOK. This is the caller's own sales system. Write your line with its moves, its phrases "
+                   "and its facts. Where it gives the words for what the homeowner just said, use those words, cut "
+                   "to one or two spoken sentences and fitted to this homeowner. Its 'Never say' list overrides "
+                   "everything else.\n" + pb)
+    when = sale_in_words(days)
+    if when:
+        system += ("\n\nCourt calendar for this homeowner: the sale is set " + when + ". You may say that in those "
+                   "words when it helps the line. Never say a date.")
     shown = " ".join(str(shown or "").split())[:320]
     prior = [" ".join(str(x or "").split())[:320] for x in (asked or [])[-5:] if str(x or "").strip()]
     if prior:
@@ -260,7 +321,10 @@ def ai_line(lines, lang="", shown="", asked=None):
     kind = kind if kind in ("answer", "question", "objection", "time", "stop", "unclear") else ""
     if step == "booked" and kind != "time":
         step = "close"
-    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 420 or _AI_BAD.search(line):
+    # No figure may come from the model. The one exception is the clock time the homeowner just
+    # gave ("ten fifteen tomorrow"): repeating it back is the booking, and it is never a dollar sign.
+    bad = ("$" in line) if kind == "time" else bool(_AI_BAD.search(line))
+    if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 420 or bad:
         return {}
     res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
     if step:
@@ -483,6 +547,7 @@ class Handler(BaseHTTPRequestHandler):
                 "port": PORT,
                 "deepgram": bool(deepgram_key()),     # whether a key is set. Never the key.
                 "ai": bool(venice_key()),
+                "playbook": len(playbook_text()),     # characters of playbook the AI reads; 0 = none found
             })
 
         if p == "/api/dgkey":
@@ -535,7 +600,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [])
+            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"))
             res = dict(res or {"line": ""}, ms=int((time.time() - t0) * 1000))
             return self._send(200, res, private=True)
 
