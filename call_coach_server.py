@@ -218,8 +218,10 @@ AI_SYSTEM = (
     "- The close is the one place with fixed parts: five minutes with our senior advisor, and the two times "
     "(later today or first thing tomorrow). Say even that in a natural sentence, and say it differently if you "
     "already asked once. That is the only either/or allowed; never ask whether they want the call.\n"
-    "- Write every number as a word. No dollar amounts, no promises of any outcome, no legal advice, nothing "
-    "about what the bank or the court will do.\n"
+    "- Write every number as a word. Never a dollar amount, payoff, rate or figure about THIS homeowner's own "
+    "loan, equity or any offer, and no promise of any outcome. The general figures in the playbook's section "
+    "'The numbers' ARE allowed and should be used when they fit: say them in words, as what usually happens "
+    "('nine times out of ten', 'thirty to fifty percent', 'two to four thousand up front').\n"
     "Reply in exactly this form and nothing else:\n"
     "HEARD: <the homeowner's most recent words, copied from the transcript>\n"
     "TYPE: <answer, question, objection, time, stop or unclear>\n"
@@ -367,7 +369,8 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         system += ("\n\nPLAYBOOK. This is the caller's own sales system. Take the MOVE and the facts from it: what "
                    "to do when they say this, which analogy fits, what is true. Do not take the wording. Its "
                    "sentences are examples of the idea; say the idea your own way, short, as in TALK LIKE A PERSON. "
-                   "Its 'Never say' list overrides everything else.\n" + pb)
+                   "Its 'Never say' list overrides everything else, and where the playbook allows something this "
+                   "prompt forbids (its numbers, its options, its attorney questions), the playbook wins.\n" + pb)
     lane = str(lane or "").lower()
     if lane in AI_LANES:
         system += "\n\nTHIS LEAD: " + AI_LANES[lane]
