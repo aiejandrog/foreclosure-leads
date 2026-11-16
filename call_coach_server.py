@@ -101,7 +101,10 @@ def deepgram_key():
 # and gets a sentence back. Only the spoken words go out; no case number, address or owner name
 # from the lead file is ever put in the prompt.
 AI_URL = os.environ.get("COACH_AI_URL", "https://api.venice.ai/api/v1/chat/completions")
-AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-flash")
+# Scored 2026-11-16 on twelve moments from the test calls, twice each: deepseek-v4-flash 17/24 at
+# 1.5 s median (6.1 s worst), deepseek-v4-1-flash 22/24 at 1.0 s (2.7 s worst). The newer one is
+# both the faster and the one that answers "how can you help me" with the offer.
+AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-1-flash")
 # The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
 # this prompt only said "reflect and ask a question", and on test call 11-16 11:34 it circled:
 # "sounds like you're feeling overwhelmed, what would a good outcome look like" three times and
@@ -140,7 +143,9 @@ AI_SYSTEM = (
     "What to say for each kind:\n"
     "- answer: open with a few of their own words (what they want, who they named: the house, the wife, the "
     "kids), then the NEXT step's script line. Move one step at a time. Never jump two steps.\n"
-    "- question: answer it plainly in one short sentence first, then ask the current step's question.\n"
+    "- question: answer it plainly in one short sentence first, then ask the current step's question. If "
+    "they ask what the call is about or how you can help, the answer is the offer itself: five minutes with "
+    "our senior advisor, who lays out the options nobody has put on their table, free.\n"
     "- objection: one short sentence that agrees with them, then ONE question about what they just said. "
     "A lawyer or attorney: keep the attorney, and ask what the attorney has told them about the sale date. "
     "A plan or the bank helping: keep it exactly as it is, and ask what happens if it is not approved before "
