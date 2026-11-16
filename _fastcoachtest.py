@@ -151,7 +151,7 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.lad_2=[$('objwho').textContent.indexOf('second pass')>=0, $('objbody').textContent!==b1, $('objbody').textContent.indexOf('plan')>=0, T.fires().slice(-1)[0].pass];
   T.say(cut); o.lad_tag=T.lines().slice(-1)[0].spk;
   T.cool(); T.say('I said I am not interested');
-  o.lad_3=[$('objwho').textContent.indexOf('third time')>=0, $('objbody').textContent.indexOf('leave it there')>=0, T.fires().slice(-1)[0].pass];
+  o.lad_3=[$('objwho').textContent.indexOf('third time')>=0, $('objbody').textContent.indexOf('any other reason not to hear your options')>=0, T.fires().slice(-1)[0].pass];
 
   /* 12. Deepgram on ONE microphone: its speaker numbers are ignored whatever they say (four test
      calls had them wrong), cards come from the words, and a sentence cut in two is one line. */
@@ -303,7 +303,7 @@ else:
             'the same objection a second time gets a different line with the court sale date', ld[1])
         chk('$' not in ''.join(x or '' for x in ld) and 'sale set for' not in ld[2] and 'One question' in ld[3],
             'no date on file: no date said; other cards get the general second pass', [ld[2], ld[3]])
-        chk('third time' in ld[4] and 'leave it there' in ld[4] and 'subasta' in ld[5], 'the third time lets them go; Spanish follows', [ld[4], ld[5]])
+        chk('third time' in ld[4] and 'any other reason' in ld[4] and 'Take care' not in ld[4] and 'subasta' in ld[5], 'the third time is worked, not released; Spanish follows', [ld[4], ld[5]])
         b = p['board']
         chk(b[0] == ['priced', 120000, True, True], "the board's quotable net replaces the raw estimate", b[0])
         chk(b[1] == ['clear', None, False, False] and 'no figure' in p['board_v'], 'a verified state with no quotable net shows no number', [b[1], p['board_v']])
@@ -355,7 +355,7 @@ else:
         chk(o['lad_read'] == [0, 'you?'], 'reading the card aloud fires nothing and is tagged as you', o['lad_read'])
         chk(o['lad_2'] == [True, True, True, 2], 'they cut in with the same objection mid-card: a new second-pass line, on partial words', o['lad_2'])
         chk(o['lad_tag'] == 'them?', 'that mixed line is treated as theirs', o['lad_tag'])
-        chk(o['lad_3'] == [True, True, 3], 'the third time shows the let-them-go line', o['lad_3'])
+        chk(o['lad_3'] == [True, True, 3], 'the third "not interested" gets the isolate question, never a goodbye', o['lad_3'])
         chk(o['one_read'] in ('you?', '') and o['one_read_quiet'] == 0, 'one mic: reading the screen raises nothing', [o['one_read'], o['one_read_quiet']])
         chk(len(o['one_busy']) == 1 and o['one_tag'] in ('them?', ''), 'one mic: "I do not have time" raises a card whatever speaker number Deepgram gives', [o['one_busy'], o['one_tag']])
         chk(len(o['one_law']) == 1, 'one mic: "I already have a lawyer" raises a card', o['one_law'])

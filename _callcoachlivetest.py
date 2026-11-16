@@ -152,7 +152,8 @@ class FakeModel(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)).decode('utf-8'))
         AI['seen'].append({'auth': self.headers.get('Authorization'), 'body': body})
-        out = json.dumps({'choices': [{'message': {'content': AI['reply']}}]}).encode()
+        rep = AI['reply'].pop(0) if isinstance(AI['reply'], list) else AI['reply']
+        out = json.dumps({'choices': [{'message': {'content': rep}}]}).encode()
         self.send_response(200); self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(out))); self.end_headers(); self.wfile.write(out)
 
@@ -313,6 +314,22 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = 'OUTCOME: sold the house to us\nNOTE: x'
         chk(wrap()[1].get('outcome') == '', 'an outcome the system does not have is not a draft')
         chk(wrap({'Origin': 'https://example.com', 'Sec-Fetch-Site': 'cross-site'})[0] == 403, 'another site cannot ask for a wrap-up')
+        # NEVER FOLD: a goodbye, or a plain "no" read as a stop request, is asked again and never shown.
+        no = [{'spk': 'you', 'text': 'Is later today better, or first thing tomorrow?'}, {'spk': '', 'text': 'Really not interested, man.'}]
+        fold = 'HEARD: Really not interested, man.\nTYPE: objection\nSTEP: close\nSAY: No problem, I will leave you be. Take care.'
+        work = 'HEARD: Really not interested, man.\nTYPE: objection\nSTEP: close\nSAY: Sure. What is it you are not interested in, though, keeping the place?'
+        n0 = len(AI['seen']); AI['reply'] = [fold, work]
+        j5 = suggest(no)[1]
+        chk(j5.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n0 + 2 and 'has NOT asked to stop' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'a line that gives up on the call is not shown: the model is asked again and told nobody said stop: %s' % j5.get('line'))
+        AI['reply'] = [fold, fold]
+        chk(suggest(no)[1].get('line') == '', 'a second goodbye shows nothing rather than ending the call')
+        AI['reply'] = ['HEARD: No.\nTYPE: stop\nSTEP: close\nSAY: You got it, I will take you off the list.', work]
+        j6 = suggest([{'spk': '', 'text': 'No.'}])[1]
+        chk(j6.get('type') == 'objection' and 'off the list' not in j6.get('line', ''), 'a plain no is never a stop request: %s' % j6)
+        n1 = len(AI['seen']); AI['reply'] = 'HEARD: stop calling me\nTYPE: stop\nSTEP: close\nSAY: You got it, you are off the list. Take care.'
+        j7 = suggest([{'spk': '', 'text': 'Stop calling me, take me off your list.'}])[1]
+        chk(j7.get('type') == 'stop' and 'off the list' in j7.get('line', '') and len(AI['seen']) == n1 + 1, 'a real stop request is honored at once: %s' % j7)
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
