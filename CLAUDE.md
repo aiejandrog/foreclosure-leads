@@ -215,6 +215,12 @@ mailed letter (`bsg_mail_campaign.letter()` / `letter_followup()`, all three `bs
 `check_pieces` now refuses a piece that carries either. Do not add them back to mail. Email, the door
 letter, the site and the private mail pages are unchanged and still import from `disclaimer.py`.
 
+**2026-11-16, notice ladder:** `bsg_mail_variants.py --touch 2|3 --from-ledger <ledger>` prints the day 7
+SECOND NOTICE and the day 14 FINAL NOTICE (plain typed sheet, boxed file block, copy in `NOTICE`). The file
+number is the ledger code and the call-by date is the first print date + 28 days (`--call-by` overrides);
+the hours line prints only with `--hours`. `check_notices` refuses court / government / lender wording, an
+unfilled field and a call-by date that is not in the future. First-touch pieces still refuse FINAL NOTICE.
+
 ## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
 
 Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the
