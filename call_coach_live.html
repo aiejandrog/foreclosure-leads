@@ -143,9 +143,15 @@ code{color:var(--accent)}
 #leadbox .hold{color:#ffb3b3;font-weight:700}
 
 /* overlays: idle warning + outcome picker */
-.overlay{position:fixed;inset:0;background:rgba(5,8,11,.82);display:none;align-items:center;justify-content:center;z-index:50}
+/* The overlay scrolls. With the wrap-up box the outcome picker grew taller than the docked coach, the
+   buttons fell below the bottom edge, and nothing could reach them (call 11-16 17:03: stuck on this
+   screen until the 90-second auto-stop saved it with no outcome). */
+.overlay{position:fixed;inset:0;background:rgba(5,8,11,.82);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow-y:auto;padding:12px}
 .overlay.on{display:flex}
-.obox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;max-width:460px;text-align:center}
+.obox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;max-width:460px;width:100%;text-align:center;margin:auto}
+#outcome .obox{max-width:560px}
+#outcome .grid{position:sticky;bottom:0;background:var(--panel);padding:8px 0}
+@media (max-height:640px){ #wrap textarea{height:54px} .obox h2{margin-bottom:2px} .obox p{margin-bottom:8px} }
 .obox h2{font-size:18px;margin-bottom:6px} .obox p{color:var(--dim);font-size:13px;margin-bottom:16px}
 .obox .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .obox .grid button{padding:12px 8px}
@@ -1625,6 +1631,9 @@ function startRecorder(stream){
    80s -> "still there?" with a 10s countdown; 90s -> auto stop & save. Any speech resets it. */
 function idleTick(){
   if(S.plain||!S.sid) return;
+  /* He pressed Stop and is choosing the outcome: that is not silence on a call. The auto-stop used to
+     fire here and save the call as "auto_silence", which Call Mode cannot log. */
+  if($('outcome').className.indexOf('on')>=0){ S.lastSpeech=now(); return; }
   var quiet=now()-S.lastSpeech;
   if(quiet>80000&&!S.idleCounting){
     S.idleCounting=true; $('idlewarn').className='overlay on';
