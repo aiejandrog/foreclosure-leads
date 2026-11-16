@@ -109,6 +109,27 @@ def call(port, path, body=None, raw=False):
         return json.loads(b) if 'json' in r.headers.get('Content-Type', '') else b.decode('utf-8', 'replace')
 
 
+# A stand-in for the language model: answers with whatever the test queued, and keeps what it was sent.
+import http.server
+import threading
+AI = {'reply': 'It sounds like the bank is helping. What did they tell you happens next?', 'seen': []}
+
+
+class FakeModel(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)).decode('utf-8'))
+        AI['seen'].append({'auth': self.headers.get('Authorization'), 'body': body})
+        out = json.dumps({'choices': [{'message': {'content': AI['reply']}}]}).encode()
+        self.send_response(200); self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(out))); self.end_headers(); self.wfile.write(out)
+
+    def log_message(self, *a):
+        pass
+
+
+fake = http.server.ThreadingHTTPServer(('127.0.0.1', 0), FakeModel)
+threading.Thread(target=fake.serve_forever, daemon=True).start()
+
 with tempfile.TemporaryDirectory() as d:
     shutil.copy(SERVER, d)
     shutil.copy(PAGE, d)
@@ -117,7 +138,8 @@ with tempfile.TemporaryDirectory() as d:
                     'owners': 'DOE, JANE', 'AuctionDate': '2099-01-02'}], f)
     port = free_port()
     proc = subprocess.Popen([sys.executable, os.path.join(d, 'call_coach_server.py')], cwd=d,
-                            env=dict(os.environ, COACH_PORT=str(port), DEEPGRAM_API_KEY='test-not-a-real-key'),
+                            env=dict(os.environ, COACH_PORT=str(port), DEEPGRAM_API_KEY='test-not-a-real-key',
+                                     VENICE_API_KEY='test-ai-key', COACH_AI_URL='http://127.0.0.1:%d/v1' % fake.server_address[1]),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         h = {}
@@ -157,6 +179,33 @@ with tempfile.TemporaryDirectory() as d:
         chk(keyreq({'Sec-Fetch-Site': 'cross-site'})[0] == 403 and keyreq({'Host': 'evil.example:%d' % port})[0] == 403,
             'a cross-site request with no Origin, or a foreign Host, is refused')
         chk(h.get('deepgram') is True and 'test-not-a-real-key' not in json.dumps(h), 'health says a key is set and never carries it')
+
+        # The AI next line: the page posts the transcript, the server asks the model, the key stays here.
+        def suggest(lines, hdr=None):
+            req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, data=json.dumps({'lines': lines}).encode(),
+                                         headers=dict({'Content-Type': 'application/json'}, **(hdr or {})))
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as ex:
+                return ex.code, {}
+        talk = [{'spk': 'you?', 'text': 'This is Alejandro.'}, {'spk': '', 'text': 'We talked to the bank already.'}]
+        st, j = suggest(talk, {'Origin': own, 'Sec-Fetch-Site': 'same-origin'})
+        sent = AI['seen'][-1] if AI['seen'] else {'auth': '', 'body': {'messages': [{}, {'content': ''}]}}
+        prompt = json.dumps(sent['body'])
+        chk(st == 200 and j.get('line') == AI['reply'], 'the AI line comes back to the coach page: %s' % j)
+        chk(sent['auth'] == 'Bearer test-ai-key' and 'test-ai-key' not in json.dumps(j), 'the key goes to the model and never to the page')
+        chk('CALLER: This is Alejandro.' in sent['body']['messages'][1]['content'] and '?: We talked to the bank already.' in sent['body']['messages'][1]['content'],
+            'the transcript goes out with its speaker guesses')
+        chk('100 NW 1st' not in prompt and '2026-000001-CA-01' not in prompt and 'DOE' not in prompt, 'no address, case number or owner name from the lead file is in the prompt')
+        AI['reply'] = 'You could walk away with $50,000. Want that?'
+        chk(suggest(talk)[1].get('line') == '', 'a model reply with a number in it is dropped')
+        AI['reply'] = 'SKIP'
+        chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
+        n_seen = len(AI['seen'])
+        chk(suggest(talk, {'Origin': 'https://example.com', 'Sec-Fetch-Site': 'cross-site'})[0] == 403 and len(AI['seen']) == n_seen,
+            'another site cannot spend the key')
+        chk(h.get('ai') is True and 'test-ai-key' not in json.dumps(h), 'health says an AI key is set and never carries it')
     finally:
         proc.terminate()
         proc.wait(timeout=5)

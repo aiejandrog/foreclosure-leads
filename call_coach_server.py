@@ -72,20 +72,94 @@ def _days_to(auction):
     return None
 
 
-def deepgram_key():
-    """The Deepgram key from the DEEPGRAM_API_KEY variable, or ''. Read on each request, so a key
-    saved in Windows after this server started is still found (the user variable lives in the
-    registry; a running process never sees it change). It goes only to the coach page over
-    loopback (/api/dgkey). Never logged, never written to disk, never in /api/health."""
-    k = os.environ.get("DEEPGRAM_API_KEY") or ""
+def user_var(name):
+    """A key from the process environment, else the Windows user variable of that name, else ''.
+    Read on each request, so a key saved in Windows after this server started is still found (the
+    user variable lives in the registry; a running process never sees it change)."""
+    k = os.environ.get(name) or ""
     if not k and os.name == "nt":
         try:
             import winreg
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as h:
-                k = winreg.QueryValueEx(h, "DEEPGRAM_API_KEY")[0] or ""
+                k = winreg.QueryValueEx(h, name)[0] or ""
         except OSError:
             k = ""
     return str(k).strip()
+
+
+def deepgram_key():
+    """The Deepgram key from the DEEPGRAM_API_KEY variable, or ''. It goes only to the coach page
+    over loopback (/api/dgkey). Never logged, never written to disk, never in /api/health."""
+    return user_var("DEEPGRAM_API_KEY")
+
+
+# ---------------------------------------------------------------- AI next line
+# The cards match set phrases, so a homeowner who words it differently gets silence (test call
+# 11-16 10:08: a minute of "we've got it figured out / we talked to the bank" and no card). This
+# asks a language model for the one next line, from the transcript alone. The key is the
+# VENICE_API_KEY variable and it never leaves this process: the page posts the transcript here
+# and gets a sentence back. Only the spoken words go out; no case number, address or owner name
+# from the lead file is ever put in the prompt.
+AI_URL = os.environ.get("COACH_AI_URL", "https://api.venice.ai/api/v1/chat/completions")
+AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-flash")
+AI_SYSTEM = (
+    "You coach a caller live, during a phone call with a homeowner who has a foreclosure case filed against "
+    "their property. The caller is Alejandro with Biscayne Solutions Group. He is not the lender, he is not "
+    "buying the house, and there is no fee. The only thing he wants from this call is a free five-minute call "
+    "between the homeowner and a senior advisor who lays out every option the owner has.\n"
+    "You get the live transcript. Labels are CALLER, THEM or ?. They come from one microphone and are often "
+    "wrong or missing, so work out who said each line from what it says.\n"
+    "Write the ONE next thing the caller should say out loud, answering the last thing the homeowner said.\n"
+    "Rules:\n"
+    "- One or two short spoken sentences, plain words, the way a person talks on the phone.\n"
+    "- First reflect what they just said in their own words, then end on ONE question.\n"
+    "- The question is open and about their situation, or it assumes the next step. Never a yes/no question "
+    "that hands them an exit, such as 'would you be open to' or 'do you have a minute'.\n"
+    "- No digits, no dollar amounts, no dates, no promises of any outcome, no legal advice, nothing about "
+    "what the bank or the court will do.\n"
+    "- If they ask to stop being called, the line confirms they are off the list and says goodbye.\n"
+    "- If the last line of the transcript is the caller speaking, reply with the single word SKIP.\n"
+    "Reply with the line only. No quotes, no label, no explanation.")
+_AI_BAD = re.compile(r"[\d$]")
+
+
+def venice_key():
+    return user_var("VENICE_API_KEY")
+
+
+def ai_line(lines, lang=""):
+    """The next line for the caller, or '' (no key, nothing to answer, a slow or failed call, or a
+    reply that breaks the no-numbers rule). Never raises: a dead model must not touch the call."""
+    key = venice_key()
+    if not key:
+        return ""
+    rows = []
+    for l in (lines or [])[-16:]:
+        t = str((l or {}).get("text") or "").strip()
+        if not t:
+            continue
+        spk = str((l or {}).get("spk") or "")
+        rows.append(("CALLER" if spk.startswith("you") else "THEM" if spk.startswith("them") else "?") + ": " + t[:400])
+    if not rows:
+        return ""
+    system = AI_SYSTEM + ("\nReply in Spanish." if str(lang).lower().startswith("es") else "")
+    body = {"model": AI_MODEL, "max_tokens": 200, "temperature": 0.4, "stream": False,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
+            "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
+                                  "strip_thinking_response": True}}
+    try:
+        import urllib.request
+        req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
+                                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        out = str(j["choices"][0]["message"].get("content") or "")
+    except Exception:
+        return ""
+    out = " ".join(out.split()).strip().strip('"\u201c\u201d').strip()
+    if not out or out.upper().rstrip(".") == "SKIP" or len(out) > 320 or _AI_BAD.search(out):
+        return ""
+    return out
 
 
 def lead_card(r):
@@ -301,6 +375,7 @@ class Handler(BaseHTTPRequestHandler):
                 "sessions_dir": SESSIONS,
                 "port": PORT,
                 "deepgram": bool(deepgram_key()),     # whether a key is set. Never the key.
+                "ai": bool(venice_key()),
             })
 
         if p == "/api/dgkey":
@@ -343,6 +418,18 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         p = u.path
         parts = [unquote(x) for x in p.strip("/").split("/")]
+
+        if p == "/api/suggest":
+            # The coach page's own request only (same rule as /api/dgkey): this spends the key.
+            own = ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
+            origin, site = self.headers.get("Origin"), self.headers.get("Sec-Fetch-Site")
+            if (self.headers.get("Host") not in own or (origin and origin not in ["http://" + o for o in own])
+                    or (site and site != "same-origin")):
+                return self._send(403, {"error": "same-origin only"}, private=True)
+            b = self._json_body()
+            t0 = time.time()
+            line = ai_line(b.get("lines"), b.get("lang") or "")
+            return self._send(200, {"line": line, "ms": int((time.time() - t0) * 1000)}, private=True)
 
         # /api/session/start
         if p == "/api/session/start":

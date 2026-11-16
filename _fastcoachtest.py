@@ -36,6 +36,8 @@ srv = open(os.path.join(HERE, 'call_coach_server.py'), encoding='utf-8').read()
 chk('"eqstate": r.get("eqstate")' in srv and 'm["coach_fires"]' in srv, 'server carries the verified state and saves prompt timings')
 gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().splitlines()
 chk('!_fastcoachtest.py' in gi, 'this test is tracked')
+chk("fetch('/api/suggest'" in src and 'VENICE' not in html and 'api.venice.ai' not in html, 'the page asks its own server for the AI line and never holds that key')
+chk('def ai_line(' in srv and 'VENICE_API_KEY' in srv and '_AI_BAD' in srv, 'the server asks the model and drops a reply with a number in it')
 
 HARNESS = r"""
 var els = {};
