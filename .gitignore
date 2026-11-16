@@ -91,6 +91,16 @@ BSG_Mail_Campaign_*.pdf
 # code_lien_amounts.py (C2): per-lien estimates keyed by book/page. County records, local only.
 code_lien_amounts.json
 code_lien_amounts.json.tmp
+# lien_amounts.py / complaint_reader.py (2026-11-16): amounts read off recorded liens, and what each
+# complaint pleads. complaints.json names the parties a lender sued: never in the public repo.
+lien_amounts.json
+lien_amounts.json.tmp
+complaints.json
+complaints.json.tmp
+pb_court_filings.json
+!_lienamountstest.py
+!_complaintreadertest.py
+!_pbcourttest.py
 # _codelienamounttest: parser/estimate/board-bake checks on invented lien text only.
 !_codelienamounttest.py
 !_fieldsheettest.py

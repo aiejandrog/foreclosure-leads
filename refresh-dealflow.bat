@@ -568,6 +568,17 @@ rem  endpoint, free local OCR). $0: no search, no captcha, no units. Output is a
 rem  payoff, and it never enters equity. Non-fatal: a failure leaves the board as it was.
 python -u code_lien_amounts.py --limit 25 >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! code_lien_amounts failed - code-lien estimates not refreshed ^(board unaffected^).>> "%LOG%"
+rem  2026-11-16: the owner searches FIND open liens and judgments but the county index publishes no
+rem  amount for most of them. lien_amounts reads the recorded document itself in all three counties
+rem  ^(Broward AcclaimWeb image, Miami OR image, Palm Beach direct book/page link^) with free local OCR
+rem  and prices the row. $0: no search, no captcha, no paid call. Non-fatal.
+python -u lien_amounts.py --limit 60 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! lien_amounts failed - open liens keep "no amount" ^(board unaffected^).>> "%LOG%"
+rem  2026-11-16: the complaint on each lis pendens lead, every page: principal claimed, default date,
+rem  and the lienholders the lender had to name. Miami off the court docket, Broward the recorded
+rem  notice, Palm Beach whatever the court tab posted to pb_court_inbox. $0. Non-fatal.
+python -u complaint_reader.py --limit 15 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! complaint_reader failed - complaints not read tonight ^(board unaffected^).>> "%LOG%"
 
 python -u refresh_progress.py step 3l
 echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...

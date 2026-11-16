@@ -3046,6 +3046,18 @@ def make_tracker(leads):
     except Exception as _lbe:
         print('loan balances: skipped (%s)' % str(_lbe)[:100])
 
+    # WHAT THE COMPLAINT PLEADS (complaint_reader.py, 2026-11-16). A lis pendens row has no judgment,
+    # and "Owed $0" was what the board said about it. `cmp` carries the principal the lender claims,
+    # the default date, how many pages were read, and how many lienholders the complaint names.
+    # Counts and figures only: no party name rides in the published payload. Never fatal.
+    try:
+        import complaint_reader as _cr
+        _cmn = _cr.stamp_rows(slim)
+        if _cmn:
+            print(f'complaints: {_cmn} lis pendens lead(s) carry what the complaint pleads')
+    except Exception as _cme:
+        print('complaints: skipped (%s)' % str(_cme)[:100])
+
     # LIVE DOCKET onto EVERY row that has one (gen_dockets.py -> dockets.json), whichever path the
     # row arrived by. Attaching it HERE rather than only in the Miami-Dade dict above is the whole
     # point: the FRESH LIS PENDENS lane comes in through slim.extend of lp_leads.json, so a dict-only
