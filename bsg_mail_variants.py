@@ -726,6 +726,29 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .t2 .src{margin-bottom:.08in}
 .t2 .ev{margin-bottom:.09in}
 .t2 .cta{font-size:15pt;margin:.06in 0 .02in}
+.pn{font:10.8pt/1.34 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.5in}
+.pn .nh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.16in}
+.pn .nco>b{display:block;font-size:1.25em;margin-bottom:.12in}
+.pn .natt{font-size:1em;line-height:1.4}
+.pn .nbox{border:1.5px solid #000;border-collapse:collapse;font-size:.86em;line-height:1.25;width:3.35in}
+.pn .nbox th{text-align:left;font-weight:400;padding:.028in .08in;vertical-align:top;width:54%%}
+.pn .nbox th i{font-style:normal;display:block;color:#333;font-size:.9em}
+.pn .nbox td{font-weight:700;padding:.028in .08in;vertical-align:top}
+.pn .nhead{text-align:center;font-weight:900;font-size:1.5em;line-height:1.15;margin:0 0 .03in}
+.pn .nhead.es{font-size:1.22em;margin-bottom:.05in}
+.pn .nsub{text-align:center;font-weight:700;font-size:.95em;margin:0 0 .13in}
+.pn .nsub span{display:block;font-weight:400}
+.pn .col{font-size:1em}
+.pn .col p{margin:0 0 .085in}
+.pn .lang{color:#000}
+.pn .cta{color:%(accent)s;font-size:1.5em;margin:.08in 0 .03in}
+.pn .nref{text-align:center;font-size:.92em;line-height:1.4;margin:0 0 .06in}
+.pn .nref b{font-weight:700}
+.pn .sigc{border-right-color:#000;color:#000}
+.t1.pn{font-size:10.1pt;line-height:1.3}
+.t2.pn{font-size:9.4pt;line-height:1.27}
+.t2.pn .col p{margin-bottom:.06in}
+.t2.pn .nh{margin-bottom:.1in}
 .cover{font-size:11.5pt}
 .cover h1{font-size:23pt;color:%(dark)s;margin:0 0 .04in}
 .cover .sub{color:#444;font-size:11pt;margin-bottom:.22in}
@@ -1009,6 +1032,236 @@ def build_html(rows, today, info):
     doc = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mail variants %s</title>'
            '<style>%s</style></head><body>%s%s</body></html>'
            % (today.isoformat(), css, cover_html(rows, today, info), ''.join(pieces)))
+    return doc, pieces
+
+
+# ════════════════════════════ the notice ladder (touch 2 and 3) ════════════════════════════
+# 2026-11-16, Alex: the Day 7 and Day 14 follow-ups are their own piece, a plain typed notice with a
+# boxed file block, written by Carlos's GPT from the brief on the Desktop. Same recipients as the
+# ledger, same file number (the ledger code) and the same call-by date on both touches. Every date on
+# it is the court record's or our own cutoff; the sender is this company by name, on every piece.
+# **x** in the copy below is bold; {name} is filled per lead. No MARS block, no opt-out line.
+CALL_BY_DAYS = 28                      # first print date + this = the day we close the outreach file
+NOTICE_HOURS = ''                      # --hours; the hours line prints only when this is set
+
+_NO_SALE = {
+    'en': 'The public record we reviewed does not show a court sale date. That does not tell us how '
+          'much time you have. **Call now to discuss whether selling is an option you want to consider.**',
+    'es': 'El registro público que revisamos no muestra una fecha de venta judicial. Eso no nos dice '
+          'cuánto tiempo tiene. **Llame ahora para conversar sobre si le interesa considerar una venta.**'}
+_SALE = {
+    'en': 'The court record lists a sale of your property for **{sale}**. That is a court sale date, '
+          "separate from BSG's mailing cutoff. **Call now to discuss whether selling before that date "
+          'is something you want to explore.**',
+    'es': 'El registro judicial muestra una venta de su propiedad programada para el **{sale}**. Esa '
+          'fecha es distinta del cierre de los envíos de BSG. **Llame ahora para conversar sobre si le '
+          'interesa explorar una venta antes de esa fecha.**'}
+
+NOTICE = {
+    2: {
+        'head': ('SECOND NOTICE: WE HAVE NOT HEARD FROM YOU', 'SEGUNDO AVISO: NO HEMOS RECIBIDO SU RESPUESTA'),
+        'sub': ('Our first letter concerned {street}. We are following up.',
+                'Le escribimos de nuevo sobre {street}.'),
+        'cta': ('PLEASE CALL', 'POR FAVOR, LLAME'),
+        'envelope': 'Personal correspondence from %s',
+        'en': ["**We have not heard from you** since our first letter about the foreclosure case "
+               "notice{rec}. I'm {signer} with {co}, a South Florida home buyer.",
+               '{salepara}',
+               'You do not need to decide to sell before calling. Tell me what you want to do. If a '
+               'sale interests you, we can discuss the property and whether a purchase could fit '
+               'your plans.',
+               'Call **{phone}** by **{callby}**, when BSG closes its outreach file. Mention File '
+               'No. {fileno}. Start with: "I received your letter about my property."'],
+        'es': ['**No hemos recibido su respuesta** a nuestra primera carta sobre el aviso de ejecución '
+               'hipotecaria{rec}. Soy {signer}, de {co}, una empresa que compra casas en el sur de '
+               'la Florida.',
+               '{salepara}',
+               'No necesita decidir vender antes de llamar. Cuénteme qué desea hacer. Si le interesa '
+               'vender, podemos hablar de la propiedad y ver si una compra podría ajustarse a sus '
+               'planes.',
+               'Llame al **{phone}** a más tardar el **{callby}**, cuando BSG cerrará su seguimiento. '
+               'Mencione el archivo {fileno}. Puede empezar así: "Recibí su carta sobre mi propiedad".'],
+    },
+    3: {
+        'head': ('FINAL NOTICE: IMMEDIATE RESPONSE REQUIRED', 'AVISO FINAL: SE REQUIERE RESPUESTA INMEDIATA'),
+        'sub': ('To speak before BSG closes its outreach file, call by {callby}.',
+                'Para conversar antes de que BSG cierre su seguimiento, llame a más tardar el {callby}.'),
+        'cta': ('FINAL LETTER, CALL', 'ÚLTIMA CARTA, LLAME'),
+        'envelope': 'Final correspondence from %s',
+        'en': ["**This is our last letter about your property.** I'm {signer} with {co}, a South "
+               'Florida home buyer. We have not heard from you after our earlier letters.',
+               '{salepara}',
+               '{recsent}If you want to discuss a possible sale, call **{phone}**. Tell me what you '
+               'want to do before we discuss a purchase.',
+               "On **{callby}**, we close **BSG's outreach file** and end this mailing series. That "
+               'date concerns our mailings. To speak before then, call and mention File No. {fileno}.'],
+        'es': ['**Esta es nuestra última carta sobre su propiedad.** Soy {signer}, de {co}, una '
+               'empresa que compra casas en el sur de la Florida. No hemos recibido su respuesta a '
+               'las cartas anteriores.',
+               '{salepara}',
+               '{recsent}Para hablar de una posible venta, llame al **{phone}**. Cuénteme qué desea '
+               'hacer antes de que hablemos de una compra.',
+               'El **{callby}** cerraremos **el archivo de seguimiento de BSG** y terminaremos esta '
+               'serie de cartas. Esa fecha corresponde a nuestros envíos. Para conversar antes, llame '
+               'y mencione el archivo {fileno}.'],
+    },
+}
+_NBOX = (('Notice Date', 'Fecha de esta carta'), ('BSG File No.', 'N.º de archivo de BSG'),
+        ('Court Case No.', 'N.º de caso judicial'), ('County', 'Condado'),
+        ('Call By: BSG outreach closes', 'Llame a más tardar: cierre del seguimiento de BSG'),
+        ('Phone', 'Teléfono'))
+
+
+def _bold(text):
+    """Escape, then turn **x** into bold."""
+    return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', _e(text))
+
+
+def call_by(r, today, override=None):
+    """The day we close the outreach file: --call-by, else the ledger's first print date + 28 days.
+    The same date prints on touch 2 and touch 3."""
+    if override:
+        return override
+    base = parse_date(r.get('ledger_date') or '') or today
+    return base + dt.timedelta(days=CALL_BY_DAYS)
+
+
+def notice_vals(r, today, lang, cb):
+    f = r['facts']
+    es = lang == 'es'
+    fmt = date_es if es else date_en
+    filed, sale = f.get('filed'), f.get('sale')
+    sale = sale if sale and sale >= today else None
+    rec = ''
+    recsent = ''
+    if filed:
+        rec = (' registrado el %s' if es else ' recorded on %s') % fmt(filed)
+        recsent = ('El aviso del caso se registró el **%s**. ' if es else
+                   'The case notice was recorded on **%s**. ') % fmt(filed)
+    return {'signer': M.SENDER['name'], 'co': _co(), 'phone': M.contact_phone(),
+            'street': M.street_case(r['addr'].split(',')[0]), 'callby': fmt(cb),
+            'fileno': show_code(r['code']), 'rec': rec, 'recsent': recsent,
+            'salepara': (_SALE[lang].replace('{sale}', fmt(sale, True)) if sale else _NO_SALE[lang])}
+
+
+def notice_html(r, today, touch, cb):
+    """One sheet for touch 2 or 3: company name, the boxed file block, the centred headline, the
+    ATTENTION block, the body in two languages, the call line three ways, the signature."""
+    n = NOTICE[touch]
+    f = r['facts']
+    city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else ''
+    place = ('%s, ' % city.title() if city else '') + '%s %s' % (r.get('to_state') or 'FL', r['zip'])
+    box_v = (('%s · %s' % (date_en(today), date_es(today))), show_code(r['code']), r['case'],
+             f.get('county') or '', '%s · %s' % (date_en(cb), date_es(cb)), M.contact_phone())
+    box = ''.join('<tr><th>%s<i>%s</i></th><td>%s</td></tr>' % (_e(a), _e(b), _e(v))
+                  for (a, b), v in zip(_NBOX, box_v) if v)
+    cols = ''
+    for lang in ('en', 'es'):
+        v = notice_vals(r, today, lang, cb)
+        paras = ['%s%s' % (r['first'], ':' if lang == 'es' else ',')] + [p.format(**v) for p in n[lang]]
+        cols += _col(lang, ''.join('<p>%s</p>' % _bold(p) for p in paras))
+    v_en, v_es = notice_vals(r, today, 'en', cb), notice_vals(r, today, 'es', cb)
+    hours = ('Hours: %s Eastern Time · Horario: %s, hora del Este<br>' % (NOTICE_HOURS, NOTICE_HOURS)
+             if NOTICE_HOURS else '')
+    return ('<section class="pc pn" data-case="%s" data-variant="N%d"><div class="in">'
+            '<div class="nh"><div class="nco"><b>%s</b><div class="natt">'
+            '<b>ATTENTION &middot; ATENCI&Oacute;N:</b> %s<br>'
+            '<b>RE: PROPERTY &middot; ASUNTO: PROPIEDAD:</b><br>%s, %s</div></div>'
+            '<table class="nbox">%s</table></div>'
+            '<div class="nhead" lang="en">%s</div><div class="nhead es" lang="es">%s</div>'
+            '<div class="nsub">%s<span>%s</span></div>'
+            '<div class="cols">%s</div>'
+            '<div class="cta">%s &middot; %s: %s</div>'
+            '<div class="nref">%sRefer to <b>BSG File No. %s</b> &middot; Mencione el <b>n.&ordm; de '
+            'archivo de BSG %s</b></div>'
+            '%s</div>'
+            '<div class="ft">%s<span class="fr">Ref. %s &middot; N%d</span></div></section>'
+            % (_e(r['case']), touch, _e(_co()), _e(M.person_name(r['owner'])),
+               _e(M.street_case(r['addr'])), _e(place), box,
+               _e(n['head'][0]), _e(n['head'][1]),
+               _e(n['sub'][0].format(**v_en)), _e(n['sub'][1].format(**v_es)),
+               cols, _e(n['cta'][0]), _e(n['cta'][1]), _e(M.contact_phone()),
+               _e(hours).replace('&lt;br&gt;', '<br>'), _e(show_code(r['code'])), _e(show_code(r['code'])),
+               sig_html(r, False, ''), footer_line(), _e(r['case']), touch))
+
+
+def check_notices(pieces, rows, touch, today, cb_of, never=()):
+    """Refuse a notice run in which a piece is missing what it must carry or carries what it must not."""
+    gone = [_e(mars('en')), _e(mars('es')), _e(optout('en')), _e(optout('es'))]
+    bad = []
+    for r, p in zip(rows, pieces):
+        why = []
+        cb = cb_of(r)
+        if cb <= today:
+            why.append('a call-by date that is not in the future')
+        if p.count(_e(M.contact_phone())) < 4:
+            why.append('the phone (box, body, call line, signature)')
+        if _e(NOTICE[touch]['head'][0]) not in p or _e(NOTICE[touch]['head'][1]) not in p:
+            why.append('the headline')
+        if p.count(_e(show_code(r['code']))) < 4 or _e(r['case']) not in p:
+            why.append('the file number or the case number')
+        if p.count(_e(_co())) < 3:
+            why.append('the company name (top, body, footer)')
+        if any(x in p for x in gone):
+            why.append('a MARS or opt-out line (removed from mail 2026-11-16)')
+        if '$' in p or '{' in p or '**' in p:
+            why.append('a dollar sign or an unfilled field')
+        if re.search(r'OFFICIAL\s+BUSINESS|PENALTY\s+FOR\s+PRIVATE|CLERK\s+OF\s+COURT\s+NOTICE|NOTICE\s+OF\s+SALE'
+                     r'|SECURED\s+BY', p, re.I):
+            why.append('wording that reads as a court, government or lender notice')
+        sale = r['facts'].get('sale')
+        if ('court sale date, separate' in p) != bool(sale and sale >= today):
+            why.append('the sale-date paragraph does not match the record')
+        ours = re.sub(r'<div class="natt">.*?</div>', '', p, flags=re.S)
+        for own in {_e(M.street_case(r['addr'])), _e(M.street_case(r['addr'].split(',')[0]))}:
+            ours = ours.replace(own, '')
+        if re.search(r'\bPMB\b|\bP\.?\s?O\.?\s+BOX\b', ours, re.I) or re.search(r'(?<!&)#\s*\d', ours):
+            why.append('a box designator (PMB or # and digits)')
+        if REG['doc'] and ('Document No. %s' % REG['doc']) not in p:
+            why.append('the registration line')
+        if any(x and x.strip() and x.strip().lower() in p.lower() for x in never):
+            why.append('a string that must never print')
+        if why:
+            bad.append('%s (%s)' % (r['case'], '; '.join(why)))
+    if bad:
+        raise DataError('REFUSED, nothing written. %d notice(s) failed the copy check: %s'
+                        % (len(bad), ', '.join(bad[:8])))
+
+
+def build_notices(rows, today, info, touch, cb_override=None):
+    css = CSS % {'ink': INK, 'accent': ACCENT, 'edge': BAND_EDGE, 'dark': DARK, 'logo': _logo_uri()}
+
+    def cb_of(r):
+        return call_by(r, today, cb_override)
+    pieces = [notice_html(r, today, touch, cb_of(r)) for r in rows]
+    check_notices(pieces, rows, touch, today, cb_of, info.get('never') or ())
+    n = len(rows)
+    cbs = sorted({cb_of(r) for r in rows})
+    cover = ('<section class="pc cover"><div class="in"><h1>%s: %d pieces</h1>'
+             '<div class="sub">%s &middot; operator sheet, do not mail this page &middot; pieces follow '
+             'on pages 2 to %d</div>'
+             '<h2>This run</h2><table>'
+             '<tr><td>Touch</td><td class="n">%d of 3</td></tr>'
+             '<tr><td>Call-by date printed (the day the outreach file closes)</td><td class="n">%s</td></tr>'
+             '<tr><td>Hours line</td><td class="n">%s</td></tr>'
+             '<tr><td>Postage estimate at $%.2f each</td><td class="n">$%.2f</td></tr></table>'
+             '<h2>Checklist</h2><ul>'
+             '<li>Print pages 2 to %d single-sided on plain white letter paper, at 100%% scale.</li>'
+             '<li>Sign each one by hand on the line above the name. Blue or black pen.</li>'
+             '<li>Hand-address the envelope from the ATTENTION name and the property address.</li>'
+             '<li>Return address on the envelope: %s, the name only. Optional line on the front: '
+             '&ldquo;%s&rdquo;.</li>'
+             '<li>Real stamp. No meter, no label.</li>'
+             '<li>Pull anyone who called, answered or said stop since the last letter before you stuff.</li>'
+             '</ul><div class="note">%d of %d in the ledger built. Nothing here is recorded as mailed.</div></div>'
+             '<div class="ft">%s<span class="fr">Operator sheet</span></div></section>'
+             % ('Second notice' if touch == 2 else 'Final notice', n, _e(date_en(today)), n + 1, touch,
+                _e(' / '.join(date_en(c) for c in cbs)), _e(NOTICE_HOURS) or 'not printed (no --hours)',
+                M.PER_LETTER, n * M.PER_LETTER, n + 1, _e(_co()), _e(NOTICE[touch]['envelope'] % _co()),
+                n, info.get('eligible', n), _e(_co())))
+    doc = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mail notice %d %s</title>'
+           '<style>%s</style></head><body>%s%s</body></html>'
+           % (touch, today.isoformat(), css, cover, ''.join(pieces)))
     return doc, pieces
 
 
@@ -1442,6 +1695,7 @@ def from_ledger_rows(path, data_dir, today):
         r['assigned'], r['variant'] = e['assigned'], e['variant']
         r['fallback'] = e.get('fallback') or ''
         r['code'], r['slug'] = e['code'], e['page']
+        r['ledger_date'] = e.get('date') or ''
         out.append(r)
     order = {c: n for n, c in enumerate(want)}
     out.sort(key=lambda r: order[r['case']])
@@ -1494,8 +1748,22 @@ def sample_rows(today):
 # ════════════════════════════ run ════════════════════════════
 def run(a):
     today = dt.date.today()
+    global NOTICE_HOURS
     sample = bool(a.sample)
     from_ledger = bool(getattr(a, 'from_ledger', ''))
+    touch = int(getattr(a, 'touch', 1) or 1)
+    NOTICE_HOURS = (getattr(a, 'hours', '') or '').strip()
+    cb_override = None
+    if touch > 1:
+        if not (sample or from_ledger):
+            print('REFUSED: --touch 2 and 3 go to the pieces already printed. Add --from-ledger <ledger>.')
+            return 2
+        if getattr(a, 'call_by', ''):
+            cb_override = parse_date(a.call_by)
+            if not cb_override or cb_override <= today:
+                print('REFUSED: --call-by must be a future date, YYYY-MM-DD.')
+                return 2
+        a.no_pages = True                     # a follow-up never rewrites the private pages
     tag = 'SAMPLE' if sample else today.isoformat() + ('_from_ledger' if from_ledger else '')
     data_dir = os.path.abspath(a.data_dir) if a.data_dir else M.data_dir()
 
@@ -1561,12 +1829,16 @@ def run(a):
         if a.with_qr and not qr_svg('https://example.invalid/'):
             print('WARNING: --with-qr asked for but no QR library is importable (segno). Pieces carry '
                   'the phone number instead.')
-        doc, pieces = build_html(rows, today, info)
+        if touch > 1:
+            doc, pieces = build_notices(rows, today, info, touch, cb_override)
+        else:
+            doc, pieces = build_html(rows, today, info)
 
         if not a.no_pages:
             write_pages(rows, today, pages_dir, a.voice_en, a.voice_es)
-        p_html = P.out('BSG_Mail_Variants_%s.html' % tag)
-        p_pdf = P.out('BSG_Mail_Variants_%s.pdf' % tag)
+        stem = 'BSG_Mail_Variants' if touch == 1 else 'BSG_Mail_Notice%d' % touch
+        p_html = P.out('%s_%s.html' % (stem, tag))
+        p_pdf = P.out('%s_%s.pdf' % (stem, tag))
         with open(p_html, 'w', encoding='utf-8') as fh:
             fh.write(doc)
         pdf_note = 'skipped (--no-pdf)'
@@ -1575,7 +1847,7 @@ def run(a):
             pdf_note = '%s (%.0f KB, %s pages%s)' % (
                 p_pdf, size / 1024.0, pages if pages else '?',
                 ', %d set in smaller type to fit' % small if small else '')
-        if not from_ledger:                       # a rebuild from a ledger never rewrites one
+        if not from_ledger and touch == 1:        # a rebuild from a ledger never rewrites one
             for r in rows:
                 old = ledger.get(r['case']) if isinstance(ledger.get(r['case']), dict) else {}
                 # marks added afterwards (in_print_file, print_file, superseded) are kept
@@ -1615,7 +1887,11 @@ def run(a):
     print('wrote', pdf_note)
     if not a.no_pages:
         print('wrote %d private pages under %s (not published)' % (len(rows), pages_dir))
-    if from_ledger:
+    if touch > 1:
+        print('touch %d notice: call-by %s; hours line %s; ledger not rewritten'
+              % (touch, ' / '.join(sorted({date_en(call_by(r, today, cb_override)) for r in rows})),
+                 'printed' if NOTICE_HOURS else 'NOT printed (pass --hours "Mon to Fri 9 am to 6 pm")'))
+    elif from_ledger:
         print('ledger not rewritten (--from-ledger only reads it)')
     else:
         print('wrote', ledger_path, '(assignment only; nothing is marked as mailed)')
@@ -1642,6 +1918,10 @@ def main(argv=None):
     ap.add_argument('--no-pdf', action='store_true', help='write the HTML only')
     ap.add_argument('--from-ledger', default='',
                     help='rebuild exactly the cases this ledger marks in_print_file (same arms, codes, pages)')
+    ap.add_argument('--touch', type=int, choices=(1, 2, 3), default=1,
+                    help='1 = the variants; 2 = SECOND NOTICE (day 7); 3 = FINAL NOTICE (day 14). 2 and 3 need --from-ledger')
+    ap.add_argument('--call-by', default='', help='YYYY-MM-DD the outreach file closes (default: first print date + 28 days)')
+    ap.add_argument('--hours', default='', help='office hours printed under the call line; omitted when blank')
     ap.add_argument('--sample', action='store_true', help='invented people; BSG_Mail_Variants_SAMPLE.pdf')
     return run(ap.parse_args(argv))
 
