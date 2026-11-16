@@ -1404,6 +1404,10 @@ function aiCheck(){
     /* They said more while the model was thinking: that answer is to half a sentence. Ask again. */
     if((S.fc.lastWord||0)>heardAt+250){ S.ai.n=n0; aiAsk(); return; }
     if(!j||!j.line) return;
+    /* Nothing new was said by them (same words heard as last time), or the model handed back the line
+       already on screen: keep what is there. Call 11-16 17:03 showed one line five times in a row. */
+    if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;
+    S.ai.heard=j.heard||'';
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
     S.ai.line=j.line; S.ai.shownAt=now();
     S.ai.hist.push(j.line); if(S.ai.hist.length>5) S.ai.hist.shift();
