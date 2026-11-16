@@ -2828,6 +2828,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'cy': old_case_year(case, d.get('st')),
+            # STUCK LISTING (Jesse: listed over 90 days = a bigger dip forming): days on Zillow today
+            # from a recent reading, and the percent the ask has come down when we saw a cut
+            'zk': (d.get('zstuck') if isinstance(d.get('zstuck'), (int, float)) else None),
+            'zc': (d.get('zcut') if isinstance(d.get('zcut'), (int, float)) else None),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
             # docket sale result (sale_results.py -> row.sr): held / cancelled / moved / at risk /
             # amended judgment. None on almost every row; the null-strip drops it.
@@ -9120,6 +9124,8 @@ function screenLead(){
   if(r.dupd) clock += '<span class="chip bad">ALSO CALENDARED ' + esc(r.dupd)
     + ' &mdash; SOONER than above. Verify the sale date before you quote it.</span>';
   if(r.sv!=null && r.sv>=2) clock += '<span class="chip bad">STALLER &middot; dodged '+r.sv+' sales</span>';
+  /* STUCK LISTING (Jesse): on Zillow 90+ days. The owner already wants out and the agent is out of ideas. */
+  if(r.zk) clock += '<span class="chip hot" title="Listed on Zillow for '+r.zk+' days'+(r.zc?' and the ask has come down '+r.zc+'%':'')+'. Jesse: a listing over 90 days is a bigger dip forming.">STUCK LISTING &middot; '+r.zk+' days'+(r.zc?' &middot; ask cut '+r.zc+'%':'')+'</span>';
   /* OLD CASE (Jesse): a 2019-2023 filing is a serial-staller risk, called after every fresh one */
   if(r.cy) clock += '<span class="chip bad" title="Filed '+r.cy+'. Jesse: 2019-2023 filings are serial stallers, 3 or 4 bankruptcies deep. Called after the fresh ones.">OLD CASE &middot; filed '+r.cy+'</span>';
   else if(r.sv===0)         clock += '<span class="chip ok">FRESH &middot; first sale</span>';

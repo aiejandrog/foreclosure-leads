@@ -28,6 +28,8 @@ import json
 import os
 import re
 
+import listing_signal as _sig
+
 # Broward condo parcel, 12 characters: digits, two letters, digits. '514205AA0390'.
 # A Miami case slug is the same shape one size up ('2025011165ca01', 14) and must
 # NOT be aliased onto its digits — that digit string can be a different parcel.
@@ -193,6 +195,17 @@ def attach(rows, redfin=None, listing=None, pa=None):
                 except (TypeError, ValueError, OSError):
                     row['rfchk'] = ''
                 n_rf += 1
+        h = _hit(ls_idx, folio, case)
+        if h:
+            # STUCK LISTING (listing_signal): days on Zillow as of TODAY from a recent reading, and a
+            # price cut when the cache saw one. Lis pendens rows reach this through the cache only.
+            row.pop('zstuck', None)
+            row.pop('zcut', None)
+            row.update(_sig.signal(h))
+            if not row.get('zstatus') and h.get('s') in _sig.LIVE and _sig.age_days(h) is not None                     and _sig.age_days(h) <= _sig.STUCK_MAX_AGE_DAYS:
+                row['zstatus'] = h['s']
+                row['zprice'] = h.get('p') or 0
+                row['zdoz'] = _sig.doz_now(h) if h['s'] == 'LISTED' else (h.get('d') or 0)
         if money(row.get('zest')) <= 0:
             h = _hit(ls_idx, folio, case)
             z = money(h.get('z')) if h else 0
