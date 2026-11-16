@@ -31,7 +31,7 @@ pure = src[src.index('/* FASTCOACH-BEGIN'):src.index('/* FASTCOACH-END */')]
 for banned in ('document.', '$(', 'fetch(', 'XMLHttpRequest', 'WebSocket', 'localStorage'):
     chk(banned not in pure, 'the matcher touches no page and no network: %s' % banned)
 chk('scanObjections' not in src and 'sitRespond(' not in src, 'one matcher: the old final-only paths are gone')
-chk("fcHear(interim,false,'')" in src and "fcHear(last.text,false,dgTag(last.spk))" in src, 'both engines feed partial words to the coach')
+chk("fcHear(interim,false,'')" in src and "fcHear(txt,false,'')" in src, 'both engines feed partial words to the coach')
 srv = open(os.path.join(HERE, 'call_coach_server.py'), encoding='utf-8').read()
 chk('"eqstate": r.get("eqstate")' in srv and 'm["coach_fires"]' in srv, 'server carries the verified state and saves prompt timings')
 gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().splitlines()
@@ -151,52 +151,32 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   T.cool(); T.say('I said I am not interested');
   o.lad_3=[$('objwho').textContent.indexOf('third time')>=0, $('objbody').textContent.indexOf('leave it there')>=0, T.fires().slice(-1)[0].pass];
 
-  /* 12. Deepgram results: they speak first, you are whoever reads the screen, two voices in one result */
+  /* 12. Deepgram on ONE microphone: its speaker numbers are ignored whatever they say (four test
+     calls had them wrong), cards come from the words, and a sentence cut in two is one line. */
   T.reset(); T.dgReset(); C.jump(1); var st=$('saytext').textContent.split(' ').slice(0,12).join(' ');
   var W=function(txt,spk){ return txt.split(' ').map(function(x){ return {word:x.toLowerCase(), punctuated_word:x, speaker:spk}; }); };
   var M=function(words,fin){ return {is_final:fin, channel:{alternatives:[{transcript:words.map(function(w){ return w.punctuated_word; }).join(' '), words:words}]}}; };
-  T.dg(M(W('Hello who is this and why are you calling me',0),true));      o.dg_first=[T.dgYou(), T.lines().slice(-1)[0].spk];
-  T.dg(M(W(st,1),true));                       o.dg_you=[T.dgYou(), T.lines().slice(-1)[0].spk];
-  T.cool(); var f1=T.fires().length;
-  T.dg(M(W('I am not interested',1),false));   o.dg_you_quiet=T.fires().length-f1;
-  T.dg(M(W('I am not interested',0),false));   o.dg_them_fire=T.fires().slice(f1).map(function(x){ return x.id; });
-  var n0=T.lines().length;
-  T.dg(M(W('so what I do is help owners',1).concat(W('please stop calling me',0)),true));
-  o.dg_split=T.lines().slice(n0).map(function(l){ return l.spk; }); o.dg_stop=card()&&card().kind;
-  o.dg_eng=$('eng').textContent;
-
-  /* 13. Deepgram hears ONE voice (test call 11-15 22:00: 182 words on one number, 3 on the other).
-     Its label is not believed, the coach still answers, and a sentence cut in two is one line. */
-  T.reset(); T.dgReset(); C.jump(1);
   T.dg(M(W('Hey there',0),true));
-  T.dg(M(W('Hi who is this',1),true));
-  T.dg(M(W(st,1),true));                       o.one_you=[T.dgYou(), T.lines().slice(-1)[0].spk];
+  T.dg(M(W(st,0),true));                       o.one_read=T.lines().slice(-1)[0].spk;
   T.cool(); var g1=T.fires().length;
-  T.dg(M(W('I really don’t have time right now',1),false));
-  T.dg(M(W('I really don’t have time right now, actually.',1),true));
+  T.dg(M(W(st,0),false));                      o.one_read_quiet=T.fires().length-g1;
+  T.dg(M(W('I really don’t have time right now',0),false));
+  T.dg(M(W('I really don’t have time right now, actually.',0),true));
   o.one_busy=T.fires().slice(g1).map(function(x){ return x.id; }); o.one_tag=T.lines().slice(-1)[0].spk;
   T.cool(); var g2=T.fires().length;
-  T.dg(M(W('No. No. It’s alright. I’m already... I already have a lawyer on the case.',1),true));
+  T.dg(M(W('No. No. It’s alright. I’m already... I already have a lawyer on the case.',0),true));
   o.one_law=T.fires().slice(g2).map(function(x){ return x.id; }); o.one_eng=$('eng').textContent;
+  T.cool(); var g3=T.fires().length;
+  T.dg(M(W('I don’t wanna talk about this with',1),true)); T.dg(M(W('someone that I don’t know.',1),true));
+  o.one_trust=T.fires().slice(g3).map(function(x){ return x.id; });
+  T.cool(); var g4=T.fires().length;
+  T.dg(M(W('Where’d you even get that from?',0),true)); o.one_where=T.fires().length-g4;
   var n1=T.lines().length;
-  T.dg(M(W('I just',1),true)); T.dg(M(W('wanted to ask what he showed you.',1),true)); T.dg(M(W('Okay.',1),true));
+  T.dg(M(W('I just',1),true)); T.dg(M(W('wanted to ask what he showed you.',0),true)); T.dg(M(W('Okay.',1),true));
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
+  o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
 
-  /* 14. Two real voices and you never read the script (test call 11-15 23:25): your name and
-     company say which voice is you, earlier lines are relabelled, their objection gets its card. */
-  T.reset(); T.dgReset(); C.jump(1);
-  var n2=T.lines().length;
-  T.dg(M(W('Hey there.',0),true));
-  T.dg(M(W('This is Alejandro with Biscayne Solutions Group.',0),true));
-  T.dg(M(W('I am not like everybody else that calls about your property.',0),true));
-  o.two_before=[T.dgYou(), T.lines().slice(-1)[0].spk==='you'];
-  T.cool(); var h1=T.fires().length;
-  T.dg(M(W('I don’t wanna talk about this with',1),true));
-  T.dg(M(W('someone that I don’t know.',1),true));
-  o.two_card=T.fires().slice(h1).map(function(x){ return x.id; });
-  o.two_lines=T.lines().slice(n2).map(function(l){ return l.spk; }); o.two_last=T.lines().slice(-1)[0].text;
-  o.two_eng=$('eng').textContent;
   /* 15. Two channels (Phone Link): channel 0 is you, channel 1 is them, from the first word.
      Their words leaking into the mic are dropped; a one-word answer on their channel is theirs. */
   T.reset(); T.dgReset(); T.dgTwo(true); C.jump(1);
@@ -214,7 +194,6 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.ch_lines=T.lines().slice(n3).map(function(l){ return l.spk+':'+l.text.split(' ')[0]; });
   T.dgTwo(false);
   o.echo=[fcEchoT('hello', 'hello'), fcEchoT('i am not interested', 'well i am really not interested'), fcEchoT('so what time works for you', 'i am not interested'), fcEchoT('yes', '')];
-  o.you_talks=[T.youVoice({},{0:60,1:12}), T.youVoice({},{0:30,1:25}), T.youVoice({1:-1},{0:20,1:9}), T.youVoice({0:3,1:1},{0:5,1:50}), T.youVoice({},{0:60,1:2})];
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
 })().catch(function(e){ console.log('@@'+JSON.stringify({err:String(e&&e.stack||e).slice(0,600)})); process.exit(0); });
@@ -253,10 +232,6 @@ o.voice=[V('honestly I wasn’t expecting you to be'), V('no thank you seriously
 var LD=function(id,n,l,es){ var x=fcLadder(id,n,l,es); return x?x.who+'|'+x.say:null; };
 o.ladder=[LD('notint',1,{},false), LD('notint',2,{auction:'2099-01-02'},false), LD('notint',2,{},false), LD('obj:v2',2,{},false),
           LD('notint',3,{},false), LD('notint',2,{auction:'2099-01-02'},true)];
-var RW=function(a){ return a.map(function(x){ return {word:x[0], speaker:x[1]}; }); };
-o.runs=[fcRuns(RW([['hi',0],['there',0],['no',1],['thanks',1]])), fcRuns(RW([['i',0],['help',0],['uh',1],['owners',0],['see',0]])),
-        fcRuns(RW([['hello',null]])), fcRuns([])];
-o.youvoice=[fcYouVoice({}), fcYouVoice({'0':1,'1':3}), fcYouVoice({'2':1})];
 o.board_v=fcFacts(fcBoard({case:'A-1',equity:50000},'?case=A-1&eq=clear')).equity.v;
 o.say=[fcFactSay('owe',none,false).say, fcFactSay('owe',rec,false).say, fcFactSay('equity',rec,false).say, fcFactSay('equity',ver,false).say,
        fcFactSay('sale',rec,false).say, fcFactSay('sale',none,false).say, fcFactSay('equity',unk,true).say, fcFactSay('owe',unk,true).say];
@@ -316,10 +291,6 @@ else:
         chk('$' not in ''.join(x or '' for x in ld) and 'sale set for' not in ld[2] and 'One question' in ld[3],
             'no date on file: no date said; other cards get the general second pass', [ld[2], ld[3]])
         chk('third time' in ld[4] and 'leave it there' in ld[4] and 'subasta' in ld[5], 'the third time lets them go; Spanish follows', [ld[4], ld[5]])
-        chk(p['runs'] == [[{'spk': '0', 'text': 'hi there'}, {'spk': '1', 'text': 'no thanks'}], [{'spk': '0', 'text': 'i help uh owners see'}],
-                          [{'spk': '', 'text': 'hello'}], []],
-            'Deepgram words split where the voice changes; a one-word blip is folded in', p['runs'])
-        chk(p['youvoice'] == [None, '1', '2'], 'you are the voice with the most script reads, nobody until one is heard', p['youvoice'])
         b = p['board']
         chk(b[0] == ['priced', 120000, True, True], "the board's quotable net replaces the raw estimate", b[0])
         chk(b[1] == ['clear', None, False, False] and 'no figure' in p['board_v'], 'a verified state with no quotable net shows no number', [b[1], p['board_v']])
@@ -372,26 +343,17 @@ else:
         chk(o['lad_2'] == [True, True, True, 2], 'they cut in with the same objection mid-card: a new second-pass line, on partial words', o['lad_2'])
         chk(o['lad_tag'] == 'them?', 'that mixed line is treated as theirs', o['lad_tag'])
         chk(o['lad_3'] == [True, True, 3], 'the third time shows the let-them-go line', o['lad_3'])
-        chk(o['dg_first'] == [None, 'them?'], 'Deepgram: their hello first does not make them you', o['dg_first'])
-        chk(o['dg_you'] == ['1', 'you'], 'Deepgram: the voice that reads the opener is you', o['dg_you'])
-        chk(o['dg_you_quiet'] == 0 and o['dg_them_fire'] == ['obj:notint'],
-            'Deepgram: trigger words in your voice raise nothing; in theirs, the card, on partial words', [o['dg_you_quiet'], o['dg_them_fire']])
-        chk(o['dg_split'] == ['you', 'them'] and o['dg_stop'] == 'stop', 'Deepgram: one result with two voices is two lines, and their half is answered', [o['dg_split'], o['dg_stop']])
-        chk(o['one_you'] == ['1', 'you?'], 'one voice: the Deepgram "you" is not believed, the content guess labels the line', o['one_you'])
-        chk(len(o['one_busy']) == 1 and o['one_tag'] in ('them?', ''), 'one voice: "I do not have time" still raises the card', [o['one_busy'], o['one_tag']])
-        chk(len(o['one_law']) == 1, 'one voice: "I already have a lawyer" still raises a card', o['one_law'])
-        chk('one voice heard' in o['one_eng'], 'the engine line says Deepgram hears one voice', o['one_eng'])
+        chk(o['one_read'] in ('you?', '') and o['one_read_quiet'] == 0, 'one mic: reading the screen raises nothing', [o['one_read'], o['one_read_quiet']])
+        chk(len(o['one_busy']) == 1 and o['one_tag'] in ('them?', ''), 'one mic: "I do not have time" raises a card whatever speaker number Deepgram gives', [o['one_busy'], o['one_tag']])
+        chk(len(o['one_law']) == 1, 'one mic: "I already have a lawyer" raises a card', o['one_law'])
+        chk(o['one_trust'] == ['obj:legit'], 'one mic: "someone I do not know" raises the trust card', o['one_trust'])
+        chk(o['one_where'] == 1, 'one mic: "where did you even get that from" gets the public-record answer', o['one_where'])
+        chk('one mic' in o['one_eng'], 'the engine line says one mic, labels read from what is said', o['one_eng'])
         chk(o['one_join'] == ['I just wanted to ask what he showed you.', 'Okay.'], 'a sentence Deepgram cut in two is one transcript line', o['one_join'])
-        chk(o['two_before'] == ['0', False], 'two voices: your name and company mark your voice, no label while only one voice is heard', o['two_before'])
-        chk(o['two_card'] == ['obj:legit'], 'two voices: "someone I don’t know" raises the trust card', o['two_card'])
-        chk(o['two_lines'] == ['you', 'you', 'you', 'them'] and o['two_last'].endswith('someone that I don’t know.'),
-            'two voices: earlier lines get their real label, and her sentence is one line', [o['two_lines'], o['two_last']])
-        chk('live speaker labels' in o['two_eng'], 'two voices: the engine line goes to live speaker labels', o['two_eng'])
+        chk(o['one_hard'] == 0, 'one mic: no line ever carries a hard YOU or THEM label', o['one_hard'])
         chk(o['ch_lines'] == ['them:Hello?', 'you:Hey,', 'them:No.', 'them:I'], 'two channels: mic is you, laptop sound is them, their echo in the mic is dropped', o['ch_lines'])
         chk(o['ch_you_quiet'] == 0 and o['ch_them'] == ['obj:notint'], 'two channels: only their channel raises a card, on partial words', [o['ch_you_quiet'], o['ch_them']])
         chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
-        chk(o['you_talks'] == ['0', None, '0', '0', None], 'who is you with no script read: the talker, the one who is not them, never on one voice', o['you_talks'])
-        chk('live speaker labels' in o['dg_eng'], 'the engine line says when your voice is known', o['dg_eng'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
 
 print()
