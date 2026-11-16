@@ -394,7 +394,8 @@ var CARDS = [
   m:['busy right now','call me back','call me later','bad time','at work right now','in the middle of'],
   body:'No problem at all… what I’ll do — I’ll give you my number, and you’d have to call ME back later to catch me… what’s your timeframe on getting back to me, just to see if I’d even be free?\n\n(or, if they’ll give a day:) It might be tough to catch me cold with my schedule… if you’ve got your calendar handy I’ll pull mine and we’ll lock a specific time so neither of us is chasing the other — that work?\n\n(No-show on the callback? Wait 2 minutes, then call: “Hey {first}, it’s just {sender} getting back to you — running a little behind…”)'},
  {id:'plan', who:'“I already have a plan / a mod going” — be the parachute', s:2,
-  m:['already have a plan','modification going','working with someone','got it handled','have it handled','plan in place','tengo un plan'],
+  m:['already have a plan','modification going','working with someone','got it handled','have it handled','plan in place','tengo un plan',
+     'figured out','found a solution','have a solution','got a solution','under control','got it covered','dont have to worry about that','working on it'],
   body:'Good — keep it. I don’t want to be your bank or your middleman… I want to be your parachute. You’re betting the house on that plan landing on time. Keep it exactly as-is… and let our advisor look at postponing the sale in parallel, for free. If your plan lands first, I did you a favor and you owe me a coffee. If it slips a day — and here a day is everything — you’ve already got backup. Fair?\n\n(still flat? skeptical tone:) Can I ask you something?… How can I point out that you MIGHT be missing something here… without you getting upset with me?'},
  {id:'legit', who:'“How do I know you’re legit?” — a concern in disguise', s:2,
   m:['legit','a scam','how do i know you','references','are you licensed','who are you really','sounds like a scam',
@@ -427,7 +428,7 @@ var CARDS = [
 /* Trigger phrases for the VAULT cards, keyed by card n. Coach-owned (see header comment).
    n14 (Save My Number) is YOUR closing move — manual only, never auto-fired. */
 var TRIG = {
- 1:['bank is working','working with the bank','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
+ 1:['bank is working','working with the bank','talked to the bank','talk to the bank','spoke to the bank','spoke with the bank','talking to the bank','bank is going to help','bank is gonna help','help us with the loan','help me with the loan','bank is reviewing','in review','loss mitigation','loan modification','the modification','a modification','el banco esta','una modificacion'],
  2:['my attorney','my lawyer','talk to my attorney','talk to my lawyer','attorney is handling','lawyer is handling','have an attorney','have a lawyer','mi abogado'],
  3:['always gets pushed','they always push','been cancelled','been canceled','cancelled twice','canceled twice','postponed before','it always moves','siempre la posponen','la cancelaron'],
  4:['tax refund','settlement check','money coming in','waiting on a check','waiting on money','check is coming','mi reembolso','esperando un cheque'],
@@ -458,7 +459,7 @@ var SIT = [
      'whered you get that','whered you even get that','where did you get that','where did you get this','where are you getting this','where are you getting that','who told you','como consiguio mi numero'],
   say:'Fair question — when a case gets filed at the courthouse it’s public record, and that’s the only reason I have it. I’m not your lender and I’m not calling to buy your house… has anybody actually shown you what happens to your balance every time that sale date moves?'},
  {tag:'“what do you want / what’s this about?” → status frame',
-  m:['what do you want','what is this about','whats this about','what is it you want','que quiere','de que se trata'],
+  m:['what do you want','what is this about','whats this about','what is it you want','what are you calling me about','what are you calling about','what is this regarding','whats this regarding','what is this call about','que quiere','de que se trata'],
   say:'Honestly, this is pretty basic — I’m really just trying to understand where things stand on {st1} right now… compared to where you’d actually want them to land… so we can see what that gap looks like. Would that help you?'},
  {tag:'it’s them → open',
   m:['this is he','this is she','speaking','yes this is','thats me','si soy yo','el mismo','ella misma'],
