@@ -374,8 +374,8 @@ else:
         chk(o['fresh'] == ['That is a great question. I have no idea.', '', 'hello there'] and 'fresh=aiFresh(S.finals, S.ai.n)' in src and 'S.ai.n=S.finals.length' in src,
             'an answer joined onto the line he just read back still counts as new, so the AI is asked', o['fresh'])
         chk("if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;" in src, 'the same line, or a line for the same words heard again, does not replace what is on screen')
-        chk('TALK LIKE A PERSON, WITH CONTROLLED URGENCY' in srv and 'NO CIRCLES' in srv and 'THE EPIPHANY' in srv and 'Do not take the wording' in srv,
-            'the model is told the voice: controlled urgency, the gap named in one line, no circles, never a script sentence word for word')
+        chk('TALK LIKE A PERSON, WITH CONTROLLED URGENCY' in srv and 'NO CIRCLES' in srv and 'DUMMY-PROOF' in srv and 'THE OBJECTION ANSWER' in srv and 'How does that sound?' in srv,
+            'the model is told the voice in his own words: plain, spoken, one picture that makes them think, and his full objection answer')
         chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')

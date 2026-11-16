@@ -366,11 +366,8 @@ with tempfile.TemporaryDirectory() as d:
                                                       'asked': ['Five minutes, free. Is later today better, or first thing tomorrow?']}).encode())
         urllib.request.urlopen(req, timeout=15).read()
         sb = AI['seen'][-1]['body']['messages'][0]['content']
-        chk('BUSY AFTER YOU ALREADY ASKED' in sb and 'The sale is set in about a week' in sb and 'calls them at that exact time' in sb,
-            'busy after the ask: the model is told it is a brush-off, to isolate it, use the sale clock and pin an exact time')
-        suggest([{'spk': '', 'text': 'I am busy right now.'}])
-        sb2 = AI['seen'][-1]['body']['messages'][0]['content']
-        chk('\n\nBUSY. ' in sb2 and 'BUSY AFTER' not in sb2, 'busy as the first thing said: pin an exact time, no isolate')
+        chk('BUSY / NO TIME' in sb and 'why wouldn\'t five minutes' in sb and 'The sale is set in about a week' in sb and 'How does that sound?' in sb,
+            'busy: the model is told to give his objection answer (why wouldn\'t five minutes be worth it, nothing to lose, part friends, how does that sound) with the sale clock')
         suggest([{'spk': '', 'text': 'Well you guys have not even told me what you are offering.'}])
         chk('THEY ASKED WHAT THEY GET' in AI['seen'][-1]['body']['messages'][0]['content'], '"what are you offering" gets two concrete things the advisor does, not "he lays out options"')
         AI['reply'] = 'SKIP'
