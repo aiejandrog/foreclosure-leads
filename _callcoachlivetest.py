@@ -374,6 +374,26 @@ with tempfile.TemporaryDirectory() as d:
         n2 = len(AI['seen']); AI['reply'] = 'HEARD: x\nTYPE: answer\nSTEP: consequence\nSAY: Okay, so he is going to take care of it. What happens if the date comes first?'
         j11 = suggest([{'spk': '', 'text': 'Our attorney is gonna take care of stopping the sale.'}])[1]
         chk('take care of it' in j11.get('line', '') and len(AI['seen']) == n2 + 1, '"he will take care of it" is not read as the coach saying goodbye: %s' % j11.get('line'))
+        # Variety: what was already said on the call is named as used up, and the next ask must be new.
+        AI['reply'] = work
+        said2 = ['So why wouldn\'t five minutes be worth it, instead of going in blind? How does that sound?',
+                 'So why wouldn\'t five minutes be worth it? We shake hands. Later today or first thing tomorrow, which is easier?']
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'I do not know about that.'}], 'asked': said2}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        vp = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('USED UP ON THIS CALL' in vp and "why wouldn't five minutes be worth it" in vp and 'later today or first thing tomorrow' in vp
+            and 'full objection answer twice already' in vp and 'Ask a NEW way' in vp,
+            'after two full objection answers and one ask, the model is told those words are used up and to ask a new way')
+        # How we get paid is never invented.
+        n3 = len(AI['seen']); AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The lender who does the work pays us a referral, so it is free to you.',
+                                             'HEARD: x\nTYPE: question\nSTEP: close\nSAY: You are right, nobody works for free. The consultation is free and you never pay up front. When can he call you?']
+        j12 = suggest([{'spk': '', 'text': 'Nobody works for free. We have no money to pay you guys.'}])[1]
+        chk('THEY ASKED HOW WE GET PAID' in AI['seen'][n3]['body']['messages'][0]['content'] and 'referral' not in j12.get('line', '')
+            and j12.get('line', '').startswith('You are right') and len(AI['seen']) == n3 + 2,
+            'how we get paid: the model gets the facts, and an invented answer (a referral) is thrown away and asked again: %s' % j12.get('line'))
+        AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The attorney pays us a commission.'] * 2
+        chk(suggest([{'spk': '', 'text': 'So what do you guys get out of it?'}])[1].get('line') == '', 'a second invented pay answer shows nothing')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
