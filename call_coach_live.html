@@ -434,7 +434,7 @@ var TRIG = {
  5:['my brother is lending','family is lending','borrowing from family','my cousin is','my sister is lending','handling it in the family','dinero de familia','mi hermano me'],
  6:['filing bankruptcy','file bankruptcy','filed bankruptcy','chapter 13','chapter 7','automatic stay','bancarrota'],
  7:['three of you','you people','all want the same','already talked to','get off my porch','tired of these calls','ya hable con'],
- 8:['wrong house','wrong address','not in foreclosure','no foreclosure here','not my house','casa equivocada','ninguna ejecucion'],
+ 8:['wrong house','wrong address','not in foreclosure','not in preforeclosure','not in pre foreclosure','making a mistake','no foreclosure here','not my house','casa equivocada','ninguna ejecucion'],
  9:['nothing anybody can do','nothing i can do','nothing can be done','too late now','its over','done deal','ya es tarde','se acabo'],
  10:['wife doesnt know','she doesnt know','husband doesnt know','before she comes out','before she hears','mi esposa no sabe'],
  11:['worn out','fed up','i give up','just take it','walk away from all','cant do this anymore','estoy agotado','no puedo mas'],
@@ -454,7 +454,8 @@ var SIT = [
   m:['who is this','whos this','who are you','whos calling','who am i speaking','con quien hablo','quien es','quien habla'],
   say:'It’s {sender} with Biscayne Solutions Group. I’m NOT your lender and I’m NOT calling to buy your house — I help owners see what options they have on {st1} before this goes any further. Can I ask you a couple of quick questions?'},
  {tag:'“how’d you get my number?” → public record, then back on track',
-  m:['how did you get my number','how do you have my number','where did you get my number','why are you calling me','como consiguio mi numero'],
+  m:['how did you get my number','how do you have my number','where did you get my number','why are you calling me',
+     'whered you get that','whered you even get that','where did you get that','where did you get this','where are you getting this','where are you getting that','who told you','como consiguio mi numero'],
   say:'Fair question — when a case gets filed at the courthouse it’s public record, and that’s the only reason I have it. I’m not your lender and I’m not calling to buy your house… has anybody actually shown you what happens to your balance every time that sale date moves?'},
  {tag:'“what do you want / what’s this about?” → status frame',
   m:['what do you want','what is this about','whats this about','what is it you want','que quiere','de que se trata'],
@@ -512,7 +513,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgYou:null, dgVotes:{}, dgWords:{}, dgOpen:null, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -770,51 +771,6 @@ function fcVoice(nline, nref){
     return (hit>=3&&hit/n>=0.6)?'you':'them';      /* "i have" + "have a" is not a script read */
   };
   return {all:side(w), tail:side(w.slice(-6))};
-}
-/* DEEPGRAM WORDS -> RUNS BY VOICE. Deepgram tags every word with a speaker number. One result can
-   hold two voices (they cut in while you were reading), so it is split where the voice changes.
-   A one-word blip between two runs of the same voice is folded in. Returns [{spk, text}]. */
-function fcRuns(words){
-  var runs=[];
-  (words||[]).forEach(function(w){
-    var k=(w.speaker==null)?'':String(w.speaker), t=String(w.punctuated_word||w.word||'').trim();
-    if(!t) return;
-    var last=runs[runs.length-1];
-    if(last&&last.spk===k){ last.text+=' '+t; last.n++; } else runs.push({spk:k, text:t, n:1});
-  });
-  for(var i=1;i<runs.length-1;i++){
-    if(runs[i].n===1&&runs[i-1].spk===runs[i+1].spk){
-      runs[i-1].text+=' '+runs[i].text+' '+runs[i+1].text; runs[i-1].n+=1+runs[i+1].n; runs.splice(i,2); i--;
-    }
-  }
-  return runs.map(function(r){ return {spk:r.spk, text:r.text}; });
-}
-/* WHICH VOICE IS YOU. Not "whoever spoke first": on an outbound call they say hello first. The
-   voice that reads the screen is you. votes: {speaker: lines that were a script read}. Returns the
-   speaker with the most votes, or null while nobody has read anything yet. */
-function fcYouVoice(votes, words){
-  var best=null, n=0;
-  Object.keys(votes||{}).forEach(function(k){ if(votes[k]>n){ n=votes[k]; best=k; } });
-  if(best!==null) return best;
-  /* Nobody has sounded like the caller yet (you went off the script). With two voices heard, the
-     one that sounded like the homeowner is not you; failing that, the caller is the one doing
-     most of the talking. */
-  var w=words||{}, ks=Object.keys(w).sort(function(x,y){ return w[y]-w[x]; });
-  if(typeof fcTwoVoices!=='function'||!fcTwoVoices(w)) return null;
-  var a=ks[0], b=ks[1], va=(votes||{})[a]||0, vb=(votes||{})[b]||0;
-  if(va<0&&vb>=0) return b;
-  if(vb<0&&va>=0) return a;
-  return (w[a]+w[b]>=40&&w[a]>=2*w[b])?a:null;
-}
-/* ARE THERE TWO VOICES AT ALL. Deepgram numbers the voices it can tell apart. Through one microphone
-   it often cannot: test call 11-15 22:00 came back 182 words on one number and 3 on the other, the
-   whole call was labelled you, and no card showed. Its numbers are believed only once a second
-   voice holds a real share of the words. words: {speaker: words heard}. */
-function fcTwoVoices(words){
-  var tot=0, a=[];
-  Object.keys(words||{}).forEach(function(k){ tot+=words[k]; a.push(words[k]); });
-  a.sort(function(x,y){ return y-x; });
-  return a.length>1&&a[1]>=5&&a[1]/tot>=0.08;
 }
 /* THEIR VOICE IN YOUR MICROPHONE. On two channels the laptop speakers leak their words into the
    mic, so the same sentence comes back on your channel a moment later. A mic line whose words are
@@ -1379,25 +1335,12 @@ function setKey(){
   try{ k.trim()?localStorage.setItem('coachDgKey',k.trim()):localStorage.removeItem('coachDgKey'); }catch(e){}
   alert(k.trim()?'Saved. Next session uses Deepgram.':'Cleared. Next session uses Chrome.');
 }
-/* One Deepgram result. Words carry a speaker number on partials too, so your own partial words
-   never raise a card, and a result with two voices in it becomes two transcript lines. Which
-   number is you is learned from who reads the screen (fcYouVoice). Until then, and for as long as
-   Deepgram hears one voice (fcTwoVoices), the content guess stands in: a wrong "you" on their
-   words silences the coach, which is worse than no label. */
-function dgLive(){ return S.dgYou!==null&&fcTwoVoices(S.dgWords); }
-/* How much one finished piece says about whose voice it is: a script read or your own name and
-   company is you (3); a line that only reads like you is a weak yes (1); like them, a no (-1). */
-function dgVote(text){
-  var nt=norm(text);
-  if(fcVoice(nt, fcRef()).all==='you') return 3;
-  for(var i=0;i<YOU_PAT.length;i++) if(YOU_PAT[i]&&nt.indexOf(YOU_PAT[i])>=0) return 3;
-  var q=guessSpeaker(nt);
-  return q==='you?'?1:(q==='them?'?-1:0);
-}
-function dgTag(k){
-  if(k===''||!dgLive()) return '';
-  return k===S.dgYou?'you':'them';
-}
+/* One Deepgram result on ONE microphone. Deepgram is used for the words only. Its speaker numbers
+   are not: on four test calls (11-15 22:00, 23:25, 23:41 and 11-16 09:56) it put both people on
+   one number, took a minute to notice the second voice, or swapped the two mid-call, and every
+   wrong "you" silenced the coach. Who is speaking is read from what is said (guessSpeaker), and a
+   card is held back only when the words are you reading the screen. Exact labels need two
+   channels (dgTwoMessage). */
 function dgMessage(j){
   var alt=j&&j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
   if(!alt) return;
@@ -1405,24 +1348,15 @@ function dgMessage(j){
   if(!txt) return;
   S.dgGot=true;
   if(S.dgTwo){ dgTwoMessage(j, txt); return; }
-  var runs=fcRuns(alt.words||[]);
-  if(!runs.length) runs=[{spk:'', text:txt}];
   if(j.is_final){
     S.interim='';
-    (alt.words||[]).forEach(function(w){ if(w.speaker!=null) S.dgWords[w.speaker]=(S.dgWords[w.speaker]||0)+1; });
-    runs.forEach(function(r,i){
-      if(r.spk!==''){ S.dgVotes[r.spk]=(S.dgVotes[r.spk]||0)+dgVote(r.text); S.dgYou=fcYouVoice(S.dgVotes, S.dgWords); }
-      pushFinal(r.text, dgTag(r.spk), r.spk, i===0);
-      /* Deepgram cuts a sentence wherever you breathe. A piece with no full stop stays open, and
-         the next piece in the same voice joins its line. */
-      S.dgOpen=/[.?!]$/.test(r.text)?null:{i:S.lines.length-1, spk:r.spk, at:now()};
-    });
-    /* Once the voices are known, every earlier line gets its real label, not the guess it was given. */
-    if(dgLive()) S.lines.forEach(function(l){ if(l.dg!=null&&l.dg!=='') l.spk=(l.dg===S.dgYou?'you':'them'); });
-    if(!S.dgTwo) $('eng').textContent='engine: Deepgram · '+(dgLive()?'live speaker labels':S.dgYou===null?'learning your voice':'one voice heard, telling you apart by what is said');
+    pushFinal(txt, '', 'm', true);
+    /* Deepgram cuts a sentence wherever you breathe. A piece with no full stop stays open, and
+       the next piece joins its line. */
+    S.dgOpen=/[.?!]$/.test(txt)?null:{i:S.lines.length-1, spk:'m', at:now()};
+    $('eng').textContent='engine: Deepgram · one mic · YOU/THEM read from what is said';
   } else {
-    var last=runs[runs.length-1];
-    S.interim=txt; S.lastSpeech=now(); fcHear(last.text,false,dgTag(last.spk)); renderTranscript();
+    S.interim=txt; S.lastSpeech=now(); fcHear(txt,false,''); renderTranscript();
   }
 }
 /* TWO CHANNELS: the mic is you, the laptop sound is them. No guessing and no learning: the
@@ -1457,11 +1391,11 @@ function setSys(on){ try{ on?localStorage.setItem('coachSysAud','1'):localStorag
 setTimeout(function(){ try{ if(localStorage.getItem('coachSysAud')&&$('sysaud')) $('sysaud').checked=true; }catch(e){} },0);
 function startDG(stream,key){
   try{
-    S.dgGot=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; S.dgThem=[];      /* a new call, new voices */
+    S.dgGot=false; S.dgOpen=null; S.dgThem=[];      /* a new call, new voices */
     var ws=new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-3&language='+(S.lang==='es-US'?'es':'en-US')
-      +'&punctuate=true&interim_results=true&smart_format=true'+(S.dgTwo?'&multichannel=true':'&diarize=true'),['token',key]);
+      +'&punctuate=true&interim_results=true&smart_format=true'+(S.dgTwo?'&multichannel=true':''),['token',key]);
     ws.onopen=function(){
-      $('eng').textContent='engine: Deepgram · '+(S.dgTwo?'two channels · mic = YOU, laptop sound = THEM':'learning your voice');
+      $('eng').textContent='engine: Deepgram · '+(S.dgTwo?'two channels · mic = YOU, laptop sound = THEM':'one mic · YOU/THEM read from what is said');
       var mr=new MediaRecorder(stream,{mimeType:(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm')});
       mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0&&ws.readyState===1) ws.send(ev.data); };
       mr.start(250);
@@ -1643,8 +1577,8 @@ function finish(outcome){
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
-            cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, dgYou:function(){ return S.dgYou; },
-            youVoice:function(v,w){ return fcYouVoice(v,w); }, echo:function(a,b){ return fcEcho(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgYou=null; S.dgVotes={}; S.dgWords={}; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
+            echo:function(a,b){ return fcEcho(a,b); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
