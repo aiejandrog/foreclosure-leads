@@ -269,7 +269,7 @@ with tempfile.TemporaryDirectory() as d:
         sent_tx = AI['seen'][-1]['body']['messages'][1]['content']
         chk(sent_tx.startswith('CALLER: Keeping it for your wife') and '?: No, nobody did.' in sent_tx,
             'one microphone: a line that is the coach\'s own earlier line read out goes to the model as the caller')
-        chk('LISTEN FIRST' in AI['seen'][-1]['body']['messages'][0]['content'] and 'CONVERSATION' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk('LISTEN FIRST' in AI['seen'][-1]['body']['messages'][0]['content'] and 'TALK LIKE A PERSON' in AI['seen'][-1]['body']['messages'][0]['content'],
             'the model is told to find the homeowner\'s words first and to talk like a person')
         sys_p = AI['seen'][-1]['body']['messages'][0]['content']
         chk('PLAYBOOK-MARKER five minutes with the senior advisor.' in sys_p and 'NOT-FOR-THE-MODEL' not in sys_p,

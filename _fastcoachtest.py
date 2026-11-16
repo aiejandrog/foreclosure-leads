@@ -367,6 +367,10 @@ else:
         chk(o['whenat'] == ['2026-11-17 09:00', '2026-11-17 10:15', '2026-11-16 16:00', '2026-11-20 14:00',
                             '2026-11-23 09:00', ' 19:00', '2026-11-17 ', '2026-11-17 15:00', '2026-11-18 12:00'],
             'the day and time they gave becomes a calendar date for Call Mode, and what cannot be placed stays empty', o['whenat'])
+        chk('overflow-y:auto' in html[html.index('.overlay{position:fixed'):html.index('.overlay.on')] and "if($('outcome').className.indexOf('on')>=0){ S.lastSpeech=now(); return; }" in src,
+            'the outcome screen scrolls, and choosing an outcome is not treated as a silent call')
+        chk("if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;" in src, 'the same line, or a line for the same words heard again, does not replace what is on screen')
+        chk('TALK LIKE A PERSON' in srv and 'Do not take the wording' in srv and '"temperature": 0.6' in srv, 'the model is told to talk like a person: short, reactive, never a script sentence word for word')
         chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
