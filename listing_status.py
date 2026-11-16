@@ -43,6 +43,7 @@ import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import property_photos as pp  # reuse _ZHDRS fingerprint + _addr_of
+import listing_signal as sig  # stuck-listing signal (2026-11-16): days today, price cut, fetch priority
 
 CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'listing_status_cache.json')
 
@@ -234,7 +235,11 @@ def enrich_file(path, cache, ttl_s, limit_state):
         return 0
     now = time.time()
     changed = fetched = 0
-    for r in leads:
+    # The fetch budget goes to live listings first (their days and price move, and a stuck one is the
+    # signal), then the soonest sales: file order spent it on whichever rows came first and left a
+    # listing's days frozen at the day it was last read. Sorting a list of the SAME dicts: every edit
+    # below still lands in `leads`.
+    for r in sorted(leads, key=lambda r: sig.refresh_priority(cache.get(_folio(r) or ''), r)):
         if limit_state['n'] <= 0:
             break
         k = _folio(r)
@@ -246,10 +251,13 @@ def enrich_file(path, cache, ttl_s, limit_state):
             # a county_leads.py change — the county scrape rebuilds the file, this pass re-stamps it).
             # ent.get('z',0) / ent.get('ag','') etc.: older cache entries predate these fields;
             # default to empty, no forced refetch — the 7-day TTL rolls them over naturally.
+            _dn = sig.doz_now(ent, now) if ent.get('s') == 'LISTED' else ent.get('d', 0)
             if (r.get('zstatus') != ent['s'] or r.get('zprice') != ent.get('p', 0)
                     or r.get('zest', 0) != ent.get('z', 0)
-                    or r.get('zagent', '') != ent.get('ag', '')):
-                r['zstatus'], r['zprice'], r['zdoz'] = ent['s'], ent.get('p', 0), ent.get('d', 0)
+                    or r.get('zagent', '') != ent.get('ag', '') or r.get('zdoz', 0) != _dn):
+                r['zstatus'], r['zprice'], r['zdoz'] = ent['s'], ent.get('p', 0), _dn
+                r.pop('zstuck', None); r.pop('zcut', None)
+                r.update(sig.signal(ent, now))
                 r['zest'] = ent.get('z', 0)
                 r['zagent'], r['zagentphone'] = ent.get('ag', ''), ent.get('ap', '')
                 r['zagentemail'], r['zbroker'] = ent.get('ae', ''), ent.get('br', '')
@@ -281,6 +289,11 @@ def enrich_file(path, cache, ttl_s, limit_state):
             r['zagentemail'], r['zbroker'] = agent_email, broker
             cache[k] = {'s': status, 'p': price, 'd': days, 'z': zest, 't': now,
                         'ag': agent, 'ap': agent_phone, 'ae': agent_email, 'br': broker}
+            _pp = sig.next_prev_price(ent, status, price)       # the cut survives refreshes
+            if _pp:
+                cache[k]['pp'] = _pp
+            r.pop('zstuck', None); r.pop('zcut', None)
+            r.update(sig.signal(cache[k], now))
             changed += 1
         # A failed fetch is NOT cached — retried next run.
         time.sleep(1.2)  # same pacing the photo pass uses; Zillow tolerates it
@@ -300,12 +313,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--limit', type=int, default=0, help='max live fetches this run (0 = unlimited)')
     ap.add_argument('--ttl-days', type=float, default=7.0)
+    ap.add_argument('--lp-limit', type=int, default=0,
+                    help='extra live fetches for lis pendens rows (lp_leads.json), which were never looked up')
     a = ap.parse_args()
     base = os.path.dirname(os.path.abspath(__file__))
     cache = _load_cache()
     limit_state = {'n': a.limit if a.limit > 0 else 10 ** 9}
     for fn in ('leads_final.json', 'broward_leads.json', 'palmbeach_leads.json'):
         enrich_file(os.path.join(base, fn), cache, a.ttl_days * 86400, limit_state)
+    if a.lp_limit > 0:
+        # Fresh filings are the newest, warmest leads and were the one population never checked for a
+        # listing. Own budget, so the auction rows above cannot starve it. The file is rebuilt every
+        # night by lp_leads.py, so what lasts is the CACHE; value_join.attach stamps rows from it.
+        enrich_file(os.path.join(base, 'lp_leads.json'), cache, a.ttl_days * 86400, {'n': a.lp_limit})
     json.dump(cache, open(CACHE_PATH, 'w', encoding='utf-8'))
 
 

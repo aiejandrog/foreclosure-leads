@@ -465,7 +465,7 @@ python -u property_types.py >> "%LOG%" 2>&1
 
 python -u refresh_progress.py step 3d
 echo [3d/5] Zillow listing status (LISTED/PENDING/SOLD/RENTAL/OFF-MKT + Zestimate, 7-day cache)...
-python -u listing_status.py --limit 120 >> "%LOG%" 2>&1
+python -u listing_status.py --limit 120 --lp-limit 80 >> "%LOG%" 2>&1
 
 python -u refresh_progress.py step 3d2
 echo [3d2/5] Redfin Estimate (advisory AVM cross-check, 21-day cache, headless browser)...

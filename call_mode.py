@@ -2370,6 +2370,39 @@ def replied_cases(notes=None, replies=None):
     return out
 
 
+# CASE AGE (Jesse, 2026-07-20, in the playbook notebook): "Late 2024 to late 2025 filings = FRESH. 9 out
+# of 10 have never stopped a sale, no bankruptcy games, they will bow to a genuine rescue. 2019 to 2023
+# filings = SERIAL STALLERS. Already 3 or 4 bankruptcies deep, know the delay game better than we do.
+# Deprioritize hard." Until 2026-11-16 nothing in the dial queue read the filing year (only the
+# "dodged 2+ sales" chip, which needs the history to have been scraped). The year is in the case
+# number in all three counties, so this costs no lookup. An old case still ships; it waits behind
+# every fresh one in its band. CALLMODE_CASE_AGE=0 turns the demotion off.
+OLD_CASE_YEAR = 2023
+
+
+def case_year(case):
+    """Filing year from a case number: Miami '2026-018040-CA-01', Broward 'CACE-26-018544' or
+    'CACE26018544', Palm Beach '502026CA012740XXXAMB' or '50-2026-CA-012740-XXXA-MB'. None when
+    the shape is not one of those (a tax deed '2026-3206TD' is a certificate year, not a filing)."""
+    c = re.sub(r'[\s]', '', str(case or '').upper())
+    m = re.match(r'(20\d\d)-\d{6}-[A-Z]{2}-\d{2}$', c)                     # Miami-Dade
+    if m:
+        return int(m.group(1))
+    m = re.match(r'[A-Z]{4}-?(\d{2})-?\d{4,7}$', c)                         # Broward
+    if m:
+        return 2000 + int(m.group(1))
+    m = re.match(r'(?:50-?)(20\d\d)-?(?:CA|CC)-?\d{6}', c)                  # Palm Beach
+    return int(m.group(1)) if m else None
+
+
+def old_case_year(case, st=None):
+    """The filing year when this is a foreclosure filed in OLD_CASE_YEAR or earlier, else None."""
+    if st in ('TD', 'BAL'):
+        return None
+    y = case_year(case)
+    return y if (y is not None and y <= OLD_CASE_YEAR) else None
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=None, replied=None):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -2794,6 +2827,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
             'oc': _s('orconf', 6), 'txd': _n('taxDue'), 'et': _n('etax'),
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
+            'cy': old_case_year(case, d.get('st')),
+            # STUCK LISTING (Jesse: listed over 90 days = a bigger dip forming): days on Zillow today
+            # from a recent reading, and the percent the ask has come down when we saw a cut
+            'zk': (d.get('zstuck') if isinstance(d.get('zstuck'), (int, float)) else None),
+            'zc': (d.get('zcut') if isinstance(d.get('zcut'), (int, float)) else None),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
             # docket sale result (sale_results.py -> row.sr): held / cancelled / moved / at risk /
             # amended judgment. None on almost every row; the null-strip drops it.
@@ -2977,7 +3015,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=None, cap=400, lookup=Non
     # equity it decides who lands in the protected head: a landline lead pushed past CALLMODE_HEAD
     # ships on its rotation day instead of every day.
     _mf = os.environ.get('CALLMODE_MOBILE_FIRST', '1') != '0'
-    out.sort(key=lambda r: (_band(r), (r.get('_ll', 0) if _mf else 0), 0 if r.get('eqv') else 1,
+    _ca = os.environ.get('CALLMODE_CASE_AGE', '1') != '0'
+    out.sort(key=lambda r: (_band(r), (1 if (_ca and r.get('cy')) else 0),
+                            (r.get('_ll', 0) if _mf else 0), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
     for _r in out:
@@ -9088,6 +9128,10 @@ function screenLead(){
   if(r.dupd) clock += '<span class="chip bad">ALSO CALENDARED ' + esc(r.dupd)
     + ' &mdash; SOONER than above. Verify the sale date before you quote it.</span>';
   if(r.sv!=null && r.sv>=2) clock += '<span class="chip bad">STALLER &middot; dodged '+r.sv+' sales</span>';
+  /* STUCK LISTING (Jesse): on Zillow 90+ days. The owner already wants out and the agent is out of ideas. */
+  if(r.zk) clock += '<span class="chip hot" title="Listed on Zillow for '+r.zk+' days'+(r.zc?' and the ask has come down '+r.zc+'%':'')+'. Jesse: a listing over 90 days is a bigger dip forming.">STUCK LISTING &middot; '+r.zk+' days'+(r.zc?' &middot; ask cut '+r.zc+'%':'')+'</span>';
+  /* OLD CASE (Jesse): a 2019-2023 filing is a serial-staller risk, called after every fresh one */
+  if(r.cy) clock += '<span class="chip bad" title="Filed '+r.cy+'. Jesse: 2019-2023 filings are serial stallers, 3 or 4 bankruptcies deep. Called after the fresh ones.">OLD CASE &middot; filed '+r.cy+'</span>';
   else if(r.sv===0)         clock += '<span class="chip ok">FRESH &middot; first sale</span>';
   /* Sales SCHEDULED, the counterpart to sales survived. `sc` shipped on every lead and nothing read
      it. Only shown when it exceeds `sv`, because then it means a sale is on the calendar that has
