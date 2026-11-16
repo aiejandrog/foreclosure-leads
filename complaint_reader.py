@@ -31,7 +31,7 @@ A principal balance is what the lender PLEADS on the filing date. It is not a pa
 escrow advances, late charges and fees ride on top. It is stamped as `cmp.p` and labelled
 "complaint claims", and no equity gate reads it.
 
-    python complaint_reader.py --limit 15            Miami complaints + Broward notices + PB inbox
+    python complaint_reader.py --limit 15            up to 15 per county: Miami complaints, Broward notices; all of the PB inbox
     python complaint_reader.py --county miami --case 2026-003288-CA-01
     python complaint_reader.py --dry-run             count the work, read nothing
 
@@ -389,6 +389,7 @@ def run(counties, limit=DEFAULT_LIMIT, only_case=None, dry_run=False, here=HERE,
         todo = [r for r in md if _due(out.get(r['case']), today)]
         rep['MIAMI-DADE'].update(leads=len(md), queued=len(todo))
         collector = None
+        n = 0                          # the limit is PER COUNTY: Miami must not use Broward's share
         for r in ([] if dry_run else todo):
             if n >= limit:
                 break
@@ -431,6 +432,7 @@ def run(counties, limit=DEFAULT_LIMIT, only_case=None, dry_run=False, here=HERE,
         todo = [r for r in bw if _due(out.get(r['case']), today)]
         rep['BROWARD'].update(leads=len(bw), queued=len(todo))
         session = None
+        n = 0                          # per county (2026-11-16: a shared limit gave Broward 0 of 15)
         for r in ([] if dry_run else todo):
             if n >= limit:
                 break
