@@ -826,7 +826,11 @@ class ledger_file_lock(object):
                 os.close(os.open(self.lk, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
                 self.held = True
                 return self
-            except FileExistsError:
+            except (FileExistsError, PermissionError):
+                # WINDOWS (2026-11-15, flaky "four writers" test): a lock file another writer just
+                # removed stays "delete pending" while any handle is open on it (antivirus, indexer),
+                # and creating it again in that window fails with PermissionError, not
+                # FileExistsError. It means the same thing: someone has it or is letting go. Wait.
                 try:
                     if time.time() - os.path.getmtime(self.lk) > self.stale:
                         os.remove(self.lk)
@@ -838,11 +842,18 @@ class ledger_file_lock(object):
                 time.sleep(0.1)
 
     def __exit__(self, *exc):
+        # A scanner holding the lock file open makes the remove fail for a moment. Swallowing that
+        # left the lock behind, and every other writer then waited out the 30 s timeout. Retry.
         if self.held:
-            try:
-                os.remove(self.lk)
-            except OSError:
-                pass
+            for attempt in range(10):
+                try:
+                    os.remove(self.lk)
+                    break
+                except FileNotFoundError:
+                    break
+                except OSError:
+                    time.sleep(0.05 * (attempt + 1))
+            self.held = False
         return False
 
 

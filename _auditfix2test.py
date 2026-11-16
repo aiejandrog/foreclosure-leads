@@ -69,6 +69,40 @@ ts = [threading.Thread(target=_w, args=(i,)) for i in range(4)]
 [t.start() for t in ts]
 [t.join() for t in ts]
 rec('four writers at once lose no row', not errs and len(json.load(open(led))) == 60, errs[:1])
+
+# Windows "delete pending": creating the lock right after another writer removed it can raise
+# PermissionError. The lock must wait and retry, and a remove a scanner blocks must be retried.
+_real_open, _real_remove = os.open, os.remove
+_fails = {'open': 2, 'remove': 2}
+
+
+def _flaky_open(path, *a, **k):
+    if path.endswith('.lock') and _fails['open'] > 0:
+        _fails['open'] -= 1
+        raise PermissionError(13, 'Permission denied')
+    return _real_open(path, *a, **k)
+
+
+def _flaky_remove(path):
+    if path.endswith('.lock') and _fails['remove'] > 0:
+        _fails['remove'] -= 1
+        raise PermissionError(13, 'Permission denied')
+    return _real_remove(path)
+
+
+os.open, os.remove = _flaky_open, _flaky_remove
+try:
+    _ok = True
+    try:
+        with S.ledger_file_lock(led, timeout=5):
+            pass
+    except Exception as e:      # noqa: BLE001
+        _ok = e
+finally:
+    os.open, os.remove = _real_open, _real_remove
+rec('the lock waits through a PermissionError on create (Windows delete pending)', _ok is True and _fails['open'] == 0, _ok)
+rec('a blocked remove of the lock file is retried, so no lock is left behind',
+    _fails['remove'] == 0 and not os.path.exists(led + '.lock'))
 rec('outreach_email, cadence and ledger_sync write through the same lock',
     '_SS.append_ledger_row(SENT_LEDGER, entry)' in src('outreach_email.py')
     and '_ss._append_ledger(' in src('cadence.py')
