@@ -359,6 +359,20 @@ with tempfile.TemporaryDirectory() as d:
         chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named: the model is told to ask what he is doing')
         suggest([{'spk': '', 'text': 'Who is this?'}])
         chk('FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'no plan named: no fact is pushed')
+        # Busy after pushback is a brush-off; "what do I get" needs a real answer.
+        AI['reply'] = work
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'You know what, I am kinda busy at the moment.'}], 'days': 8,
+                                                      'asked': ['Five minutes, free. Is later today better, or first thing tomorrow?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        sb = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('BUSY AFTER YOU ALREADY ASKED' in sb and 'The sale is set in about a week' in sb and 'calls them at that exact time' in sb,
+            'busy after the ask: the model is told it is a brush-off, to isolate it, use the sale clock and pin an exact time')
+        suggest([{'spk': '', 'text': 'I am busy right now.'}])
+        sb2 = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('\n\nBUSY. ' in sb2 and 'BUSY AFTER' not in sb2, 'busy as the first thing said: pin an exact time, no isolate')
+        suggest([{'spk': '', 'text': 'Well you guys have not even told me what you are offering.'}])
+        chk('THEY ASKED WHAT THEY GET' in AI['seen'][-1]['body']['messages'][0]['content'], '"what are you offering" gets two concrete things the advisor does, not "he lays out options"')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

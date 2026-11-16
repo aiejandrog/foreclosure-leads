@@ -215,6 +215,9 @@ AI_SYSTEM = (
     "house?\n"
     "  Right: No worries, I'm not selling you anything. I just saw the association filed a case on your place. "
     "Did you know about that?\n"
+    "- The two-times question (later today or first thing tomorrow) is asked ONCE per call. If it is already "
+    "in the lines you gave, never ask it again: ask for a specific hour instead ('what time are you done "
+    "today?') and say the advisor calls them then.\n"
     "- The close is the one place with fixed parts: five minutes with our senior advisor, and the two times "
     "(later today or first thing tomorrow). Say even that in a natural sentence, and say it differently if you "
     "already asked once. That is the only either/or allowed; never ask whether they want the call.\n"
@@ -321,9 +324,48 @@ AI_ATTY_Q = (r"lawyer|attorney|abogad",
              r"specialist|exact steps|in touch with the lender")
 
 
-def plan_hint(last_said, given):
-    """The instruction for this one line when the homeowner just named a plan, or ''."""
+# "BUSY" AND "WHAT DO I GET". Call 11-16 (association case, sale in eight days): after four pushbacks
+# she said "I'm kinda busy" and the line was "Gotcha, you're slammed, later today or first thing
+# tomorrow?", the same two-times question for the third time. Busy after pushback is a brush-off, not
+# a calendar problem. And "you haven't even told me what you're offering" got "he lays the options
+# out", which is no answer at all.
+_AI_BUSY = re.compile(r"\bbusy\b|do ?n[o'’]?t have (the |any )?time|no time|bad time|in the middle of|not a good time|"
+                      r"call (me )?(back|later)|another time|at work|driving|ocupad", re.I)
+_AI_VALUE = re.compile(r"what (benefit|good|do you (even )?(do|offer)|are you (even )?offering|can you (even )?do|would i get|"
+                       r"do i get|is in it for me|is the point)|have ?n[o'’]?t (even )?told me|how (can|could|would|do) you "
+                       r"(even )?help|what (exactly )?is it you do|so what is it", re.I)
+_AI_ASKED_TIME = re.compile(r"later today|first thing tomorrow|five minutes", re.I)
+
+
+def plan_hint(last_said, given, when=""):
+    """The instruction for this one line when the homeowner just named a plan, pushed back with
+    "busy", or asked what they get, or ''."""
     used = " ".join(given).lower()
+    clock = (" The sale is set " + when + ": say so, in those words, as the reason it cannot wait.") if when else ""
+    if _AI_VALUE.search(last_said) and not re.search(r"ask the court for more time|close in cash|licensed lender", used, re.I):
+        return ("\n\nTHEY ASKED WHAT THEY GET. 'He lays out your options' is not an answer. Your SAY names TWO concrete "
+                "things the senior advisor does, picked to match what THIS homeowner said they want, from: asking the "
+                "court for more time; bringing a buyer who can close in cash before the sale date; replacing the loan "
+                "through a licensed lender; getting a modification resubmitted the right way; leaving on a date they "
+                "pick with money in hand. Say them plainly, as what he does, not as a promise. Then one sentence that "
+                "it is five minutes and free, and ask what time today works." + clock +
+                " This overrides the one-thought rule for this line.")
+    if _AI_VALUE.search(last_said):
+        return ("
+
+THEY ASKED AGAIN WHAT THEY GET. Never say you do not offer anything. Your SAY: the ONE thing the "
+                "senior advisor does that fits what they said they want, in one plain sentence, in different words "
+                "than before; then that it is five minutes and free; then ask what exact time today they are free." + clock)
+    if _AI_BUSY.search(last_said) and not re.search(r"really the time|worth (it|five)", used, re.I):
+        if _AI_ASKED_TIME.search(used):
+            return ("\n\nBUSY AFTER YOU ALREADY ASKED. This is a brush-off, not a calendar problem. Do NOT ask 'later "
+                    "today or first thing tomorrow' again and do not just say it is only five minutes. Your SAY: agree "
+                    "in three words; then isolate it as a real question: is it truly the time, or are they not sure "
+                    "five minutes is worth it." + clock + " Then take the scheduling off them: ask what time they are "
+                    "done today, and say the advisor calls them at that exact time. This overrides the one-thought "
+                    "rule for this line.")
+        return ("\n\nBUSY. Do not offer to call back 'sometime'. Your SAY: agree in three words, then ask what exact "
+                "time today they are free, and say it is five minutes and the advisor calls them at that time." + clock)
     for pat, fact, key in AI_PLAN_FACTS:
         if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
             return ("\n\nPLAN FACT FOR THIS LINE. The homeowner just named a plan. Your SAY is: a reaction of a few words, "
@@ -475,7 +517,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
 
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
     if not rows[-1].startswith("CALLER"):
-        system += plan_hint(last_said, prior + [shown])
+        system += plan_hint(last_said, prior + [shown], when)
     res = ask(system)
     # THE CHALLENGE, guaranteed (Alex, 11-16: "why didn't you ask, so you're not interested in saving
     # your property, your equity?"). The first "not interested" of a call gets his question, word for
