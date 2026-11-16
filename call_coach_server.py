@@ -247,7 +247,7 @@ def playbook_text():
         except OSError:
             return ""
         body = re.split(r"(?m)^---\s*$", raw)[-1]
-        _playbook.update(mtime=mt, text=re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", body).strip()[:16000])
+        _playbook.update(mtime=mt, text=re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", body).strip()[:40000])
     return _playbook["text"]
 
 
