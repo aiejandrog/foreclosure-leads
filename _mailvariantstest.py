@@ -245,8 +245,8 @@ rec('the sample covers all three variants and the fallback',
     {r['variant'] for r in SR} == {'A', 'B', 'C'} and sum(1 for r in SR if r['fallback']) == 1)
 need = [V._e(D.mars_part('govt', 'may_agree', 'may_stop', lang=l, company=M.SENDER['co'], as_html=False))
         for l in ('en', 'es')] + [V._e(OC.OPTOUT_LINE_EN), V._e(OC.OPTOUT_LINE_ES), PHONE]
-rec('every piece carries the MARS lines, the opt-out lines and the phone, EN and ES',
-    all(all(n in p for n in need) for p in pieces))
+rec('every piece carries the phone and no MARS or opt-out line, EN or ES (2026-11-16)',
+    all(PHONE in p and not any(n in p for n in need[:-1]) for p in pieces))
 text = [re.sub(r'<svg.*?</svg>', '', p, flags=re.S) for p in pieces]
 rec('no piece carries a dollar sign', not any('$' in t for t in text))
 rec('no piece carries a mailbox designator', not any(re.search(r'\bPMB\b|P\.?\s?O\.?\s+BOX', t, re.I) for t in text))
@@ -350,10 +350,10 @@ except V.DataError as e:
     rec("a unit number in the homeowner's own address is not a refusal", False, e)
 B = next(r for r in SR if r['variant'] == 'B')
 try:
-    V.check_pieces([V.piece_html(B, TODAY).replace(V._e(OC.OPTOUT_LINE_ES), '')], [B])
-    rec('a piece missing an opt-out line refuses the run', False)
+    V.check_pieces([V.piece_html(B, TODAY) + V._e(OC.OPTOUT_LINE_ES)], [B])
+    rec('a piece carrying an opt-out line refuses the run', False)
 except V.DataError:
-    rec('a piece missing an opt-out line refuses the run', True)
+    rec('a piece carrying an opt-out line refuses the run', True)
 try:
     V.check_pieces([V.piece_html(B, TODAY)], [B], never=['Sam Sample'])
     rec('a never-print string refuses the run', False)

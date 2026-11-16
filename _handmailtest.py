@@ -36,8 +36,8 @@ ROW = {'case': 'T-1', 'owner': 'DOE,JANE', 'first': 'Jane', 'addr': '1 NW 2 ST, 
        'zip': '33100', 'age': 3, 'plaintiff': 'TEST BANK'}
 mars = D.mars_part('govt', 'may_agree', 'may_stop', company=B.SENDER['co'], as_html=False)
 l1, l2 = B.letter(ROW), B.letter_followup(ROW)
-chk('follow-up carries the three MARS sentences', mars in l2)
-chk('follow-up carries the EN and ES opt-out lines', OC.OPTOUT_LINE_EN in l2 and OC.OPTOUT_LINE_ES in l2)
+chk('follow-up carries no MARS block (2026-11-16)', mars not in l2)
+chk('follow-up carries no opt-out line, EN or ES', OC.OPTOUT_LINE_EN not in l2 and OC.OPTOUT_LINE_ES not in l2)
 chk('follow-up names the street and is signed by the same person', '1 NW 2 St' in l2 and B.SENDER['name'] in l2)
 chk('follow-up says it is the one follow-up', 'my one follow-up' in l2)
 BAD = ('stop the foreclosure', 'stop your foreclosure', 'stop the sale', 'save your home', 'save your house',

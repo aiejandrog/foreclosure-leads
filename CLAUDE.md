@@ -210,6 +210,11 @@ Palm Beach rows before a bankruptcy search. Neither is built; draft wording is u
 `letters-mailing-address/`. **2026-11-11:** the mailing-address letter for absentee owners is decided; see
 "No answer to mail" below. Broward / Palm Beach before a bankruptcy search is unchanged.
 
+**2026-11-16, at Alejandro's direction:** the three MARS sentences and the opt-out line are OUT of every
+mailed letter (`bsg_mail_campaign.letter()` / `letter_followup()`, all three `bsg_mail_variants` pieces).
+`check_pieces` now refuses a piece that carries either. Do not add them back to mail. Email, the door
+letter, the site and the private mail pages are unchanged and still import from `disclaimer.py`.
+
 ## No answer to mail (Call Mode, 2026-11-11, draft PR, LEGAL REVIEW)
 
 Alex's five decisions (2026-11-11): the first No answer or voicemail on a verified-equity owner line routes the

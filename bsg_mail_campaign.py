@@ -414,15 +414,10 @@ def letter(r):
     """About 145 words. Short because it is HANDWRITTEN, not because anything legal was trimmed.
 
     Carries, in order: who I am, the four denials (government / lender / lawyer / no money), why I
-    am writing, the offer, the three MARS sentences from disclaimer.mars_part(), and the opt-out.
+    am writing, and the offer. No MARS block and no opt-out line (Alex, 2026-11-16).
     """
     street = street_case(r['addr'].split(',')[0])
-    # The three federally mandated MARS / Reg O sentences (disclaimer.py: govt, may_agree, may_stop) and
-    # the approved opt-out line, EN then ES, exactly as every email carries them (outreach_copy).
-    # Neither was in this body before 2026-10-15 although this docstring said both were. Imported,
-    # never retyped: a missing key raises here instead of printing a letter without them.
-    mars = D.mars_part('govt', 'may_agree', 'may_stop', company=SENDER['co'], as_html=False)
-    optout = '%s %s' % (OC.OPTOUT_LINE_EN, OC.OPTOUT_LINE_ES)
+    # 2026-11-16, Alex: mailed letters carry NO MARS block and NO opt-out line. Do not add them back.
     return (
         "%s,\n\n"
         "I'm %s with %s, here in South Florida. I'm not with the government or your lender, "
@@ -430,22 +425,18 @@ def letter(r):
         "I saw the court filing on %s. Whether you want to keep the house or sell it, I can walk "
         "you through the options you still have and what each one would mean for you. If selling "
         "turns out to be the right move, I buy houses in this situation.\n\n"
-        "%s\n\n"
-        "%s\n\n"
         "%s\n%s"
         % (r['first'], SENDER['name'], SENDER['co'], street,
-           mars, optout, SENDER['name'], contact_phone())
+           SENDER['name'], contact_phone())
     )
 
 
 def letter_followup(r):
-    """The second touch, mailed about 7 days after letter(). Same disclosures, same opt-out, same
-    signer; shorter, and it says plainly that this is the one follow-up, so it never reads as the
+    """The second touch, mailed about 7 days after letter(). Same signer, no MARS block and no
+    opt-out line; shorter, and it says plainly that this is the one follow-up, so it never reads as the
     start of a drip. Options first (keep or sell), no number, no deadline, no promise about the sale.
     """
     street = street_case(r['addr'].split(',')[0])
-    mars = D.mars_part('govt', 'may_agree', 'may_stop', company=SENDER['co'], as_html=False)
-    optout = '%s %s' % (OC.OPTOUT_LINE_EN, OC.OPTOUT_LINE_ES)
     return (
         "%s,\n\n"
         "I wrote to you last week about %s. This is my one follow-up, in case the first letter got "
@@ -453,10 +444,8 @@ def letter_followup(r):
         "I'm not with the government or your lender, I'm not a lawyer, and I'm not asking you for "
         "any money. If it would help to have someone lay out your options, keeping the house or "
         "selling it, in one short phone call, my number is below.\n\n"
-        "%s\n\n"
-        "%s\n\n"
         "%s\n%s"
-        % (r['first'], street, mars, optout, SENDER['name'], contact_phone())
+        % (r['first'], street, SENDER['name'], contact_phone())
     )
 
 
@@ -561,9 +550,7 @@ def build(rows, budget, days, drops, total_pool):
            '<li><b>Never</b> ask for money, a signature, or a deposit in a letter.</li>'
            '<li><b>If anyone says stop</b> &mdash; by mail, phone, text or at the door &mdash; that '
            'is permanent and it covers every channel. Tell Alex the same day.</li>'
-           '</ul>'
-           '<div class="warn"><b>The "not a good time" line and the three sentences above it stay in.</b> '
-           'They are not filler; they are what makes the rest of it legal to send.</div></div>'
+           '</ul></div>'
            % (len(rows), half)]
 
     for n, r in enumerate(rows, 1):
@@ -592,8 +579,7 @@ def build(rows, budget, days, drops, total_pool):
 def build_printed(rows, days, drops, total_pool):
     """One letter per sheet, on letterhead, ready to fold into a #10 window-less envelope.
 
-    The words are IDENTICAL to the handwritten version -- same offer, same four denials, same two
-    MARS sentences, same opt-out. Only the presentation differs. Keeping one body means a copy fix
+    The words are IDENTICAL to the handwritten version -- same offer, same four denials. Only the presentation differs. Keeping one body means a copy fix
     lands on both variants; two bodies is how the flyer, letter and email drifted apart before.
     """
     today = dt.date.today()
