@@ -726,7 +726,7 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .t2 .src{margin-bottom:.08in}
 .t2 .ev{margin-bottom:.09in}
 .t2 .cta{font-size:15pt;margin:.06in 0 .02in}
-.pn{font:10.8pt/1.34 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.5in}
+.pn{font:10.3pt/1.33 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.5in}
 .pn .nh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.16in}
 .pn .nco>b{display:block;font-size:1.25em;margin-bottom:.12in}
 .pn .natt{font-size:1em;line-height:1.4}
@@ -745,7 +745,7 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .pn .nref{text-align:center;font-size:.92em;line-height:1.4;margin:0 0 .06in}
 .pn .nref b{font-weight:700}
 .pn .sigc{border-right-color:#000;color:#000}
-.t1.pn{font-size:10.1pt;line-height:1.3}
+.t1.pn{font-size:9.9pt;line-height:1.3}
 .t2.pn{font-size:9.4pt;line-height:1.27}
 .t2.pn .col p{margin-bottom:.06in}
 .t2.pn .nh{margin-bottom:.1in}
@@ -1043,6 +1043,7 @@ def build_html(rows, today, info):
 # **x** in the copy below is bold; {name} is filled per lead. No MARS block, no opt-out line.
 CALL_BY_DAYS = 28                      # first print date + this = the day we close the outreach file
 NOTICE_HOURS = ''                      # --hours; the hours line prints only when this is set
+NOTICE_HOURS_ES = ''                   # --hours-es; falls back to --hours
 
 _NO_SALE = {
     'en': 'The public record we reviewed does not show a court sale date. That does not tell us how '
@@ -1161,7 +1162,7 @@ def notice_html(r, today, touch, cb):
         paras = ['%s%s' % (r['first'], ':' if lang == 'es' else ',')] + [p.format(**v) for p in n[lang]]
         cols += _col(lang, ''.join('<p>%s</p>' % _bold(p) for p in paras))
     v_en, v_es = notice_vals(r, today, 'en', cb), notice_vals(r, today, 'es', cb)
-    hours = ('Hours: %s Eastern Time · Horario: %s, hora del Este<br>' % (NOTICE_HOURS, NOTICE_HOURS)
+    hours = ('Hours: %s Eastern Time · Horario: %s, hora del Este<br>' % (NOTICE_HOURS, NOTICE_HOURS_ES or NOTICE_HOURS)
              if NOTICE_HOURS else '')
     return ('<section class="pc pn" data-case="%s" data-variant="N%d"><div class="in">'
             '<div class="nh"><div class="nco"><b>%s</b><div class="natt">'
@@ -1748,11 +1749,12 @@ def sample_rows(today):
 # ════════════════════════════ run ════════════════════════════
 def run(a):
     today = dt.date.today()
-    global NOTICE_HOURS
+    global NOTICE_HOURS, NOTICE_HOURS_ES
     sample = bool(a.sample)
     from_ledger = bool(getattr(a, 'from_ledger', ''))
     touch = int(getattr(a, 'touch', 1) or 1)
     NOTICE_HOURS = (getattr(a, 'hours', '') or '').strip()
+    NOTICE_HOURS_ES = (getattr(a, 'hours_es', '') or '').strip()
     cb_override = None
     if touch > 1:
         if not (sample or from_ledger):
@@ -1922,6 +1924,7 @@ def main(argv=None):
                     help='1 = the variants; 2 = SECOND NOTICE (day 7); 3 = FINAL NOTICE (day 14). 2 and 3 need --from-ledger')
     ap.add_argument('--call-by', default='', help='YYYY-MM-DD the outreach file closes (default: first print date + 28 days)')
     ap.add_argument('--hours', default='', help='office hours printed under the call line; omitted when blank')
+    ap.add_argument('--hours-es', default='', help='the same hours in Spanish (default: the --hours text)')
     ap.add_argument('--sample', action='store_true', help='invented people; BSG_Mail_Variants_SAMPLE.pdf')
     return run(ap.parse_args(argv))
 
