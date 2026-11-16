@@ -181,6 +181,7 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   var n1=T.lines().length;
   T.dg(M(W('I just',1),true)); T.dg(M(W('wanted to ask what he showed you.',1),true)); T.dg(M(W('Okay.',1),true));
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
+  var fcEchoT=function(a,b){ return T.echo(a,b); };
 
   /* 14. Two real voices and you never read the script (test call 11-15 23:25): your name and
      company say which voice is you, earlier lines are relabelled, their objection gets its card. */
@@ -196,6 +197,23 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.two_card=T.fires().slice(h1).map(function(x){ return x.id; });
   o.two_lines=T.lines().slice(n2).map(function(l){ return l.spk; }); o.two_last=T.lines().slice(-1)[0].text;
   o.two_eng=$('eng').textContent;
+  /* 15. Two channels (Phone Link): channel 0 is you, channel 1 is them, from the first word.
+     Their words leaking into the mic are dropped; a one-word answer on their channel is theirs. */
+  T.reset(); T.dgReset(); T.dgTwo(true); C.jump(1);
+  var CH=function(txt,ch,fin){ return {is_final:fin, channel_index:[ch,2], channel:{alternatives:[{transcript:txt, words:[]}]}}; };
+  var n3=T.lines().length;
+  T.dg(CH('Hello?',1,true));
+  T.dg(CH('Hello?',0,true));
+  T.dg(CH('Hey, this is Alejandro. Were you aware of the case on your property?',0,true));
+  T.dg(CH('No.',1,true));
+  T.cool(); var k1=T.fires().length;
+  T.dg(CH('I am not interested',0,false)); o.ch_you_quiet=T.fires().length-k1;
+  T.dg(CH('I am not interested',1,false)); o.ch_them=T.fires().slice(k1).map(function(x){ return x.id; });
+  T.dg(CH('I am not interested.',1,true));
+  T.dg(CH('not interested',0,true));
+  o.ch_lines=T.lines().slice(n3).map(function(l){ return l.spk+':'+l.text.split(' ')[0]; });
+  T.dgTwo(false);
+  o.echo=[fcEchoT('hello', 'hello'), fcEchoT('i am not interested', 'well i am really not interested'), fcEchoT('so what time works for you', 'i am not interested'), fcEchoT('yes', '')];
   o.you_talks=[T.youVoice({},{0:60,1:12}), T.youVoice({},{0:30,1:25}), T.youVoice({1:-1},{0:20,1:9}), T.youVoice({0:3,1:1},{0:5,1:50}), T.youVoice({},{0:60,1:2})];
   console.log('@@'+JSON.stringify(o));
   process.exit(0);
@@ -369,6 +387,9 @@ else:
         chk(o['two_lines'] == ['you', 'you', 'you', 'them'] and o['two_last'].endswith('someone that I don’t know.'),
             'two voices: earlier lines get their real label, and her sentence is one line', [o['two_lines'], o['two_last']])
         chk('live speaker labels' in o['two_eng'], 'two voices: the engine line goes to live speaker labels', o['two_eng'])
+        chk(o['ch_lines'] == ['them:Hello?', 'you:Hey,', 'them:No.', 'them:I'], 'two channels: mic is you, laptop sound is them, their echo in the mic is dropped', o['ch_lines'])
+        chk(o['ch_you_quiet'] == 0 and o['ch_them'] == ['obj:notint'], 'two channels: only their channel raises a card, on partial words', [o['ch_you_quiet'], o['ch_them']])
+        chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
         chk(o['you_talks'] == ['0', None, '0', '0', None], 'who is you with no script read: the talker, the one who is not them, never on one voice', o['you_talks'])
         chk('live speaker labels' in o['dg_eng'], 'the engine line says when your voice is known', o['dg_eng'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])

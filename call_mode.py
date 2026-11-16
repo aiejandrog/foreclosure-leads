@@ -8715,7 +8715,7 @@ function coachDock(url){
       + '<button id="cdclose" title="Hide the coach (stop and save the call in the coach first)">Hide</button></div>'
       + '<div class="cdhint">Blank or "can\'t connect"? Start it on this computer: <code>python call_coach_server.py</code>, then Reload.'
       + ' <button id="cdreload" style="font:inherit;padding:1px 8px">Reload</button></div>'
-      + '<iframe id="cdframe" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe>';
+      + '<iframe id="cdframe" allow="microphone; display-capture; autoplay" referrerpolicy="no-referrer"></iframe>';
     document.body.appendChild(d);
     document.getElementById('cdclose').onclick = function(){ d.style.display = 'none'; document.body.classList.remove('coachon'); };
     document.getElementById('cdtab').onclick = function(){ window.open(document.getElementById('cdframe').src, '_blank', 'noopener'); };
