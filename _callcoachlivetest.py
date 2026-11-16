@@ -319,17 +319,46 @@ with tempfile.TemporaryDirectory() as d:
         fold = 'HEARD: Really not interested, man.\nTYPE: objection\nSTEP: close\nSAY: No problem, I will leave you be. Take care.'
         work = 'HEARD: Really not interested, man.\nTYPE: objection\nSTEP: close\nSAY: Sure. What is it you are not interested in, though, keeping the place?'
         n0 = len(AI['seen']); AI['reply'] = [fold, work]
-        j5 = suggest(no)[1]
+        def suggest2(lines):
+            req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                         data=json.dumps({'lines': lines, 'asked': ["So you're not interested in saving your property, or the equity you've got in it?"]}).encode())
+            return json.loads(urllib.request.urlopen(req, timeout=15).read())
+        j5 = suggest2(no)
         chk(j5.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n0 + 2 and 'has NOT asked to stop' in AI['seen'][-1]['body']['messages'][0]['content'],
             'a line that gives up on the call is not shown: the model is asked again and told nobody said stop: %s' % j5.get('line'))
         AI['reply'] = [fold, fold]
-        chk(suggest(no)[1].get('line') == '', 'a second goodbye shows nothing rather than ending the call')
+        chk(suggest2(no).get('line') == '', 'a second goodbye shows nothing rather than ending the call')
         AI['reply'] = ['HEARD: No.\nTYPE: stop\nSTEP: close\nSAY: You got it, I will take you off the list.', work]
         j6 = suggest([{'spk': '', 'text': 'No.'}])[1]
         chk(j6.get('type') == 'objection' and 'off the list' not in j6.get('line', ''), 'a plain no is never a stop request: %s' % j6)
         n1 = len(AI['seen']); AI['reply'] = 'HEARD: stop calling me\nTYPE: stop\nSTEP: close\nSAY: You got it, you are off the list. Take care.'
         j7 = suggest([{'spk': '', 'text': 'Stop calling me, take me off your list.'}])[1]
         chk(j7.get('type') == 'stop' and 'off the list' in j7.get('line', '') and len(AI['seen']) == n1 + 1, 'a real stop request is honored at once: %s' % j7)
+        # The challenge: the first "not interested" of a call gets his question, whatever the model wrote.
+        AI['reply'] = work
+        j8 = suggest(no)[1]
+        chk(j8.get('line') == "So you're not interested in saving your property, or the equity you've got in it?" and j8.get('type') == 'objection',
+            'the first "not interested" gets the challenge question: %s' % j8.get('line'))
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': no, 'asked': [j8.get('line')]}).encode())
+        j9 = json.loads(urllib.request.urlopen(req, timeout=15).read())
+        chk(j9.get('line', '').startswith('Sure. What is it'), 'the second "not interested" gets a different angle from the model: %s' % j9.get('line'))
+        AI['reply'] = 'HEARD: x\nTYPE: stop\nSTEP: close\nSAY: You are off the list. Take care.'
+        j10 = suggest([{'spk': '', 'text': 'I am not interested, stop calling me.'}])[1]
+        chk(j10.get('type') == 'stop' and 'not interested in saving' not in j10.get('line', ''), 'a stop request is never challenged: %s' % j10.get('line'))
+        # The plan fact: when they name a plan, the matching fact goes to the model for that line, once.
+        AI['reply'] = work
+        suggest([{'spk': 'you', 'text': 'What does taken care of look like?'}, {'spk': '', 'text': 'I am filing bankruptcy next week.'}])
+        sp1 = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('PLAN FACT FOR THIS LINE' in sp1 and 'seven in ten' in sp1, 'bankruptcy named: the model is handed the bankruptcy fact for that line')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'Like I said, bankruptcy.'}], 'asked': ['About seven in ten end up back in foreclosure. What is plan B?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('PLAN FACT FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'a fact already used on the call is not handed over again')
+        suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
+        chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named: the model is told to ask what he is doing')
+        suggest([{'spk': '', 'text': 'Who is this?'}])
+        chk('FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'no plan named: no fact is pushed')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
