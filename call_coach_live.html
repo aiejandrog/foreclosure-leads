@@ -149,6 +149,11 @@ code{color:var(--accent)}
 .obox h2{font-size:18px;margin-bottom:6px} .obox p{color:var(--dim);font-size:13px;margin-bottom:16px}
 .obox .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .obox .grid button{padding:12px 8px}
+.obox .grid button.ai{outline:3px solid #4aa3ff;outline-offset:2px}
+#wrap{text-align:left;background:#0b1c2c;border:1px solid #1d4468;border-radius:10px;padding:12px;margin-bottom:14px}
+#wrap .wl{color:#4aa3ff;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+#wrap .wf{font-size:13px;color:#bcdcff;margin-bottom:8px;line-height:1.5}
+#wrap textarea{width:100%;background:#0e1216;color:#e6edf3;border:1px solid #1d4468;border-radius:6px;padding:8px;font:14px/1.4 system-ui,sans-serif;resize:vertical}
 </style>
 </head>
 <body>
@@ -302,7 +307,12 @@ code{color:var(--accent)}
 <div class="overlay" id="outcome">
   <div class="obox">
     <h2>How did it go?</h2>
-    <p>Saved with the recording (meta.json + outcomes.jsonl). Log the same outcome in Call Mode so the cadence moves.</p>
+    <p>Pick the outcome. Docked in Call Mode, it goes to that lead&rsquo;s outcome screen with the time and the note below.</p>
+    <div id="wrap">
+      <div class="wl" id="wraphead">AI wrap-up &middot; reading the call&hellip;</div>
+      <div class="wf" id="wrapfacts"></div>
+      <textarea id="wrapnote" rows="3" placeholder="Note for the log (edit freely)"></textarea>
+    </div>
     <div class="grid">
       <button onclick="Coach.finish('talked')">Talked</button>
       <button onclick="Coach.finish('appointment')">Appointment</button>
@@ -1020,6 +1030,9 @@ function lookup(){
     S.hits=j.matches||[];
   }).catch(function(){ $('leadhits').innerHTML='<div class="hit"><span>server unreachable</span></div>'; });
 }
+/* The conversation this lead calls for. The coach used to know one kind of lead (a Miami-Dade
+   auction); the server now opens every lane the board has, and says which one this is. */
+var LANE_NAME={auction:'Auction date set', hoa:'Association case', taxdeed:'Tax sale', filing:'New filing, no sale date', investor:'Investor / balloon'};
 function pick(i){
   var m=S.hits[i]; if(!m) return;
   fcBoard(m, location.search);
@@ -1033,6 +1046,7 @@ function pick(i){
   $('leadbox').style.display='block';
   $('leadbox').innerHTML=
     '<div><span class="k">Case</span><span class="v">'+esc(m.case||'')+'</span></div>'
+    +(m.lane?'<div><span class="k">Lane</span><span class="v">'+esc(LANE_NAME[m.lane]||m.lane)+(m.county?' \u00b7 '+esc(m.county):'')+'</span></div>':'')
    +'<div><span class="k">Address</span><span class="v">'+esc(m.address||'')+'</span></div>'
    +'<div><span class="k">Owner</span><span class="v">'+esc(m.owners||'')+'</span></div>'
    +(F.bk?'<div class="hold">Bankruptcy on record · sale stayed</div>':'')
@@ -1377,7 +1391,7 @@ function aiCheck(){
   $('aiwho').className='who busy';
   if($('ailine').className.indexOf('on')<0){ $('ailine').className='on'; $('aibody').textContent='…'; }
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null})})
+    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||''})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
     if(seq!==S.ai.seq) return;
     $('aiwho').className='who';
@@ -1691,6 +1705,34 @@ function stop(){
   if(S.plain){ location.reload(); return; }
   if(S.outcomeAuto){ finish('auto_silence'); return; }
   $('outcome').className='overlay on';   // outcome first; finish() does the actual save
+  wrapAsk();
+}
+/* AI WRAP-UP. The model reads the whole call and drafts the log entry: outcome, what they want, the
+   pushback, the time agreed, a note. It only DRAFTS: its outcome is lit, not picked, and the note is
+   yours to edit. What you tap and what is left in the box is what gets saved and handed to Call Mode. */
+var WRAP_BTN={talked:0, appointment:1, callback:2, not_interested:3, voicemail:4, bad_number:5};
+function wrapAsk(){
+  S.wrap=null;
+  $('wraphead').textContent='AI wrap-up \u00b7 reading the call\u2026'; $('wrapfacts').textContent='';
+  var btns=$('outcome').querySelectorAll?$('outcome').querySelectorAll('.grid button'):[];
+  for(var i=0;i<btns.length;i++) btns[i].className='';
+  if(!S.lines.length){ $('wraphead').textContent='AI wrap-up \u00b7 nothing was said'; return; }
+  fetch('/api/wrapup',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({lines:S.lines.map(function(l){ return {spk:l.spk, text:l.text}; }), lane:(S.lead&&S.lead.lane)||''})})
+  .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
+    if(!j||!j.outcome){ $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; return; }
+    S.wrap=j;
+    $('wraphead').textContent='AI wrap-up \u00b7 a draft, fix anything that is wrong';
+    var bits=[]; if(j.when) bits.push('Time: '+j.when); if(j.want) bits.push('Wants to '+j.want);
+    if(j.objection) bits.push('Pushback: '+j.objection);
+    $('wrapfacts').textContent=bits.join('  \u00b7  ');
+    if(!$('wrapnote').value) $('wrapnote').value=j.note||'';
+    var k=WRAP_BTN[j.outcome]; if(k!=null&&btns[k]) btns[k].className='ai';
+  }).catch(function(){ $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; });
+}
+function wrapOut(outcome){
+  var w=S.wrap||{}, note=String(($('wrapnote')&&$('wrapnote').value)||'').replace(/\s+/g,' ').trim().slice(0,320);
+  return {ai:S.wrap||null, picked:outcome||'', note:note, want:w.want||'', objection:w.objection||'', when:w.when||''};
 }
 /* HAND THE RESULT TO CALL MODE. Docked inside Call Mode, the coach used to end with "log the outcome
    in Call Mode too", and a time booked here lived only in this page. Now the outcome picked here and
@@ -1699,10 +1741,11 @@ function stop(){
 function handoff(outcome){
   try{
     if(!outcome||window.parent===window) return;
-    var w=S.fc.whenObj||null, at=fcWhenAt(w, Date.now());
+    var wo=wrapOut(outcome);
+    var w=S.fc.whenObj||(wo.when?fcWhen(norm(wo.when)):null), at=fcWhenAt(w, Date.now());
     var to=(location.ancestorOrigins&&location.ancestorOrigins.length)?location.ancestorOrigins[0]:'*';
     window.parent.postMessage({src:'bsg-coach', v:1, 'case':(S.lead&&S.lead['case'])||'', outcome:outcome,
-      when:w?w.text:'', iso:at.iso, hm:at.hm}, to);
+      when:w?w.text:'', iso:at.iso, hm:at.hm, note:wo.note, want:wo.want, objection:wo.objection}, to);
   }catch(e){}
 }
 function finish(outcome){
@@ -1720,7 +1763,7 @@ function finish(outcome){
       body:JSON.stringify({lines:S.lines})});
     })
     .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null})}); })
+      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)})}); })
     .then(function(r){return r.json();})
     .then(function(j){
       alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0)

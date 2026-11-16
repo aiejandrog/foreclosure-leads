@@ -259,7 +259,28 @@ def _read_back(text, given):
     return False
 
 
-def ai_line(lines, lang="", shown="", asked=None, days=None):
+# WHICH CONVERSATION THIS IS. One script for every lead was wrong for half of them: a fresh filing has
+# no sale date to talk about, a tax sale has no bank, and an investor has no "wife and kids".
+AI_LANES = {
+    "auction": "A foreclosure sale for this property is on the court calendar. Everything in the path applies as written.",
+    "hoa": "This case was filed by the homeowners or condo association, not the mortgage lender. Say 'the association's "
+           "case', not 'the bank'. What an association is owed is usually small next to what the home is worth; that gap is "
+           "why this is fixable and why it is dangerous to leave alone. Never state either amount.",
+    "taxdeed": "This is a county tax sale for unpaid property taxes, not a mortgage foreclosure. Never say 'foreclosure', "
+               "'the bank' or 'your lender' on this call; say 'the tax sale on the property' and 'the county'. The goal "
+               "is the same: five minutes with the senior advisor.",
+    "filing": "A lawsuit was filed recently and NO sale date has been set. Never mention a sale date or 'before the sale'; "
+              "say 'the case that was filed' and 'before this goes any further'. This owner is earlier than most people "
+              "we reach and has the most options of anyone: say that as good news. The consequence question is 'if "
+              "nothing changes and this keeps moving through the court, where does that leave you?'",
+    "investor": "The owner is most likely an investor or a company, and the paper is short-term money that came due. Talk "
+                "business, not family: no 'wife and kids', no feelings, unless they bring it up. No rates, terms or "
+                "numbers. The offer is five minutes with the senior advisor, who works with licensed lenders on replacing "
+                "that paper with long-term money. Ask what else they hold, because the same thing may help those too.",
+}
+
+
+def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
     """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
     to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
     dead model must not touch the call."""
@@ -285,7 +306,10 @@ def ai_line(lines, lang="", shown="", asked=None, days=None):
                    "and its facts. Where it gives the words for what the homeowner just said, use those words, cut "
                    "to one or two spoken sentences and fitted to this homeowner. Its 'Never say' list overrides "
                    "everything else.\n" + pb)
-    when = sale_in_words(days)
+    lane = str(lane or "").lower()
+    if lane in AI_LANES:
+        system += "\n\nTHIS LEAD: " + AI_LANES[lane]
+    when = sale_in_words(days) if lane != "filing" else ""
     if when:
         system += ("\n\nCourt calendar for this homeowner: the sale is set " + when + ". You may say that in those "
                    "words when it helps the line. Never say a date.")
@@ -338,6 +362,71 @@ def ai_line(lines, lang="", shown="", asked=None, days=None):
     return res
 
 
+# THE CALL WRAP-UP. When the call ends the same model reads the whole transcript and drafts the log
+# entry: what happened, what they want, what they pushed back with, the time they agreed to, and a
+# note. It is a DRAFT: the caller sees it on the outcome screen, fixes it, and picks the outcome
+# himself; only then does it go to Call Mode. One microphone still mislabels who said what, and one
+# wrong "appointment" logged by a machine would corrupt the cadence and the stats.
+WRAP_OUTCOMES = ("appointment", "callback", "talked", "not_interested", "voicemail", "bad_number")
+WRAP_SYSTEM = (
+    "You write the log entry for a phone call that just ended. The caller is Alejandro with Biscayne Solutions "
+    "Group; the other person is a property owner with a court case or tax sale on the property. Labels in the "
+    "transcript (CALLER, THEM, ?) come from one microphone and are often wrong or missing; work out who said what "
+    "from the content. Report only what was actually said. If something was not said, write none.\n"
+    "Reply in exactly this form and nothing else:\n"
+    "OUTCOME: <one of: appointment, callback, talked, not_interested, voicemail, bad_number>\n"
+    "WANT: <keep, sell, undecided or unknown: what the owner wants to do with the property>\n"
+    "OBJECTION: <their main pushback in a few words, or none>\n"
+    "WHEN: <the day and time the owner agreed to for the next call, in their words, or none>\n"
+    "NOTE: <two short sentences a teammate could act on: their situation and plan in their own words, and what "
+    "was agreed. No advice, no opinions.>\n"
+    "appointment = they agreed to a set day or time for the advisor call. callback = they asked to be called "
+    "another time without agreeing to the advisor call. talked = a real conversation with neither. voicemail = "
+    "nobody answered or a machine did. bad_number = wrong person or a dead line.")
+
+
+def ai_wrapup(lines, lane=""):
+    """{"outcome","want","objection","when","note"} drafted from the transcript, or {} (no key, an
+    empty call, or a failed request). Never raises."""
+    key = venice_key()
+    rows = []
+    for l in (lines or [])[-120:]:
+        t = str((l or {}).get("text") or "").strip()
+        if t:
+            spk = str((l or {}).get("spk") or "")
+            rows.append(("CALLER" if spk == "you" else "THEM" if spk == "them" else "?") + ": " + t[:300])
+    if not key or not rows:
+        return {}
+    system = WRAP_SYSTEM + ("\nThis lead: " + AI_LANES[lane] if lane in AI_LANES else "")
+    body = {"model": AI_MODEL, "max_tokens": 260, "temperature": 0.1, "stream": False,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(rows)}],
+            "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
+                                  "strip_thinking_response": True}}
+    import urllib.request
+    out = ""
+    for _try in range(2):
+        try:
+            req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
+                                         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                out = str(json.loads(r.read().decode("utf-8"))["choices"][0]["message"].get("content") or "")
+        except Exception:
+            out = ""
+        if out.strip():
+            break
+
+    def field(name):
+        m = re.search(r"^\s*%s:\s*(.*)$" % name, out, re.I | re.M)
+        return " ".join(m.group(1).split()).strip().strip('"\u201c\u201d').strip() if m else ""
+    oc = field("OUTCOME").lower().replace(" ", "_")
+    if oc not in WRAP_OUTCOMES:
+        return {}
+    want = field("WANT").lower()
+    none = lambda v: "" if v.lower().rstrip(".") in ("none", "n/a", "unknown", "") else v
+    return {"outcome": oc, "want": want if want in ("keep", "sell", "undecided") else "",
+            "objection": none(field("OBJECTION"))[:80], "when": none(field("WHEN"))[:60], "note": none(field("NOTE"))[:320]}
+
+
 def lead_card(r):
     """The fields the coach actually shows on a call."""
     return {
@@ -358,24 +447,115 @@ def lead_card(r):
         "eqstate": r.get("eqstate"),
         "judgment_unknown": bool(r.get("judgment_unknown")),
         "sale_bk_active": bool(r.get("sale_bk_active")),
+        "county": "MIAMI-DADE",
+        "lane": lane_of("TD" if "tax" in str(r.get("Auction Type") or "").lower() else "FC", r.get("case_type")),
+        "src": "leads_final.json",
     }
 
 
+# EVERY LANE (2026-11-16, Alex: "add Coach onto every section, all lanes, morning worker"). The coach
+# read leads_final.json only: the Miami-Dade auction file. A Broward or Palm Beach auction, a fresh
+# filing or an investor balloon opened the coach with no name, no sale date and no lane, so it looked
+# like the coach only worked in one corner of Call Mode. These are the board's other lead files, in the
+# slim shape the board itself bakes. First file that has a case wins.
+SLIM_FILES = ("broward_leads.json", "palmbeach_leads.json", "balloon_leads.json", "lp_leads.json")
+_slim = {"sig": None, "rows": []}
+
+
+def lane_of(st, ctype):
+    """Which conversation this is: auction (court sale on the calendar), hoa (the association filed),
+    taxdeed (county sale for unpaid taxes), filing (lawsuit filed, no sale date yet), investor
+    (short-term paper that came due)."""
+    st, ct = str(st or "").upper(), str(ctype or "").lower()
+    if st == "BAL" or "balloon" in ct:
+        return "investor"
+    if st == "TD" or "tax" in ct:
+        return "taxdeed"
+    if st == "LP":
+        return "filing"
+    if "hoa" in ct or "condo" in ct:
+        return "hoa"
+    return "auction"
+
+
+def slim_card(r, src):
+    days = r.get("days")
+    days = days if isinstance(days, int) and 0 <= days < 9000 else None
+    return {
+        "case": r.get("case"),
+        "address": r.get("addr"),
+        "owners": r.get("oname") or r.get("owners"),
+        "auction": r.get("auction") or None,
+        "days": days,
+        "judgment": None, "opening_bid": None,          # the slim files carry estimates, never quoted here
+        "plaintiff": r.get("plaintiff"),
+        "equity": None, "eqstate": None,                # the board's verdict arrives in the coach link, or not at all
+        "tier": r.get("tier"), "score": r.get("score"), "homestead": r.get("hs"),
+        "judgment_unknown": True, "sale_bk_active": False,
+        "county": r.get("county"), "lane": lane_of(r.get("st"), r.get("ctype")), "src": src,
+    }
+
+
+def all_cards():
+    """Every lead the coach can open: leads_final first, then the slim files. Cached on file times."""
+    sig = []
+    for f in ("leads_final.json",) + SLIM_FILES:
+        try:
+            sig.append(os.path.getmtime(os.path.join(ROOT, f)))
+        except OSError:
+            sig.append(0)
+    with _lock:
+        if _slim["sig"] == sig:
+            return _slim["rows"]
+    rows, seen = [], set()
+    for r in load_leads():
+        c = lead_card(r)
+        key = _norm(c.get("case"))
+        if key and key not in seen:
+            seen.add(key)
+            rows.append((_norm(" ".join(str(r.get(k) or "") for k in (
+                "Address", "owners", "Case #", "people_name", "mailing_address"))), c))
+    for f in SLIM_FILES:
+        try:
+            with open(os.path.join(ROOT, f), "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        for r in data if isinstance(data, list) else []:
+            if not isinstance(r, dict):
+                continue
+            c = slim_card(r, f)
+            key = _norm(c.get("case"))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            rows.append((_norm(" ".join(str(x or "") for x in (
+                c.get("address"), c.get("owners"), c.get("case"), r.get("mail")))), c))
+    with _lock:
+        _slim.update(sig=sig, rows=rows)
+    return rows
+
+
 def search_leads(q, limit=10):
-    """All-token substring match across address / owner / case number."""
+    """All-token substring match across address / owner / case number, in every lead file. An exact
+    case number is found first, so the coach link from any lane opens the right lead."""
     nq = _norm(q)
     if not nq:
         return []
     toks = [t for t in nq.split() if len(t) > 1]
     if not toks:
         return []
+    cards = all_cards()
+    exact = [c for _, c in cards if _norm(c.get("case")) == nq]
+    if exact:
+        return exact[:limit]
     hits = []
-    for r in load_leads():
-        hay = _norm(" ".join(str(r.get(k) or "") for k in (
-            "Address", "owners", "Case #", "people_name", "mailing_address")))
+    for hay, c in cards:
         if all(t in hay for t in toks):
-            hits.append(r)
-    return [lead_card(r) for r in hits[:limit]]
+            hits.append(c)
+            if len(hits) >= limit:
+                break
+    return hits
 
 
 def recent_leads(limit=25):
@@ -473,6 +653,7 @@ def end_session(sid, payload):
     m["coach_fires"] = payload.get("coach_fires")
     m["consent_ack"] = payload.get("consent_ack")
     m["outcome"] = payload.get("outcome")
+    m["wrapup"] = payload.get("wrapup")        # the AI draft and what the caller kept of it
     _write_json(mp, m)
     # One append-only line per call so outcomes are greppable without opening each session
     # folder. Lives INSIDE call_sessions/ so the same .gitignore line covers it.
@@ -547,7 +728,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/health":
             return self._send(200, {
                 "ok": True,
-                "leads": len(load_leads()),
+                "leads": len(all_cards()),               # every lane the coach can open
                 "sessions_dir": SESSIONS,
                 "port": PORT,
                 "deepgram": bool(deepgram_key()),     # whether a key is set. Never the key.
@@ -605,9 +786,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"))
+            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"), b.get("lane") or "")
             res = dict(res or {"line": ""}, ms=int((time.time() - t0) * 1000))
             return self._send(200, res, private=True)
+
+        if p == "/api/wrapup":
+            own = ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
+            origin, site = self.headers.get("Origin"), self.headers.get("Sec-Fetch-Site")
+            if (self.headers.get("Host") not in own or (origin and origin not in ["http://" + o for o in own])
+                    or (site and site != "same-origin")):
+                return self._send(403, {"error": "same-origin only"}, private=True)
+            b = self._json_body()
+            return self._send(200, ai_wrapup(b.get("lines"), str(b.get("lane") or "").lower()) or {"outcome": ""}, private=True)
 
         # /api/session/start
         if p == "/api/session/start":
