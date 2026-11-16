@@ -3013,6 +3013,7 @@ function _owedLine(r){
   var parts = [];
   var c = (r||{}).cmp;
   if(c && +c.p > 0) parts.push('complaint claims ' + f(+c.p) + ' principal' + (c.dd ? ' (default ' + c.dd + ')' : ''));
+  else if(c && +c.o > 0) parts.push('complaint: original loan ' + f(+c.o) + (c.dd ? ' (default ' + c.dd + ')' : ''));
   else if(c && +c.face > 0) parts.push('foreclosed mortgage recorded at ' + f(+c.face));
   if(c && +c.jr > 0) parts.push(c.jr + ' other lienholder' + (c.jr === 1 ? '' : 's') + ' named in the complaint');
   var face = +((r||{}).orestface) || 0, n = +((r||{}).orestn) || 0;

@@ -102,6 +102,46 @@ _BASIS = (
 )
 
 
+_UNITS = {w: i for i, w in enumerate(
+    'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen '
+    'sixteen seventeen eighteen nineteen'.split())}
+_TENS = {w: 10 * (i + 2) for i, w in enumerate('twenty thirty forty fifty sixty seventy eighty ninety'.split())}
+_NUMWORD = r'(?:%s|hundred|thousand|million|and)' % '|'.join(list(_UNITS) + list(_TENS))
+# "in the amount of One Hundred Thousand and 00/100": a private note states its amount in words, and
+# the court's scan often garbles the figure in brackets after it (seen 2026-11-16, CACE-26-018549).
+_WORD_AMOUNT_RES = [re.compile(p, re.I) for p in (
+    r'(?:note|mortgage|loan)[^.$]{0,160}?in\s+the\s+(?:original\s+)?(?:principal\s+)?(?:amount|sum)\s+of\s*'
+    r'((?:%s[\s-]+){1,12}%s)' % (_NUMWORD, _NUMWORD),
+    r'principal\s+(?:sum|amount)\s+of\s*((?:%s[\s-]+){1,12}%s)' % (_NUMWORD, _NUMWORD),
+)]
+
+
+def words_to_number(text):
+    """'One Hundred Twenty-Five Thousand and' -> 125000.0. 0.0 when the words are not a number.
+    OCR runs words together ('ofOne nundred'): only clean number words count, nothing is guessed."""
+    total = cur = 0
+    seen = False
+    for w in re.split(r'[\s-]+', str(text or '').lower().strip()):
+        if w in ('and', ''):
+            continue
+        if w in _UNITS:
+            cur += _UNITS[w]
+        elif w in _TENS:
+            cur += _TENS[w]
+        elif w == 'hundred':
+            cur = (cur or 1) * 100
+        elif w == 'thousand':
+            total += (cur or 1) * 1000
+            cur = 0
+        elif w == 'million':
+            total += (cur or 1) * 1000000
+            cur = 0
+        else:
+            return 0.0
+        seen = True
+    return float(total + cur) if seen else 0.0
+
+
 def _money(s):
     try:
         return float(str(s).replace(',', ''))
@@ -162,6 +202,10 @@ def parse_complaint(pages):
     d, _m = _first(_NOTE_RES, flat, parse_date)
     out['note_date'] = d
     v, _m = _first(_ORIG_RES, flat, _money, lo=1000, hi=50_000_000)
+    if not v:
+        v, _m = _first(_WORD_AMOUNT_RES, flat, words_to_number, lo=1000, hi=50_000_000)
+        if v:
+            out['orig_in_words'] = True
     out['orig_amount'] = round(v, 2) if v else None
     m = _RATE_RE.search(flat)
     if m:
@@ -326,6 +370,20 @@ def pb_inbox_files(folder=None):
     return {case: path for case, (_din, path) in best.items()}
 
 
+def broward_inbox_files(folder=None):
+    """{case: path} for Broward complaints saved from the court site: 'CACE-26-018549_COMPLAINT.pdf'."""
+    if folder is None:
+        import paths
+        folder = os.path.join(paths.DEALFLOW_DIR, 'documents', 'BROWARD', '_court_inbox')
+    out = {}
+    for path in glob.glob(os.path.join(folder, '*_COMPLAINT*.pdf')):
+        m = re.match(r'([A-Z]{4}-?\d{2}-?\d{6})_', os.path.basename(path).upper())
+        if m:
+            raw = re.sub(r'[^A-Z0-9]', '', m.group(1))
+            out['%s-%s-%s' % (raw[:4], raw[4:6], raw[6:])] = path
+    return out
+
+
 def pb_key(case):
     """Palm Beach case numbers are stored in several shapes; the first 14 characters identify one."""
     v = re.sub(r'[^A-Z0-9]', '', str(case or '').upper())
@@ -429,6 +487,19 @@ def run(counties, limit=DEFAULT_LIMIT, only_case=None, dry_run=False, here=HERE,
                if isinstance(x, dict) and x.get('county') == 'BROWARD'}
         chains = _load(os.path.join(here, 'broward_liens.json'), {})
         bw = _newest_first([r for r in leads if r.get('county') == 'BROWARD'])
+        # A COMPLAINT fetched in the operator's Chrome beats the recorded notice (2026-11-16: the
+        # court search does answer a real Chrome once its own check finishes; the "refused" result
+        # was a search submitted while the check was still running). Files: <CASE>_COMPLAINT.pdf.
+        for case, path in ({} if dry_run else broward_inbox_files()).items():
+            mtime = int(os.path.getmtime(path))
+            old = out.get(case) or {}
+            if old.get('src_mtime') == mtime and old.get('v') == PARSER_VERSION and old.get('kind') == 'complaint':
+                continue
+            with open(path, 'rb') as f:
+                e = entry_from(f.read(), 'complaint', today, {'src_mtime': mtime, 'county': 'BROWARD'})
+            out[case] = e
+            note('BROWARD', e)
+            _save(os.path.join(here, 'complaints.json'), out)
         todo = [r for r in bw if _due(out.get(r['case']), today)]
         rep['BROWARD'].update(leads=len(bw), queued=len(todo))
         session = None
@@ -468,6 +539,8 @@ def for_board(entry):
         b['face'] = int(entry['face'])
     if entry.get('default_date'):
         b['dd'] = entry['default_date']
+    if entry.get('orig_amount') and not entry.get('principal'):
+        b['o'] = int(round(entry['orig_amount']))      # the original loan, when no balance is pleaded as a figure
     if entry.get('rate'):
         b['r'] = entry['rate']
     if js:

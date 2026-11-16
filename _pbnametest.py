@@ -164,6 +164,7 @@ if node:
           "card({lp:1,eqc:{f:1,j:null},cm:{rm:360000}}),"
           "card({lp:1,cm:{fc:135000}}),"
           "card({v:300000,eqc:{f:1,j:null}}),"
+          "card({lp:1,cm:{o:100000,dd:'2026-09-19',pg:18,rd:15}}),"
           "card({lp:1,eqc:{f:1,j:250000,q:1,n:90000},cm:{p:1}})]));")
     out = subprocess.run([node, '-e', js], capture_output=True, text=True, timeout=30)
     try:
@@ -171,7 +172,7 @@ if node:
     except ValueError:
         g = [[out.stderr[:300]]]
     flat = json.dumps(g[:4])
-    rec('6e: a fresh filing never says "judgment not posted"', len(g) == 6 and 'judgment not posted' not in flat, g[:1])
+    rec('6e: a fresh filing never says "judgment not posted"', len(g) == 7 and 'judgment not posted' not in flat, g[:1])
     rec('6f: with no complaint read it says so', len(g) > 0 and g[0] == ['equity unknown', 'Recorded liens checked',
         'Complaint not read yet, so what is owed is not known'], g[0])
     rec('6g: with the complaint read it leads with the principal claimed',
@@ -183,11 +184,32 @@ if node:
     rec('6i: a Broward notice shows the recorded face', len(g) > 3 and g[3][0] == 'Foreclosed mortgage recorded at $135,000', g[3])
     rec('6j: a case that is not a fresh filing keeps the judgment wording',
         len(g) > 4 and g[4][1] == 'Recorded liens checked, judgment not posted' and g[4][2] == '', g[4])
-    rec('6k: once a judgment is posted the complaint line steps aside',
-        len(g) > 5 and g[5][0] == 'Net equity $90,000' and g[5][2] == '', g[5])
+    rec('6k: an amount stated only as the original loan is labelled as the amount borrowed',
+        len(g) > 5 and g[5][0] == 'Complaint: original loan $100,000' and 'amount borrowed' in g[5][2]
+        and 'Read 15 of 18 pages' in g[5][2], g[5])
+    rec('6l: once a judgment is posted the complaint line steps aside',
+        len(g) > 6 and g[6][0] == 'Net equity $90,000' and g[6][2] == '', g[6])
 else:
     rec('6e: node not installed; the card was not executed (source checks only)',
         "'Complaint not read yet" in block and 'Complaint claims' in block)
+
+# ---- 7. amounts in words, and the Broward complaint inbox --------------------------------------
+import complaint_reader as CR  # noqa: E402
+rec('7a: an amount written in words is read', CR.words_to_number('One Hundred Thousand and') == 100000.0
+    and CR.words_to_number('Two Hundred Twenty-Five Thousand Five Hundred') == 225500.0)
+rec('7b: garbled OCR words are never guessed into a number', CR.words_to_number('ofOne nundred') == 0.0 and CR.words_to_number('') == 0.0)
+pw = CR.parse_complaint(['COMPLAINT Defendant executed a Promissory Note in the amount of One Hundred Thousand and 00/100 dollars.'])
+rec('7c: a note stated in words gives the original loan, never a balance claimed',
+    pw['orig_amount'] == 100000.0 and pw['principal'] is None and pw.get('orig_in_words') is True, pw)
+rec('7d: the board row carries the original loan only when no balance is pleaded',
+    CR.for_board(dict(pw, status='read', kind='complaint', pages=1, pages_read=1)).get('o') == 100000
+    and 'o' not in CR.for_board({'status': 'read', 'kind': 'complaint', 'principal': 5000.0, 'orig_amount': 9000.0}))
+with tempfile.TemporaryDirectory() as td:
+    open(os.path.join(td, 'CACE-26-000123_COMPLAINT.pdf'), 'wb').write(b'%PDF-')
+    open(os.path.join(td, 'cace26000456_complaint.pdf'), 'wb').write(b'%PDF-')
+    open(os.path.join(td, 'notes.txt'), 'w').write('x')
+    rec('7e: Broward complaints saved from the court site are found by case',
+        sorted(CR.broward_inbox_files(td)) == ['CACE-26-000123', 'CACE-26-000456'], sorted(CR.broward_inbox_files(td)))
 
 print('\n%d checks, %d failed' % (len(checks), len(fails)))
 print('ALL PASS' if not fails else 'FAILED: ' + '; '.join(fails))
