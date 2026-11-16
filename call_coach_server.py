@@ -201,7 +201,7 @@ AI_SYSTEM = (
     "What makes those right, and what every line must do:\n"
     "- PLAIN WORDS, DUMMY-PROOF. The person on the phone is stressed and half listening. Use words a "
     "twelve-year-old follows. Never jargon or shorthand: not 'the money side', 'the gap', 'locked in', "
-    "'isolate', 'the clock', 'loss mitigation', 'reinstatement' without saying what it is. Say the actual "
+    "'isolate', 'the clock', 'that's the gap', 'loss mitigation', 'reinstatement' without saying what it is. Say the actual "
     "thing: 'who is actually talking to the association about what you owe, so the sale doesn't happen?' If a "
     "line could make them say 'what do you mean?', rewrite it until it cannot.\n"
     "- SPOKEN, NOT CLIPPED. It should sound like a person thinking out loud to a neighbor, with the little "
@@ -233,8 +233,11 @@ AI_SYSTEM = (
     "   Keep it to what he can say in one breath and a half: never more than eighty-five words. If you put a "
     "point in front of beat b, it is ONE sentence. Do not give the full objection answer twice in a row: if "
     "your last line was one, this line is a question line or the ask.\n"
-    "   Say it fresh each time: change the opening words and which of their wants you name, keep the beats. "
-    "Beats c to f are his standard phrases and may be repeated.\n"
+    "   The full answer is strong the first time and tired the third. Use it at most TWICE on a call. After "
+    "that, answer the new thing they said in one or two fresh sentences and ask for the appointment a way "
+    "you have not asked yet. The words 'by the way' and 'Okay, so' are his, but not in every line: vary how "
+    "lines open and connect. Getting the appointment booked takes range, so every ask on a call uses "
+    "different words.\n"
     "Other rules that still hold: never open with 'Fair question', 'That's fair', 'I understand', 'I hear "
     "you', 'It sounds like', 'No worries', 'Understood'. No dashes, no lists. Never a discovery question "
     "they already answered. The two-times question (later today or first thing tomorrow) once per call; "
@@ -388,6 +391,11 @@ def plan_hint(last_said, given, when=""):
         return ("\n\nTHEY ASKED AGAIN WHAT THEY GET. Never say you do not offer anything. Your SAY: the ONE thing the "
                 "senior advisor does that fits what they said they want, in one plain sentence, in different words "
                 "than before; then that it is five minutes and free; then ask what exact time today they are free." + clock)
+    if _AI_BUSY.search(last_said) and len(re.findall(r"why wouldn.?t five minutes", used)) >= 2:
+        return ("\n\nBUSY / NO TIME, and you have already given the full objection answer twice. Do not give it "
+                "again. Your SAY, in fresh words: pick up that they are busy in a few words, say why it cannot wait "
+                "in one plain sentence, then take the scheduling off them by asking what time they are done today so "
+                "the advisor calls them right then." + clock)
     if _AI_BUSY.search(last_said):
         return ("\n\nBUSY / NO TIME. This is pushback, not a calendar problem. Your SAY is THE OBJECTION ANSWER in "
                 "Alejandro's words: pick up that they are busy in a few words, then 'so why wouldn't five minutes "
@@ -410,6 +418,88 @@ def plan_hint(last_said, given, when=""):
                 ". Ask it as a real plain question and say why it matters (if nobody is, the sale still happens). "
                 "One question only.")
     return ""
+
+
+# SAYING THE SAME THING AGAIN. Call 11-16 18:41, his words: "it starts repeating the same shit, use
+# different words to get the appointment booked". Counted in that call's AI lines: "why wouldn't
+# five minutes be worth it" five times, "later today or first thing tomorrow, which is easier" six,
+# "by the way" in nearly every line. The model is told what it has already used on THIS call and may
+# not use it again; the objection answer in his full words is good twice, then it has to find new ones.
+AI_STOCK = [
+    (r"why wouldn.?t five minutes", "why wouldn't five minutes be worth it", 2),
+    (r"going in (kind of )?blind", "going in blind", 2),
+    (r"shake hands", "shake hands and part friends", 2),
+    (r"how does that sound", "How does that sound?", 2),
+    (r"nothing to lose", "nothing to lose", 2),
+    (r"laid out in front of you", "every step laid out in front of you", 2),
+    (r"later today or first thing tomorrow", "later today or first thing tomorrow", 1),
+    (r"which (one )?is easier", "which is easier for you", 1),
+    (r"what are you going to do", "what are you going to do", 2),
+    (r"by the way", "by the way", 2),
+    (r"sitting there", "still sitting there a week out", 1),
+    (r"that morning", "that morning", 2),
+    (r"here.?s the thing", "here's the thing", 1),
+    (r"let me be straight|i.?ll be straight", "let me be straight with you", 1),
+    (r"that.?s good,? (you should )?keep (him|them|it)", "that's good, keep him", 1),
+    (r"what happens if", "what happens if", 2),
+    (r"let me ask you this", "let me ask you this", 1),
+    (r"so here.?s what i.?d want for you", "so here's what I'd want for you", 1),
+]
+AI_CLOSES = (
+    "He has a few minutes open this afternoon. What time are you done today?",
+    "Tell me a time that works for you and I'll make him fit it.",
+    "I can have him call you within the hour. Does that work?",
+    "You said you need [what they said they want]. That's the first thing he looks at. When can he call you?",
+    "What if he shows you one thing nobody has told you yet? When's a good time for him to call?",
+    "Worst case, you hang up knowing more than you do right now. So when's good?",
+    "Five minutes against the house. That's a fair trade, right? Give me a time.",
+    "Let's just get it on the calendar so it's done. Morning or afternoon?",
+    "Is this the best number for him to reach you on? Then give me a time today.",
+)
+
+
+def variety_note(prior):
+    """Tells the model which of its own phrases are used up on this call, which opener it just used,
+    and which ways of asking for the appointment are still fresh."""
+    text = " ".join(prior).lower()
+    spent = [label for pat, label, limit in AI_STOCK if len(re.findall(pat, text)) >= limit]
+    out = ""
+    if spent:
+        out += ("\nUSED UP ON THIS CALL. You have already said these, so they may NOT appear in this line, in these "
+                "words or close to them: " + "; ".join(spent) + ". Find different words for the same idea.")
+    last = prior[-1].lower() if prior else ""
+    m = re.match(r"\s*(okay,? so|so|okay|gotcha|right|yeah|i get it|of course)\b", last)
+    if m:
+        out += "\nYour last line opened with '" + m.group(1) + "'. Open this one differently."
+    if sum(1 for x in prior if re.match(r"\s*okay,? so\b", x, re.I)) >= 3:
+        out += "\nYou have opened three lines with 'Okay, so'. Do not open with it again on this call."
+    if len(re.findall(r"why wouldn.?t five minutes", text)) >= 2:
+        out += ("\nYou have given the full objection answer twice already. Not again on this call. Answer what they "
+                "just said in ONE or two fresh sentences, then ask for the appointment.")
+    asks = len(re.findall(r"later today|first thing tomorrow|what time|when can he|give me a time|on his calendar|on the calendar", text))
+    if asks >= 1:
+        fresh = [c for c in AI_CLOSES if c.lower()[:22] not in text]
+        out += ("\nYou have already asked for the appointment " + str(asks) + " time(s). Ask a NEW way, never the same "
+                "words twice. Ways not used yet on this call (adapt one, do not copy it): " + " | ".join(fresh[:5]))
+    return out
+
+
+# HOW WE GET PAID is never made up. On that same call the homeowner said "nobody works for free, we
+# have no money to pay you", and the model invented an answer three times ("the licensed lender or
+# attorney who does the work pays us a referral"). Nobody told it that. What it may say is what
+# Alejandro said on the call himself.
+_AI_PAYQ = re.compile(r"work(s|ing)? for free|for free|get paid|what do you (guys )?get|what.?s in it for you|the catch|"
+                      r"can.?t (afford|pay)|(no|any|the) (funds|money)|pay (you|your|for)|how much (do|does|is)|your fee|"
+                      r"cost me|charge", re.I)
+_AI_PAYLIE = re.compile(r"referral|pays? us|paid by|commission|kickback|we (only )?get paid|gets? paid (when|if|unless|by)|"
+                        r"doesn.?t get paid|don.?t get paid|our cut|we make (our )?money|lender pays|attorney pays", re.I)
+AI_PAY_ANSWER = (
+    "\n\nTHEY ASKED HOW WE GET PAID, OR SAID THEY CANNOT PAY. Answer it straight, once, in plain words, with ONLY "
+    "these facts and nothing added: you're right that nobody works for free; the five-minute consultation is free and "
+    "they never pay anything up front; our senior advisor specializes in cases where people have no money available; "
+    "there are programs where both sides come out winning and they do not come out of pocket; how any of that would "
+    "work for THEIR case is exactly what he lays out on the call, and they decide. NEVER say who pays us, never say "
+    "referral, commission, or that a lender or attorney pays. Then ask for the appointment in fresh words.")
 
 
 def folds(res):
@@ -496,10 +586,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         system += ("\n\nCourt calendar for this homeowner: the sale is set " + when + ". You may say that in those "
                    "words when it helps the line. Never say a date.")
     shown = " ".join(str(shown or "").split())[:320]
-    prior = [" ".join(str(x or "").split())[:320] for x in (asked or [])[-5:] if str(x or "").strip()]
+    prior = [" ".join(str(x or "").split())[:320] for x in (asked or [])[-14:] if str(x or "").strip()]
     if prior:
-        system += ("\nLines you already gave on this call, oldest first:\n" + "\n".join("- " + x for x in prior)
+        system += ("\nLines you already gave on this call, oldest first:\n" + "\n".join("- " + x for x in prior[-6:])
                    + "\nNever repeat one of them or ask the same thing in other words. The new line is a later step.")
+        system += variety_note(prior)
     if shown:
         system += ("\nThe caller's screen currently shows: \"" + shown + "\". The caller may have just read it "
                    "out. Write the line that comes after the homeowner's answer to it.")
@@ -551,7 +642,14 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
     if not rows[-1].startswith("CALLER"):
         system += plan_hint(last_said, prior + [shown], when)
+        if _AI_PAYQ.search(last_said):
+            system += AI_PAY_ANSWER
     res = ask(system)
+    # A made-up answer about how we get paid is never shown: asked again with the facts, then dropped.
+    if res and _AI_PAYLIE.search(res.get("line", "")):
+        res = ask(system + AI_PAY_ANSWER + " Your last answer invented how the company gets paid. That is forbidden.")
+        if res and _AI_PAYLIE.search(res.get("line", "")):
+            return {}
     # THE CHALLENGE, guaranteed (Alex, 11-16: "why didn't you ask, so you're not interested in saving
     # your property, your equity?"). The first "not interested" of a call gets his question, word for
     # word, whatever the model wrote. Later ones get the model's other angles. A stop request is
