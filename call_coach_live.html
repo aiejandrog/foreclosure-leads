@@ -753,6 +753,40 @@ function fcWhen(nline){
   if(!day&&!time) return null;
   return {day:day, time:time, text:(day+' '+time).trim()};
 }
+/* THE DAY AND TIME AS A DATE. fcWhen keeps their words ("tomorrow at 9 AM"); Call Mode needs a
+   calendar date to put the follow-up on. w: an fcWhen result. nowMs: the caller's clock.
+   Returns {iso:'YYYY-MM-DD' or '', hm:'HH:MM' or ''}. A bare hour with no AM/PM is read the way
+   an appointment is made: 8 to 11 is the morning, 12 to 7 the afternoon. Anything it cannot place
+   is left empty, never guessed. */
+function fcWhenAt(w, nowMs){
+  var out={iso:'', hm:''}; if(!w) return out;
+  var d=new Date(nowMs), day=String(w.day||''), add=-1, m;
+  var WD={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,domingo:0,lunes:1,martes:2,miercoles:3,jueves:4,viernes:5,sabado:6};
+  if(/pasado manana/.test(day)) add=2;
+  else if(/tomorrow|manana/.test(day)) add=1;
+  else if(/today|tonight|this (morning|afternoon|evening)|hoy|esta (tarde|noche)/.test(day)) add=0;
+  else if((m=/in (an?|one|two|three|a couple(?: of)?|a few|[0-9]{1,2}) (hours?|minutes?|days?)/.exec(day))){
+    var q={a:1,an:1,one:1,two:2,three:3,'a couple':2,'a couple of':2,'a few':3}[m[1]]||parseInt(m[1],10)||0;
+    add=/day/.test(m[2])?q:0;
+  }
+  else if((m=/(sunday|monday|tuesday|wednesday|thursday|friday|saturday|domingo|lunes|martes|miercoles|jueves|viernes|sabado)/.exec(day))){
+    add=(WD[m[1]]-d.getDay()+7)%7; if(add===0||/next /.test(day)) add+=(add===0?7:0);
+  }
+  if(add>=0){
+    var x=new Date(d.getFullYear(), d.getMonth(), d.getDate()+add);
+    out.iso=x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+  }
+  var t=String(w.time||'');
+  if(/noon/.test(t)) out.hm='12:00';
+  else if((m=/([0-9]{1,2})(?::([0-9]{2}))?/.exec(t))){
+    var h=parseInt(m[1],10), mi=m[2]||'00';
+    var pm=/PM|afternoon|evening|night|tarde|noche/.test(t), am=/AM|morning|de la manana/.test(t)||/morning|por la manana|en la manana/.test(day);
+    if(!pm&&!am) pm=(h===12||h<=7);
+    if(pm&&h<12) h+=12; if(!pm&&h===12) h=0;
+    if(h<24&&parseInt(mi,10)<60) out.hm=String(h).padStart(2,'0')+':'+mi;
+  }
+  return out;
+}
 /* A later line adds to an earlier one: "tomorrow" then "around 7" is "tomorrow around 7". */
 function fcWhenMerge(a, b){
   if(!a) return b; if(!b) return a;
@@ -1116,7 +1150,7 @@ function fcFireWhen(w, cur, isFinal){
   if(upd){ w=fcWhenMerge(c.when, w); if(w.text===c.when.text){ c.at=t; return; } }
   S.fc.heldSince=0; fcListen(false);
   var rec=upd?c.rec:{id:'cb_time', at:mmss(t-S.t0), partial:!isFinal, held_ms:0, words_lag_ms:S.fc.txLag};
-  rec.when=w.text;
+  rec.when=w.text; S.fc.whenObj=w;
   if(!upd) S.fc.fires.push(rec);
   $('objection').className=''; S.lastCard=null;        /* the busy card has done its job */
   var s=fcWhenSay(w, fcEs());
@@ -1658,8 +1692,22 @@ function stop(){
   if(S.outcomeAuto){ finish('auto_silence'); return; }
   $('outcome').className='overlay on';   // outcome first; finish() does the actual save
 }
+/* HAND THE RESULT TO CALL MODE. Docked inside Call Mode, the coach used to end with "log the outcome
+   in Call Mode too", and a time booked here lived only in this page. Now the outcome picked here and
+   the day and time that were heard go to the page that framed the coach, which puts them on its own
+   outcome and after-call screens. Only the case number, the outcome and the time are sent. */
+function handoff(outcome){
+  try{
+    if(!outcome||window.parent===window) return;
+    var w=S.fc.whenObj||null, at=fcWhenAt(w, Date.now());
+    var to=(location.ancestorOrigins&&location.ancestorOrigins.length)?location.ancestorOrigins[0]:'*';
+    window.parent.postMessage({src:'bsg-coach', v:1, 'case':(S.lead&&S.lead['case'])||'', outcome:outcome,
+      when:w?w.text:'', iso:at.iso, hm:at.hm}, to);
+  }catch(e){}
+}
 function finish(outcome){
   $('outcome').className='overlay';
+  handoff(outcome);
   clearInterval(S.fc.anT); clearTimeout(S.fc.holdT); try{ if(S.fc.ctx) S.fc.ctx.close(); }catch(e){}
   S.srOn=false; if(S.sr){ try{S.sr.stop();}catch(e){} }
   S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
@@ -1692,7 +1740,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

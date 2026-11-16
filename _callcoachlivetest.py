@@ -55,6 +55,35 @@ chk("'http://127.0.0.1:8777/?case='" in cm, 'Call Mode carries the Coach link')
 chk('function coachDock(' in cm and 'allow="microphone' in cm, 'Call Mode docks the coach with mic allowed')
 chk("closest('a[href^=\"' + COACH_ORIGIN" in cm and '_coachDockable()' in cm, 'only the coach link is intercepted, and only on a computer')
 
+# --- coach handoff into Call Mode ------------------------------------------------------------
+chk('function coachDonePick(' in cm and "window.addEventListener('message'" in cm and 'coachDoneFor(r)' in cm,
+    'Call Mode listens for the coach handoff and keeps it per lead')
+chk("' advisor call booked: '" in cm and "'&date=' + _cda.iso" in cm and 'Tap the lit outcome to log it' in cm,
+    'the booked time lands in the note, opens the calendar on that day, and nothing is logged without a tap')
+if shutil.which('node'):
+    pick = cm[cm.index('var COACH_OC = '):cm.index('/* The handoff for THIS lead')]
+    hjs = "var COACH_ORIGIN='http://127.0.0.1:8777';\n" + pick + r"""
+var ok={src:'bsg-coach', 'case':'CACE-26-000001', outcome:'appointment', when:'tomorrow at 9 AM', iso:'2026-11-17', hm:'09:00'};
+var o=[coachDonePick(ok,'http://127.0.0.1:8777',5),
+       coachDonePick(ok,'https://evil.example',5),
+       coachDonePick(Object.assign({},ok,{src:'x'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{outcome:'delete_everything'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{'case':'<img src=x>'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{when:'<b>9</b> "x"', iso:'17/11/2026', hm:'25:00'}),'http://127.0.0.1:8777',5)];
+console.log(JSON.stringify(o));
+"""
+    rr = subprocess.run([shutil.which('node'), '-e', hjs], capture_output=True, text=True, timeout=60)
+    if rr.returncode:
+        chk(False, 'coach handoff check runs in node: %s' % rr.stderr[-300:])
+    else:
+        ho = json.loads(rr.stdout.strip().splitlines()[-1])
+        chk(ho[0] == {'c': 'CACE-26-000001', 'k': 'appt', 'when': 'tomorrow at 9 AM', 'iso': '2026-11-17', 'hm': '09:00', 'at': 5},
+            'a handoff from our coach is accepted: %s' % ho[0])
+        chk(ho[1] is None and ho[2] is None and ho[3] is None and ho[4] is None,
+            'another origin, another sender, an unknown outcome or markup in the case number is refused')
+        chk(ho[5] and ho[5]['when'] == 'b9b x' and ho[5]['iso'] == '' and ho[5]['hm'] == '',
+            'the time text is stripped to plain characters and a malformed date or time is dropped: %s' % ho[5])
+
 # --- JS behaviour in node ------------------------------------------------------------------
 node = shutil.which('node')
 if not node:
