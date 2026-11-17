@@ -446,6 +446,13 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Fair enough. But the sale still comes in about a week."
         chk(suggest2([{'spk': '', 'text': 'I am telling you no.'}]).get('line') == 'But the sale still comes in about a week.', '"Fair enough." is cut out of the line too')
         chk(AI['seen'][-1]['body'].get('model') == 'claude-sonnet-5-5', 'the model asked is Sonnet: %s' % AI['seen'][-1]['body'].get('model'))
+        AI['reply'] = work
+        suggest([{'spk': '', 'text': 'I do not have any money.'}])
+        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' in AI['seen'][-1]['body']['messages'][0]['content'], 'unverified equity: the model is told never to say they have equity')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'I do not have any money.'}], 'eq': 'verified'}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' not in AI['seen'][-1]['body']['messages'][0]['content'], 'verified equity: that rule is not sent')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

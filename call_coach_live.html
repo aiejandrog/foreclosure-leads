@@ -1404,7 +1404,7 @@ function aiCheck(){
   $('aiwho').className='who busy';
   if($('ailine').className.indexOf('on')<0){ $('ailine').className='on'; $('aibody').textContent='…'; }
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||''})})
+    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
     if(seq!==S.ai.seq) return;
     $('aiwho').className='who';
@@ -1732,23 +1732,23 @@ function stop(){
    yours to edit. What you tap and what is left in the box is what gets saved and handed to Call Mode. */
 var WRAP_BTN={talked:0, appointment:1, callback:2, not_interested:3, voicemail:4, bad_number:5};
 function wrapAsk(){
-  S.wrap=null;
+  S.wrap=null; S.wrapPending=true;
   $('wraphead').textContent='AI wrap-up \u00b7 reading the call\u2026'; $('wrapfacts').textContent='';
   var btns=$('outcome').querySelectorAll?$('outcome').querySelectorAll('.grid button'):[];
   for(var i=0;i<btns.length;i++) btns[i].className='';
-  if(!S.lines.length){ $('wraphead').textContent='AI wrap-up \u00b7 nothing was said'; return; }
+  if(!S.lines.length){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 nothing was said'; return; }
   fetch('/api/wrapup',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({lines:S.lines.map(function(l){ return {spk:l.spk, text:l.text}; }), lane:(S.lead&&S.lead.lane)||''})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
-    if(!j||!j.outcome){ $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; return; }
-    S.wrap=j;
+    if(!j||!j.outcome){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; return; }
+    S.wrap=j; S.wrapPending=false;
     $('wraphead').textContent='AI wrap-up \u00b7 a draft, fix anything that is wrong';
     var bits=[]; if(j.when) bits.push('Time: '+j.when); if(j.want) bits.push('Wants to '+j.want);
     if(j.objection) bits.push('Pushback: '+j.objection);
     $('wrapfacts').textContent=bits.join('  \u00b7  ');
     if(!$('wrapnote').value) $('wrapnote').value=j.note||'';
     var k=WRAP_BTN[j.outcome]; if(k!=null&&btns[k]) btns[k].className='ai';
-  }).catch(function(){ $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; });
+  }).catch(function(){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; });
 }
 function wrapOut(outcome){
   var w=S.wrap||{}, note=String(($('wrapnote')&&$('wrapnote').value)||'').replace(/\s+/g,' ').trim().slice(0,320);
@@ -1769,6 +1769,14 @@ function handoff(outcome){
   }catch(e){}
 }
 function finish(outcome){
+  /* He picked the outcome before the wrap-up came back (call 11-16 19:47: about two seconds, and the
+     note and the time never reached the save or Call Mode). Wait for it, four seconds at most. */
+  if(S.wrapPending&&!S.wrapWaited&&outcome!=='auto_silence'){
+    S.wrapWaited=true; var _t0=now();
+    $('wraphead').textContent='AI wrap-up \u00b7 one second, finishing the note\u2026';
+    var _iv=setInterval(function(){ if(!S.wrapPending||now()-_t0>4000){ clearInterval(_iv); finish(outcome); } },150);
+    return;
+  }
   $('outcome').className='overlay';
   handoff(outcome);
   clearInterval(S.fc.anT); clearTimeout(S.fc.holdT); try{ if(S.fc.ctx) S.fc.ctx.close(); }catch(e){}
