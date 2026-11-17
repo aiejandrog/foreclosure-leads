@@ -443,6 +443,9 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
         chk('these four beats and nothing else, forty words at most' in AI['seen'][-1]['body']['messages'][0]['content'], 'the first lawyer answer is four short beats')
+        AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Fair enough. But the sale still comes in about a week."
+        chk(suggest2([{'spk': '', 'text': 'I am telling you no.'}]).get('line') == 'But the sale still comes in about a week.', '"Fair enough." is cut out of the line too')
+        chk(AI['seen'][-1]['body'].get('model') == 'claude-sonnet-5-5', 'the model asked is Sonnet: %s' % AI['seen'][-1]['body'].get('model'))
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
