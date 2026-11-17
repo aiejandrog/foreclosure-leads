@@ -1382,7 +1382,7 @@ function pushFinal(text,spk,dgSpk,canJoin){
    pause, then the model. Now the question goes out 0.6 s after the last word, on the bet that the
    turn is over. If they keep talking while the model thinks, the answer is thrown away and asked
    again with the rest of what they said, so an early guess is never shown. */
-var AI_PAUSE=600, AI_HOLD=7000;
+var AI_PAUSE=800, AI_HOLD=7000, AI_GAP=2500;
 function aiAsk(){
   if(S.plain||!S.sid) return;
   clearTimeout(S.ai.t);
@@ -1393,6 +1393,11 @@ function aiCheck(){
   var t=now(), quiet=t-(S.fc.lastWord||0), held=t-(S.ai.shownAt||0);
   if(quiet<AI_PAUSE){ S.ai.t=setTimeout(aiCheck, AI_PAUSE-quiet+30); return; }
   if(S.ai.line&&held<AI_HOLD){ S.ai.t=setTimeout(aiCheck, AI_HOLD-held+50); return; }
+  /* COST AND NOISE. Call 11-16 19:47 made 123 model requests to show 6 lines: every breath in a
+     sentence sent one, and each was thrown away when the talking went on. No more than one request
+     every AI_GAP ms, and none while one is still out. */
+  var since=t-(S.ai.sentAt||0);
+  if(S.ai.busy||since<AI_GAP){ S.ai.t=setTimeout(aiCheck, S.ai.busy?400:(AI_GAP-since+30)); return; }
   /* WHAT IS NEW is measured in characters of everything said (S.finals), not in transcript lines.
      Call 11-16 17:29: he read the line back, it was counted as read, and then her answer ("that's a
      great question, I have no idea") was JOINED onto that same transcript line. No new line appeared,
@@ -1402,10 +1407,12 @@ function aiCheck(){
   if(!fresh||fcReadBack(norm(fresh), norm(S.ai.line))||fcVoice(norm(fresh), fcRef()).all==='you') return;
   var seq=++S.ai.seq, n=S.lines.length, t0=now(), heardAt=S.fc.lastWord||0;
   $('aiwho').className='who busy';
+  S.ai.busy=true; S.ai.sentAt=now();
   if($('ailine').className.indexOf('on')<0){ $('ailine').className='on'; $('aibody').textContent='…'; }
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
+    S.ai.busy=false;
     if(seq!==S.ai.seq) return;
     $('aiwho').className='who';
     /* They said more while the model was thinking: that answer is to half a sentence. Ask again. */
@@ -1424,7 +1431,7 @@ function aiCheck(){
     aiFocus('ai');
     /* the line, what it heard and how it read it are saved with the call, so a bad line can be found afterwards */
     S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, wait:now()-heardAt, behind:S.lines.length-n, step:j.step||'', type:j.type||'', heard:j.heard||'', line:j.line});
-  }).catch(function(){ $('aiwho').className='who'; });
+  }).catch(function(){ S.ai.busy=false; $('aiwho').className='who'; });
 }
 /* WHERE THE CALL IS. The model names the step its line belongs to; the strip shows the whole path
    with the done steps green and the current one lit, and the script panel underneath moves to the

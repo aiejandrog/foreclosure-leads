@@ -145,6 +145,7 @@ def call(port, path, body=None, raw=False):
 # A stand-in for the language model: answers with whatever the test queued, and keeps what it was sent.
 import http.server
 import threading
+ALLMSG = lambda seen: '\n'.join(str(x.get('content')) for x in seen['body']['messages'])     # rules + this call's instructions + transcript
 AI = {'reply': 'It sounds like the bank is helping. What did they tell you happens next?', 'seen': []}
 
 
@@ -268,17 +269,17 @@ with tempfile.TemporaryDirectory() as d:
                                                                 {'spk': '', 'text': 'No, nobody did.'}], 'asked': [said]}).encode())
         urllib.request.urlopen(req, timeout=15).read()
         sent_tx = AI['seen'][-1]['body']['messages'][1]['content']
-        chk(sent_tx.startswith('CALLER: Keeping it for your wife') and '?: No, nobody did.' in sent_tx,
+        chk('CALLER: Keeping it for your wife' in sent_tx and '?: No, nobody did.' in sent_tx,
             'one microphone: a line that is the coach\'s own earlier line read out goes to the model as the caller')
-        chk('LISTEN FIRST' in AI['seen'][-1]['body']['messages'][0]['content'] and 'TALK LIKE A PERSON' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk('LISTEN FIRST' in ALLMSG(AI['seen'][-1]) and 'TALK LIKE A PERSON' in ALLMSG(AI['seen'][-1]),
             'the model is told to find the homeowner\'s words first and to talk like a person')
-        sys_p = AI['seen'][-1]['body']['messages'][0]['content']
+        sys_p = ALLMSG(AI['seen'][-1])
         chk('PLAYBOOK-MARKER five minutes with the senior advisor.' in sys_p and 'NOT-FOR-THE-MODEL' not in sys_p,
             'the playbook note goes to the model: only the part under the last rule, wiki-links flattened')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': talk, 'days': 12}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('the sale is set in about two weeks' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk('the sale is set in about two weeks' in ALLMSG(AI['seen'][-1]),
             'the court sale reaches the model as words, never a date')
         chk(h.get('playbook', 0) > 20, 'health says how much playbook the AI reads: %s' % h.get('playbook'))
         AI['reply'] = 'HEARD: tomorrow at ten\nTYPE: time\nSTEP: booked\nSAY: Tomorrow at 10:15, got it. Save my number for me.'
@@ -289,12 +290,12 @@ with tempfile.TemporaryDirectory() as d:
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': talk, 'days': 12, 'lane': 'filing'}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        lane_p = AI['seen'][-1]['body']['messages'][0]['content']
+        lane_p = ALLMSG(AI['seen'][-1])
         chk('NO sale date has been set' in lane_p and 'the sale is set in about' not in lane_p, 'a new filing tells the model there is no sale date, and none is passed')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': talk, 'lane': 'investor'}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('Talk business, not family' in AI['seen'][-1]['body']['messages'][0]['content'], 'the investor lane gets the investor conversation')
+        chk('Talk business, not family' in ALLMSG(AI['seen'][-1]), 'the investor lane gets the investor conversation')
 
         # The call wrap-up: a draft of the log entry from the whole transcript.
         def wrap(hdr=None):
@@ -324,7 +325,7 @@ with tempfile.TemporaryDirectory() as d:
                                          data=json.dumps({'lines': lines, 'asked': ["So you're not interested in saving your property, or the equity you've got in it?"]}).encode())
             return json.loads(urllib.request.urlopen(req, timeout=15).read())
         j5 = suggest2(no)
-        chk(j5.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n0 + 2 and 'has NOT asked to stop' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk(j5.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n0 + 2 and 'has NOT asked to stop' in ALLMSG(AI['seen'][-1]),
             'a line that gives up on the call is not shown: the model is asked again and told nobody said stop: %s' % j5.get('line'))
         AI['reply'] = [fold, fold]
         chk(suggest2(no).get('line') == '', 'a second goodbye shows nothing rather than ending the call')
@@ -349,32 +350,32 @@ with tempfile.TemporaryDirectory() as d:
         # The plan fact: when they name a plan, the matching fact goes to the model for that line, once.
         AI['reply'] = work
         suggest([{'spk': 'you', 'text': 'What does taken care of look like?'}, {'spk': '', 'text': 'I am filing bankruptcy next week.'}])
-        sp1 = AI['seen'][-1]['body']['messages'][0]['content']
+        sp1 = ALLMSG(AI['seen'][-1])
         chk('PLAN FACT FOR THIS LINE' in sp1 and 'seven in ten' in sp1, 'bankruptcy named: the model is handed the bankruptcy fact for that line')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'Like I said, bankruptcy.'}], 'asked': ['About seven in ten end up back in foreclosure. What is plan B?']}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('PLAN FACT FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'a fact already used on the call is not handed over again')
+        chk('PLAN FACT FOR THIS LINE' not in ALLMSG(AI['seen'][-1]), 'a fact already used on the call is not handed over again')
         suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
-        chk('ATTORNEY, FIRST TIME' in AI['seen'][-1]['body']['messages'][0]['content'] and 'money problem, not a legal problem' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk('ATTORNEY, FIRST TIME' in ALLMSG(AI['seen'][-1]) and 'money problem, not a legal problem' in ALLMSG(AI['seen'][-1]),
             'an attorney named the first time: the model is handed the money-problem-not-a-legal-problem reframe')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'My lawyer has it.'}], 'asked': ['This is a money problem, not a legal problem. Who is working on the money?']}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named again: the model is told to ask what he is doing')
+        chk('ATTORNEY QUESTION FOR THIS LINE' in ALLMSG(AI['seen'][-1]), 'an attorney named again: the model is told to ask what he is doing')
         suggest([{'spk': '', 'text': 'Who is this?'}])
-        chk('FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'no plan named: no fact is pushed')
+        chk('FOR THIS LINE' not in ALLMSG(AI['seen'][-1]), 'no plan named: no fact is pushed')
         # Busy after pushback is a brush-off; "what do I get" needs a real answer.
         AI['reply'] = work
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'You know what, I am kinda busy at the moment.'}], 'days': 8,
                                                       'asked': ['Five minutes, free. Is later today better, or first thing tomorrow?']}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        sb = AI['seen'][-1]['body']['messages'][0]['content']
+        sb = ALLMSG(AI['seen'][-1])
         chk('BUSY / NO TIME' in sb and 'why wouldn\'t five minutes' in sb and 'The sale is set in about a week' in sb and 'How does that sound?' in sb,
             'busy: the model is told to give his objection answer (why wouldn\'t five minutes be worth it, nothing to lose, part friends, how does that sound) with the sale clock')
         suggest([{'spk': '', 'text': 'Well you guys have not even told me what you are offering.'}])
-        chk('THEY ASKED WHAT THEY GET' in AI['seen'][-1]['body']['messages'][0]['content'], '"what are you offering" gets two concrete things the advisor does, not "he lays out options"')
+        chk('THEY ASKED WHAT THEY GET' in ALLMSG(AI['seen'][-1]), '"what are you offering" gets two concrete things the advisor does, not "he lays out options"')
         # "take care of it" is not a goodbye.
         n2 = len(AI['seen']); AI['reply'] = 'HEARD: x\nTYPE: answer\nSTEP: consequence\nSAY: Okay, so he is going to take care of it. What happens if the date comes first?'
         j11 = suggest([{'spk': '', 'text': 'Our attorney is gonna take care of stopping the sale.'}])[1]
@@ -386,7 +387,7 @@ with tempfile.TemporaryDirectory() as d:
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'I do not know about that.'}], 'asked': said2}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        vp = AI['seen'][-1]['body']['messages'][0]['content']
+        vp = ALLMSG(AI['seen'][-1])
         chk('USED UP ON THIS CALL' in vp and "why wouldn't five minutes be worth it" in vp and 'later today or first thing tomorrow' in vp
             and "long 'why wouldn't five minutes' answer already" in vp and 'Ask a NEW way' in vp,
             'after two full objection answers and one ask, the model is told those words are used up and to ask a new way')
@@ -394,7 +395,7 @@ with tempfile.TemporaryDirectory() as d:
         n3 = len(AI['seen']); AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The lender who does the work pays us a referral, so it is free to you.',
                                              'HEARD: x\nTYPE: question\nSTEP: close\nSAY: You are right, nobody works for free. The consultation is free and you never pay up front. When can he call you?']
         j12 = suggest([{'spk': '', 'text': 'Nobody works for free. We have no money to pay you guys.'}])[1]
-        chk('THEY ASKED HOW WE GET PAID' in AI['seen'][n3]['body']['messages'][0]['content'] and 'referral' not in j12.get('line', '')
+        chk('THEY ASKED HOW WE GET PAID' in ALLMSG(AI['seen'][n3]) and 'referral' not in j12.get('line', '')
             and j12.get('line', '').startswith('You are right') and len(AI['seen']) == n3 + 2,
             'how we get paid: the model gets the facts, and an invented answer (a referral) is thrown away and asked again: %s' % j12.get('line'))
         AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The attorney pays us a commission.'] * 2
@@ -403,14 +404,14 @@ with tempfile.TemporaryDirectory() as d:
         weak = 'HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Give him five minutes, and worst case you hang up and you have lost nothing.'
         n4 = len(AI['seen']); AI['reply'] = [weak, work]
         j13 = suggest([{'spk': '', 'text': 'I do not think so.'}])[1]
-        chk(j13.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n4 + 2 and 'expects a no' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk(j13.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n4 + 2 and 'expects a no' in ALLMSG(AI['seen'][-1]),
             '"worst case you hang up and you have lost nothing" is thrown away and asked again: %s' % j13.get('line'))
         AI['reply'] = [weak, weak]
         chk(suggest([{'spk': '', 'text': 'I do not think so.'}])[1].get('line') == '', 'a second weak answer shows nothing')
         n5 = len(AI['seen']); AI['reply'] = work
         chk(suggest([{'spk': '', 'text': 'Bro this is too many words, what would you have said there?'}])[1].get('line') == '' and len(AI['seen']) == n5,
             'the callers talking about the script is not answered, and the model is not even asked')
-        sp9 = AI['seen'][-1]['body']['messages'][0]['content']
+        sp9 = ALLMSG(AI['seen'][-1])
         chk('money problem, not a legal problem' in sp9 and 'under forty-five words' in sp9 and 'THE REFRAME' in sp9,
             'the model is given the short objection answer: agree, one reframe, the ask')
         # Praise filler never reaches the screen.
@@ -424,11 +425,11 @@ with tempfile.TemporaryDirectory() as d:
         # Wit: the opener's not-the-bank line is chosen for the call; a loan question gets the lender line.
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'Hello, who is this?'}])
-        chk('OPENER WORDING FOR THIS CALL' in AI['seen'][-1]['body']['messages'][0]['content'], 'the opener is handed one witty way to say not the bank, not a buyer')
+        chk('OPENER WORDING FOR THIS CALL' in ALLMSG(AI['seen'][-1]), 'the opener is handed one witty way to say not the bank, not a buyer')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'Can you guys get me a loan or something?'}], 'asked': ['What do you want to happen with the house?']}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('THEY ASKED ABOUT A LOAN OR A LENDER' in AI['seen'][-1]['body']['messages'][0]['content'] and 'do not lend money ourselves' in AI['seen'][-1]['body']['messages'][0]['content'],
+        chk('THEY ASKED ABOUT A LOAN OR A LENDER' in ALLMSG(AI['seen'][-1]) and 'do not lend money ourselves' in ALLMSG(AI['seen'][-1]),
             'a loan question is answered (we do not lend, licensed lenders) with the dry lender line')
         # "that's good" is cut like the rest, and an answer that runs long is asked for again, shorter.
         AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Okay, so keep him, that's good. But this is a money problem, not a legal problem."
@@ -438,21 +439,31 @@ with tempfile.TemporaryDirectory() as d:
         n6 = len(AI['seen']); AI['reply'] = [longline, 'HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Keep him. This is a money problem. Who is talking to the bank?']
         j17 = suggest2([{'spk': '', 'text': 'I am telling you no.'}])
         chk(j17.get('line') == 'Keep him. This is a money problem. Who is talking to the bank?' and len(AI['seen']) == n6 + 2
-            and 'too long to say out loud' in AI['seen'][-1]['body']['messages'][0]['content'],
+            and 'too long to say out loud' in ALLMSG(AI['seen'][-1]),
             'an answer over fifty-five words is asked for again and the shorter one is shown: %s' % j17.get('line'))
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
-        chk('these four beats and nothing else, forty words at most' in AI['seen'][-1]['body']['messages'][0]['content'], 'the first lawyer answer is four short beats')
+        chk('these four beats and nothing else, forty words at most' in ALLMSG(AI['seen'][-1]), 'the first lawyer answer is four short beats')
         AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Fair enough. But the sale still comes in about a week."
         chk(suggest2([{'spk': '', 'text': 'I am telling you no.'}]).get('line') == 'But the sale still comes in about a week.', '"Fair enough." is cut out of the line too')
         chk(AI['seen'][-1]['body'].get('model') == 'claude-sonnet-5-5', 'the model asked is Sonnet: %s' % AI['seen'][-1]['body'].get('model'))
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'I do not have any money.'}])
-        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' in AI['seen'][-1]['body']['messages'][0]['content'], 'unverified equity: the model is told never to say they have equity')
+        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' in ALLMSG(AI['seen'][-1]), 'unverified equity: the model is told never to say they have equity')
         req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
                                      data=json.dumps({'lines': [{'spk': '', 'text': 'I do not have any money.'}], 'eq': 'verified'}).encode())
         urllib.request.urlopen(req, timeout=15).read()
-        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' not in AI['seen'][-1]['body']['messages'][0]['content'], 'verified equity: that rule is not sent')
+        chk('EQUITY IS NOT VERIFIED ON THIS LEAD' not in ALLMSG(AI['seen'][-1]), 'verified equity: that rule is not sent')
+        # Cost: the rules and the playbook are one unchanging system message; this call's details ride after it.
+        AI['reply'] = work
+        suggest([{'spk': '', 'text': 'I have a lawyer.'}]); m1 = AI['seen'][-1]['body']['messages']
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'I am busy.'}], 'asked': ['What time works?'], 'days': 9, 'lane': 'hoa'}).encode())
+        urllib.request.urlopen(req, timeout=15).read(); m2 = AI['seen'][-1]['body']['messages']
+        chk(m1[0]['content'] == m2[0]['content'] and 'PLAYBOOK-MARKER' in m1[0]['content'] and 'THIS CALL' not in m1[0]['content'],
+            'the system message (rules and playbook) is identical from one request to the next, so it is billed as cached')
+        chk('BUSY / NO TIME' in m2[1]['content'] and 'TRANSCRIPT SO FAR' in m2[1]['content'] and 'I am busy.' in m2[1]['content'],
+            'what changes per line (the hint, the lines already given, the transcript) is in the user message')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
