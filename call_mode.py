@@ -8815,16 +8815,21 @@ function coachDock(url){
       + '<iframe id="cdframe" allow="microphone; display-capture; autoplay" referrerpolicy="no-referrer"></iframe>';
     document.body.appendChild(d);
     document.getElementById('cdclose').onclick = function(){ d.style.display = 'none'; document.body.classList.remove('coachon'); };
-    document.getElementById('cdtab').onclick = function(){ window.open(document.getElementById('cdframe').src, '_blank', 'noopener'); };
-    document.getElementById('cdreload').onclick = function(){ var f = document.getElementById('cdframe'); f.src = f.src; };
+    document.getElementById('cdtab').onclick = function(){ window.open(d._url || document.getElementById('cdframe').src, '_blank', 'noopener'); };
+    document.getElementById('cdreload').onclick = function(){ var f = document.getElementById('cdframe'); f.src = d._url || f.src; };
   }
   var f = document.getElementById('cdframe');
   /* Same lead already docked: just show it. Switching leads reloads the coach, which ends a call that
      is recording without its stop-and-save, so ask first. */
-  var cur = f.getAttribute('src');
+  /* SWITCHING LEADS (2026-11-17, Alex: "switch out prospect to the other and it'll have all the
+     information of the prospect there ready to go"). The coach is no longer reloaded and nothing is
+     asked: it is told which lead is up, saves the call it has on screen by itself and loads the new
+     lead in its place, with the microphone still on. d._url is the lead it was last given. */
+  var cur = d._url || f.getAttribute('src');
   if(cur !== url){
-    if(cur && !confirm('Switch the coach to this lead?\n\nIf the coach is recording, press Stop & save in it first.')) { d.style.display = 'flex'; document.body.classList.add('coachon'); return; }
-    f.src = url;
+    if(!cur) f.src = url;
+    else { try{ f.contentWindow.postMessage({src:'bsg-callmode', v:1, type:'lead', 'case':(new URL(url)).searchParams.get('case'), qs:url.split('?')[1] || ''}, COACH_ORIGIN); }catch(x){ f.src = url; } }
+    d._url = url;
   }
   d.style.display = 'flex'; document.body.classList.add('coachon');
 }
@@ -9069,7 +9074,21 @@ function clientBar(){
   return '<div class="warnbar" style="border-color:var(--gold)">&#11088; <b>CLIENT</b> &mdash; this is an existing client. '
     + 'Alejandro handles them directly. Do not work them as a lead: no cold call, text, letter, door or Whitepages search.</div>';
 }
+/* THE COACH FOLLOWS THE CARD (2026-11-17, Alex: "it will show up because it's connected and wired to
+   everything like the call mode"). With the coach docked and showing, opening a lead tells the coach
+   that this is the prospect now. The coach ignores it while a conversation is going (speech in the
+   last 20 seconds), so reading another card mid-call never cuts the call in two. */
+function coachFollow(r){
+  var d = document.getElementById('coachdock');
+  if(!d || d.style.display === 'none' || !d._url || !r || !r.c) return;
+  var L = fileLinks(r), url = null;
+  for(var i = 0; i < L.length; i++) if(L[i][0] === 'Coach') url = L[i][1];
+  if(!url || url === d._url) return;
+  var f = document.getElementById('cdframe');
+  try{ f.contentWindow.postMessage({src:'bsg-callmode', v:1, type:'lead', auto:true, 'case':r.c, qs:url.split('?')[1] || ''}, COACH_ORIGIN); d._url = url; }catch(x){}
+}
 function screenLead(){
+  try{ coachFollow(cur); }catch(x){}
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
   var r=cur, d=r.p[phIdx], rk=r.r[phIdx]||'';

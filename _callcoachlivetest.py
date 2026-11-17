@@ -479,6 +479,13 @@ with tempfile.TemporaryDirectory() as d:
         chk('ALREADY BOOKED for six' in sb19 and 'THEY SAID YES' not in sb19, 'a thank-you after the hour is booked confirms that hour, it does not offer a new one')
         sb20 = sug3('Ten tomorrow morning or later this evening. How does that sound?', ['Our senior advisor lays out other options, free. Ten tomorrow morning, how does that sound?'])
         chk('THEY GAVE YOU A DAY' not in sb20, 'the caller reading his own close is not the homeowner giving a day')
+        _bk6 = ['Okay, four this afternoon, he calls you right at four. Save my number now and read it back to me.']
+        sb21 = sug3("Four is not gonna work. I don't know what your number is.", _bk6)
+        chk('THEY CANNOT SEE YOUR NUMBER' in sb21 and 'grab a pen' in sb21 and 'ALREADY BOOKED' not in sb21, 'they cannot see the number: the caller gives it out loud, never "read it back" again')
+        sb22 = sug3('Yeah. Six works.', _bk6 + ['Then let us move it later. How does six this evening sound?'])
+        chk('YOU ALREADY ASKED THEM TO SAVE THE NUMBER' in sb22, 'the save-my-number ask is made once a call')
+        sb23 = sug3('Okay. So you could call me tomorrow.', ['Five minutes with our senior advisor. Later today or first thing tomorrow?'])
+        chk('ALREADY ASKED THEM TO SAVE' not in sb23 and 'CANNOT SEE YOUR NUMBER' not in sb23, 'the first booking still asks them to save the number')
         suggest([{'spk': 'them', 'text': 'I would like an offer right now, that is what I want.'}])
         chk('CHECKMATE.' in ALLMSG(AI['seen'][-1]) and 'exactly what he does' in ALLMSG(AI['seen'][-1]), 'naming a want the advisor delivers is the close: no more questions')
         suggest2([{'spk': 'them', 'text': 'My ex wife is on the deed and she will not sign.'}])
