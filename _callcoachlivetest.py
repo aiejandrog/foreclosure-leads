@@ -421,6 +421,15 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = "HEARD: x\nTYPE: answer\nSTEP: problem\nSAY: Okay, so you want to keep it, that's good to hear. What is the plan right now?"
         j15 = suggest([{'spk': '', 'text': 'I want to keep it.'}])[1]
         chk(j15.get('line') == 'Okay, so you want to keep it. What is the plan right now?', 'a compliment in the middle of a sentence is cut too: %s' % j15.get('line'))
+        # Wit: the opener's not-the-bank line is chosen for the call; a loan question gets the lender line.
+        AI['reply'] = work
+        suggest([{'spk': '', 'text': 'Hello, who is this?'}])
+        chk('OPENER WORDING FOR THIS CALL' in AI['seen'][-1]['body']['messages'][0]['content'], 'the opener is handed one witty way to say not the bank, not a buyer')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'Can you guys get me a loan or something?'}], 'asked': ['What do you want to happen with the house?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('THEY ASKED ABOUT A LOAN OR A LENDER' in AI['seen'][-1]['body']['messages'][0]['content'] and 'do not lend money ourselves' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'a loan question is answered (we do not lend, licensed lenders) with the dry lender line')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

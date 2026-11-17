@@ -111,7 +111,7 @@ AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-1-flash")
 # never asked for the appointment. The model now has to say where the call is on the path and
 # move it ONE step toward the close on every line.
 AI_STEPS = [
-    ("opener", "Opener", "Who you are in one breath (Biscayne Solutions Group, not the lender, not buying) and why you called: the case, and how soon the date is."),
+    ("opener", "Opener", "Who you are in one breath (Biscayne Solutions Group, and a witty way of saying you are not the bank and not a buyer) and why you called: the case, and how soon the date is."),
     ("situation", "Situation", "Find out what they want to happen with the house before the date."),
     ("problem", "Problem", "Find out whether anyone has shown them what the date costs them, or what is not covered."),
     ("solution", "What they've tried", "Find out the plan they are counting on and what part of it is actually in writing."),
@@ -250,6 +250,29 @@ AI_SYSTEM = (
     "   His longer answer (why wouldn't five minutes be worth it, every step laid out, shake hands and part "
     "friends, how does that sound) is for ONE moment per call, when they are close and wavering, and even "
     "then under fifty-five words.\n"
+    "LENDERS, BUYERS AND THE OTHER CALLERS: SAY IT WITH A LITTLE WIT. Alejandro, 11-16: 'play around with "
+    "the wording when you mention a lender or a buyer, say it witty.' The flat 'I'm not your lender and I'm "
+    "not trying to buy your house' is what every caller says, so it lands as nothing. The style is Jon "
+    "Lallande's: dry, low-key, a little amused, naming the thing they are already thinking before they say "
+    "it. The joke is always on the investors, the banks, or on yourself as one more caller. NEVER on the "
+    "homeowner or their situation. One light touch in a line, not a routine, and not in every line.\n"
+    "  Saying you are not the bank and not a buyer (use a different one each time, never the flat version):\n"
+    "    'I'm not the bank, and I'm not one of those guys trying to buy your house for half of nothing.'\n"
+    "    'Before you ask, no, I don't want your house, and no, I'm not collecting for the bank.'\n"
+    "    'I'm probably the only call you get this week that isn't trying to buy your place or collect on it.'\n"
+    "    'I'm not the bank and I'm not a we-buy-houses guy. I don't even have a sign on a telephone pole.'\n"
+    "    'Relax, I don't have a lowball offer in my pocket and I'm not the bank's collections department.'\n"
+    "  Naming the other callers before they do:\n"
+    "    'I'm guessing your phone's been blowing up with people who suddenly love your house.'\n"
+    "    'You've probably had more investors call you this month than friends.'\n"
+    "    'I know, everybody and their cousin wants to buy your house right now. I'm not in that line.'\n"
+    "  What the senior advisor does with lenders and buyers:\n"
+    "    'He knows which lenders actually say yes and which ones just like making you fill out paperwork.'\n"
+    "    'If selling's the move, he brings buyers who show up with money, not the ones who show up with stories.'\n"
+    "    'He deals with the banks all day so you don't have to sit on hold with them.'\n"
+    "    'He can tell you in five minutes if a lender would even look at this, before you lose a month finding out.'\n"
+    "  These are examples of the tone. Make your own in the same spirit, and do not reuse one already said on "
+    "the call.\n"
     "NO GRADING THEM. Never compliment or rate what they said: no 'that's smart', 'that's good', 'good "
     "question', 'fair enough', 'that's good to hear', 'that makes sense', 'I appreciate that', 'love that'. "
     "A person on a cold call does not hand out grades. Start with their words or with your point. The only "
@@ -267,9 +290,9 @@ AI_SYSTEM = (
     "they already answered. The two-times question (later today or first thing tomorrow) once per call; "
     "after that ask what time they are done today and say the advisor calls them then.\n"
     "The call by section, in this voice (the shape, not lines to repeat):\n"
-    "  Opener: Hey, it's Alejandro with Biscayne Solutions Group. I'm not your lender and I'm not trying to buy "
-    "your house. I'm calling because there's a sale date set on your place in about a week. Did you know "
-    "about that?\n"
+    "  Opener: Hey, it's Alejandro with Biscayne Solutions Group. Before you ask, no, I don't want your house, "
+    "and no, I'm not collecting for the bank. I'm calling because there's a sale date set on your place in "
+    "about a week. Did you know about that?\n"
     "  What they want: Okay, so with that date coming up, what is it you actually want to happen with the "
     "house?\n"
     "  The hole in the plan: Okay, so the bank's looking at it. And by the way, has anybody at the bank told "
@@ -398,6 +421,41 @@ _AI_VALUE = re.compile(r"what (benefit|good|do you (even )?(do|offer)|are you (e
 _AI_ASKED_TIME = re.compile(r"later today|first thing tomorrow|five minutes", re.I)
 
 
+# The opener's "not the bank, not a buyer" line is picked here, at random, so two calls in a row do
+# not open with the same joke (the model copied its one example word for word, three times of three).
+AI_WIT_NOT = (
+    "I'm not the bank, and I'm not one of those guys trying to buy your house for half of nothing.",
+    "Before you ask, no, I don't want your house, and no, I'm not collecting for the bank.",
+    "I'm probably the only call you get this week that isn't trying to buy your place or collect on it.",
+    "I'm not the bank and I'm not a we-buy-houses guy. I don't even have a sign on a telephone pole.",
+    "Relax, I don't have a lowball offer in my pocket and I'm not the bank's collections department.",
+    "I'm not one of those wholesalers trying to buy your property for pennies on the dollar, and I'm not your lender either.",
+)
+_AI_LOANQ = re.compile(r"\b(loan|refinanc|refi|lender|borrow|financ|mortgage company)", re.I)
+_AI_BUYQ = re.compile(r"\b(sell it|selling it|just sell|a buyer|buy it|cash offer|investor)", re.I)
+
+
+def wit_hint(last_said, given):
+    """Which witty wording to use on this line: the opener's not-the-bank line, or the lender / buyer
+    line when they just asked about a loan or about selling."""
+    used = " ".join(given).lower()
+    if not given:
+        import random
+        return ("\n\nOPENER WORDING FOR THIS CALL. Say who you are, then say you are not the bank and not a buyer in "
+                "these words or very close to them: \"" + random.choice(AI_WIT_NOT) + "\" Then why you called and one "
+                "question.")
+    if _AI_LOANQ.search(last_said) and "?" in last_said and "lenders actually say yes" not in used:
+        return ("\n\nTHEY ASKED ABOUT A LOAN OR A LENDER. Answer it first, plainly: we do not lend money ourselves, our "
+                "senior advisor works with licensed lenders. Then one dry line about lenders in the witty style (he "
+                "knows which ones actually say yes and which ones just like paperwork; he can tell them in five "
+                "minutes if a lender would even look at this). Then the ask. Under forty-five words.")
+    if _AI_BUYQ.search(last_said) and "show up with" not in used:
+        return ("\n\nTHEY BROUGHT UP SELLING OR A BUYER. Pick it up in their words, then one dry line about buyers in the "
+                "witty style (if selling is the move, the advisor brings buyers who show up with money, not the ones "
+                "who show up with stories), then one plain question or the ask. Under forty-five words.")
+    return ""
+
+
 def plan_hint(last_said, given, when=""):
     """The instruction for this one line when the homeowner just named a plan, pushed back with
     "busy", or asked what they get, or ''."""
@@ -463,6 +521,11 @@ AI_STOCK = [
     (r"laid out in front of you", "every step laid out in front of you", 2),
     (r"later today or first thing tomorrow", "later today or first thing tomorrow", 1),
     (r"which (one )?is easier", "which is easier for you", 1),
+    (r"not your lender", "the flat 'I'm not your lender and I'm not trying to buy your house'", 1),
+    (r"half of nothing", "half of nothing", 1), (r"collecting for the bank", "collecting for the bank", 1),
+    (r"blowing up", "your phone's been blowing up", 1), (r"telephone pole", "sign on a telephone pole", 1),
+    (r"show up with (money|stories)", "buyers who show up with money, not stories", 1),
+    (r"fill out paperwork|filling out paperwork", "lenders who like paperwork", 1),
     (r"what time are you done", "what time are you done today", 1),
     (r"call(s)? you right then|call you then", "so he can call you right then", 1),
     (r"what time (today )?works", "what time works", 1),
@@ -722,7 +785,8 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
     if _AI_META.search(last_said):
         return {}                      # the callers are talking about the script: keep what is on screen
     if not rows[-1].startswith("CALLER"):
-        system += plan_hint(last_said, prior + [shown], when)
+        _ph = plan_hint(last_said, prior + [shown], when)
+        system += _ph or wit_hint(last_said, [x for x in prior + [shown] if x])
         if _AI_PAYQ.search(last_said):
             system += AI_PAY_ANSWER
     res = ask(system)
