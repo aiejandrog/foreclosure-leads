@@ -4683,7 +4683,7 @@ function _phSrcNote(r, i){
   if(_rk === 'r') return 'RELATIVE of the owner (you tagged it). Ask only for ' + esc(r.on||'the owner') + ' to call you back: do not mention the foreclosure, the sale, the case or any amount. Calling relatives is NOT cleared by the attorney yet'
     + (RELDIAL ? '.' : ': Call Mode does not dial it. Dial it on your phone, then tap the log button so the call counts.') + ' Call only, never texted.';
   if(_rk === 'u') return 'You were not sure whose number this is. Ask for ' + esc(r.on||'the owner') + ' by name and confirm who you are speaking with before you mention the filing. Call only, never texted.';
-  if(s==='wpm') return 'You pasted this number from Whitepages. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing. Pasted numbers are not checked against the do-not-call registry.';
+  if(s==='wpm') return '';   /* notice removed 2026-11-17 (Alejandro) */
   if(s==='hh' && String(r.pw||'').charAt(i)==='o') return '';
   if(String(r.pw||'').charAt(i)==='l') return 'LIKELY the owner: Whitepages has the same first name and part of the surname. Confirm you are speaking with ' + esc(r.on||'the owner') + ' before you mention the filing.';
   if(String(r.pw||'').charAt(i)==='w') return 'Whitepages lists this number\u2019s person (' + esc((r.wo||[]).join(' / ')) + ') as the OWNER; our record says ' + esc(r.on||'someone else') + '. Ask who you are speaking with and whether they own the house before you mention the filing.';
@@ -6505,7 +6505,7 @@ function textPreflight(c, num, pcs){
       try{ phone = /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || '')); }catch(e){}
       var held = true;
       try{ held = textingHeld(); }catch(e){}
-      if(phone && !held) fin(true, '');
+      if(!held) fin(true, '');   /* 2026-11-17 (Alejandro): any device, not only phones */
       else fin(false, why);
     };
     t = setTimeout(function(){ unreachable('the bridge did not answer the do-not-contact check'); }, 3500);
@@ -9077,11 +9077,9 @@ function screenLead(){
      we contact this person at all" is asked one last time -- pool() is built once per render and a
      sync can land a hard no between the build and the tap. */
   var _hs = hardSuppressed(r);
-  var _cap = _tele24(r);
-  if(_hs || _cap >= 3){
+  if(_hs){
     $('app').innerHTML = head()
-      + '<div class="card"><div class="warnbar">' + (_hs ? ('&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '. This person is not to be called or texted.')
-                                                       : ('&#9888; FTSA cap: ' + _cap + ' telephonic touches to this person in the last 24 hours (max 3). No call, no text until the oldest one ages out.'))
+      + '<div class="card"><div class="warnbar">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '. This person is not to be called or texted.'
       + '</div><div class="addr">' + esc(propertyLabel(r)) + '</div><div class="own">' + esc(ownerLabel(r)) + '</div>'
       + '<button class="big" id="skip" style="background:#2a3f6b;margin-top:12px">Next lead</button></div>';
     $('skip').onclick = function(){ advance(r.c); };
@@ -10377,7 +10375,7 @@ function recHolds(r, n){
   if(r.bq) H.push('Bankruptcy not checked: ask first');
   if(r.ab) H.push('Absentee owner: call and mail, do not knock');
   var tc = 0; try{ tc = _tele24n(n || {}); }catch(e){}
-  if(tc) H.push(tc + ' call or text touch' + (tc === 1 ? '' : 'es') + ' in the last 24 hours (max 3)');
+  if(tc) H.push(tc + ' call or text touch' + (tc === 1 ? '' : 'es') + ' in the last 24 hours');
   return H;
 }
 /* {s, why, s2, why2}: CLOSED | URGENT | MAIL | KNOCK | CALL | WAIT. */
@@ -10877,13 +10875,12 @@ function nextNumPrompt(r, k, onNo){
   var p = r.p||[];
   if(k < 0 || k >= p.length) return onNo();
   SCREEN = 'after';
-  var cap = _tele24(r) >= 3;
+  var cap = false;   /* FTSA cap removed 2026-11-17 (Alejandro) */
   $('app').innerHTML = '<div class="card"><div class="nxq">'
     + '<div class="addr" style="font-size:17px">Call another number for ' + esc(firstName(r) || 'this owner') + '?</div>'
     + '<div class="own" style="margin-top:6px">' + fmt(String(p[k]).replace(/\D/g,'')) + ' &middot; number ' + (k + 1) + ' of ' + p.length + '</div>'
     + _numChecks(r, k).replace('<span class="chip hot">on the button</span>', '')
     + (_phSrcNote(r, k) ? '<div class="nc" style="margin-top:6px">' + _phSrcNote(r, k) + '</div>' : '')
-    + (cap ? '<div class="nc" style="margin-top:6px">FTSA cap: 3 telephonic touches to this person in 24 hours. The number is saved; call it after the oldest touch ages out.</div>' : '')
     + '<div class="nxbtns">'
     + (cap ? '' : '<button id="nxyes" class="big">&#128222; Yes, go to that number</button>')
     + '<button id="nxno" class="ghost">' + (cap ? 'OK, move on' : 'No, move on') + '</button>'
@@ -10993,7 +10990,6 @@ function afterCall(r, o, nextC){
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
   else if(textingHeld())    txt = '<div class="nc">'+esc(textHoldWhy() || 'Texting is held — the do-not-contact list is stale.')+'</div>';
-  else if(_tele24(r) >= 3)  txt = '<div class="nc">FTSA cap: '+_tele24(r)+' telephonic touches to this person in 24h (max 3). No text until one ages out.</div>';
   else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
   else if(_gkcb)            txt = '<div class="nc">Someone other than the owner asked for this callback. Call back at that time, no text.</div>';
@@ -11253,6 +11249,7 @@ function _tele24(r){
 }
 function _telephonicToday(n){ return _tele24n(n); }
 function _ftsaCapToast(n, extra){
+  return false;   /* FTSA cap toast removed 2026-11-17 (Alejandro) */
   var cnt = _telephonicToday(n);
   if(cnt <= 3) return false;
   n.touches[n.touches.length-1].capExceeded = true;

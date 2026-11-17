@@ -68,7 +68,7 @@ rec('Call Mode no longer holds a text on a Whitepages likely owner or a pasted n
     and 'Pasted from Whitepages, not confirmed yet' not in cm
     and "charAt(phIdx)==='l' && !sitKeys.length" not in cm)
 rec('the holds that stay are still in the after-call panel',
-    all(x in cm for x in ('do-not-text list', 'FTSA cap', 'Household member, not the owner',
+    all(x in cm for x in ('do-not-text list', 'Household member, not the owner',
                           'Name-only match', 'Someone other than the owner asked for this callback')))
 
 # ---- 3. first-email gates ------------------------------------------------------------------------

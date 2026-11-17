@@ -134,7 +134,7 @@ rec('pasted number, no answer: the text is offered (gate removed 2026-11-13)',
 rec('do-not-text still wins over the household note', 'do-not-text' in res.get('dnt+hh', {}).get('txt', ''), res.get('dnt+hh'))
 rec('suppressed still blocks an owner number', 'suppressed' in res.get('supp+owner', {}).get('txt', ''), res.get('supp+owner'))
 rec('stale list still blocks an owner number', res.get('held+owner', {}).get('button') is False, res.get('held+owner'))
-rec('FTSA cap still blocks an owner number', 'FTSA cap' in res.get('ftsa+owner', {}).get('txt', ''), res.get('ftsa+owner'))
+rec('FTSA cap removed 2026-11-17: 3 touches no longer block an owner number', 'FTSA cap' not in res.get('ftsa+owner', {}).get('txt', ''), res.get('ftsa+owner'))
 rec('bad number still blocks', 'Bad number' in res.get('badnum+owner', {}).get('txt', ''), res.get('badnum+owner'))
 rec('hours window still applies to an owner number', res.get('late+owner', {}).get('button') is False, res.get('late+owner'))
 rec('the household note names the reason', 'owner' in res.get('hh/noanswer', {}).get('txt', '').lower()

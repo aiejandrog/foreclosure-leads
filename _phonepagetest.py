@@ -146,7 +146,7 @@ def main():
           return {before3, tripped, marked, inQ, goneQ, stillGone};
         }""")
         rec('FTSA: 3 telephonic touches today do NOT warn', guard['before3'] == 3)
-        rec('FTSA: the 4th warns and marks the record', guard['tripped'] and guard['marked'])
+        rec('FTSA cap removed 2026-11-17: the 4th touch does not warn', not guard['tripped'])
         rec('worker queue: a synced .wq lead appears', guard['inQ'])
         rec('worker queue: retiring hides it', guard['goneQ'])
         rec('worker queue: a stale remote blob cannot resurrect it', guard['stillGone'])
