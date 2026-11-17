@@ -56,6 +56,15 @@ PARSER_VERSION = 1
 DEFAULT_LIMIT = 60
 PAUSE_S = 1.2
 RETRY_GAP_DAYS = 14          # a document the county would not serve is asked for again after this
+# A BLOCK IS NOT AN ANSWER (2026-11-17). 45% of Broward reads ended gap_pdf (62 of 138) and each one
+# was then parked for 14 days. Probed live: the same documents download fine minutes later. The
+# county's Cloudflare front challenges the image route in bursts (403 "Just a moment" for a stretch
+# of requests, then 200 again), so a failed download says nothing about the document. These statuses
+# are asked for again on the next run, and once more at the end of the same run on a new session.
+TRANSIENT = ('gap_pdf', 'gap_session', 'gap_details', 'gap_error')
+RETRY_TRANSIENT_DAYS = 1
+SECOND_PASS = 80             # documents re-asked at the end of a run
+SECOND_PASS_WAIT_S = 45      # let the challenge burst pass first
 RESOLVE_CASES = 60           # Broward name searches per run, to find a row's instrument number (443 cases waited on 11-16)
 MIN_FIGURE = 100.0
 MAX_FIGURE = 50_000_000.0
@@ -238,7 +247,7 @@ def _due(entry, today):
         age = (today - datetime.date.fromisoformat(str(entry.get('read') or '')[:10])).days
     except ValueError:
         return True
-    return age >= RETRY_GAP_DAYS
+    return age >= (RETRY_TRANSIENT_DAYS if entry.get('status') in TRANSIENT else RETRY_GAP_DAYS)
 
 
 # ---- apply to a stored chain --------------------------------------------------------------------
@@ -486,7 +495,7 @@ def resolve_broward(cases, here=HERE, limit=RESOLVE_CASES, pause=PAUSE_S, search
 
 
 def run(counties, limit=DEFAULT_LIMIT, dry_run=False, apply_only=False, here=HERE, today=None,
-        readers=None, pause=PAUSE_S):
+        readers=None, pause=PAUSE_S, second_wait=SECOND_PASS_WAIT_S):
     today = today or datetime.date.today()
     cache = dict(load_cache())
     report = {'read': 0, 'priced': 0, 'no_figure': 0, 'partial': 0, 'gaps': 0, 'by_county': {}}
@@ -522,6 +531,28 @@ def run(counties, limit=DEFAULT_LIMIT, dry_run=False, apply_only=False, here=HER
                     save_cache(cache)
                 time.sleep(pause)
             save_cache(cache)
+            # SECOND PASS: the documents a challenge burst refused this run, asked once more on a
+            # fresh session after a wait. Outside the run's limit: these were already counted as read.
+            again = [(c, case, key) for c, case, key in items if (cache.get(key) or {}).get('status') in TRANSIENT
+                     and (cache.get(key) or {}).get('read') == today.isoformat()][:SECOND_PASS]
+            if again:
+                time.sleep(second_wait)
+                if hasattr(readers, '_brw'):
+                    readers._brw = None
+                for county, case, key in again:
+                    entry = read_one(county, key, case, readers, today)
+                    if entry.get('status') in TRANSIENT:
+                        time.sleep(pause)
+                        continue
+                    cache[key] = entry
+                    report['gaps'] -= 1
+                    report['recovered'] = report.get('recovered', 0) + 1
+                    st = entry.get('status')
+                    report[st if st in ('priced', 'no_figure', 'partial') else 'gaps'] += 1
+                    if st == 'priced':
+                        report['by_county'].setdefault(county, {'read': 0, 'priced': 0})['priced'] += 1
+                    time.sleep(pause)
+                save_cache(cache)
     if not dry_run:
         report['applied'] = apply_files(cache, counties, here)
     return report
@@ -537,8 +568,8 @@ def main(argv=None):
     counties = {'all': ['BROWARD', 'MIAMI-DADE', 'PALM BEACH'], 'broward': ['BROWARD'],
                 'miami': ['MIAMI-DADE'], 'pb': ['PALM BEACH']}[a.county]
     rep = run(counties, limit=a.limit, dry_run=a.dry_run, apply_only=a.apply_only)
-    print('lien_amounts: queued %s, read %d, priced %d, no figure %d, partial %d, gaps %d'
-          % (rep.get('queued', '-'), rep['read'], rep['priced'], rep['no_figure'], rep['partial'], rep['gaps']))
+    print('lien_amounts: queued %s, read %d, priced %d, no figure %d, partial %d, gaps %d, recovered on second pass %d'
+          % (rep.get('queued', '-'), rep['read'], rep['priced'], rep['no_figure'], rep['partial'], rep['gaps'], rep.get('recovered', 0)))
     for c, v in sorted((rep.get('by_county') or {}).items()):
         print('  %-11s read %d, priced %d' % (c, v['read'], v['priced']))
     if rep.get('not_indexed'):
