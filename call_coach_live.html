@@ -219,6 +219,7 @@ code{color:var(--accent)}
 <div id="app">
   <div id="bar">
     <span id="dot">&#9679; REC</span>
+    <span id="leadchip" title="The prospect this call is saved under. Pick another on the right, or press No prospect." style="padding:3px 10px;border-radius:12px;border:1px solid #2a3a4a;color:#9fb3c8;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">No prospect</span>
     <span class="t" id="clock">00:00</span>
     <span class="t" id="words">0 words</span>
     <span id="eng"></span>
@@ -246,8 +247,8 @@ code{color:var(--accent)}
   </div>
 
   <div id="right">
-    <p class="h" style="margin-bottom:6px">Lead</p>
-    <input id="q" placeholder="address, owner, or case # — Enter to search"
+    <p class="h" style="margin-bottom:6px">Prospect for this call <button id="nolead" title="Take the prospect off: the coach runs with no case attached" style="float:right;font:inherit;font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid #2a3a4a;background:#0d1520;color:#9fb3c8;cursor:pointer" onclick="Coach.dropLead()">No prospect</button></p>
+    <input id="q" placeholder="type a street, a name or a case # and pick one"
            onkeydown="if(event.key==='Enter'){event.preventDefault();Coach.lookup()}" oninput="Coach.debounceLookup()">
     <div id="leadhits"></div>
     <div id="leadbox"></div>
@@ -941,7 +942,7 @@ function fcLeadMsg(d){
   var c=String(d.case||''); if(!/^[A-Za-z0-9 ._-]{4,40}$/.test(c)) return null;
   var qs=String(d.qs||'');
   if(qs.length>200||!/^[A-Za-z0-9=&%._-]*$/.test(qs)||qs.indexOf('case=')!==0) qs='case='+encodeURIComponent(c);
-  return {c:c, qs:qs};
+  return {c:c, qs:qs, auto:d.auto===true};
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1111,7 +1112,7 @@ function lookup(){
   fetch('/api/lead?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(j){
     var h='';
     (j.matches||[]).forEach(function(m,i){
-      h+='<div class="hit" onclick="Coach.pick('+i+')"><b>'+esc(m.address||'(no address)')+'</b><br>'
+      h+='<div class="hit" onclick="Coach.choose('+i+')"><b>'+esc(m.address||'(no address)')+'</b><br>'
         +'<span>'+esc(m.owners||'')+' · '+esc(m.case||'')+' · sale '+esc(m.auction||'?')
         +(m.days!=null?' ('+m.days+'d)':'')+'</span></div>';
     });
@@ -1152,6 +1153,13 @@ function pick(i){
   if(st1) $('f_st1').value=st1;
   if(m.auction) $('f_date').value=m.auction;
   fill();
+  leadChip();
+}
+function leadChip(){
+  var c=$('leadchip'); if(!c) return;
+  var m=S.lead;
+  c.textContent=m?(String(m.address||'').split(',')[0]||m.owners||'')+' \u00b7 '+(m.case||''):'No prospect';
+  c.style.color=m?'#bfe0ff':'#9fb3c8'; c.style.borderColor=m?'#4aa3ff':'#2a3a4a';
 }
 
 /* ======================= OBJECTION AUTO-FIRE ======================= */
@@ -1977,7 +1985,7 @@ function loadLead(c){
     pick(hit);
   }).catch(function(){});
 }
-function rollCall(outcome, nextCase){
+function rollCall(outcome, nextCase, clear){
   if(S.plain||!S.sid||S.rolling) return false;
   S.rolling=true;
   var old={sid:S.sid, lines:S.lines, body:{duration_s:Math.round((now()-S.t0)/1000),stages_visited:S.stagesVisited,objections_fired:S.objFired,
@@ -1990,7 +1998,7 @@ function rollCall(outcome, nextCase){
       if(!ok) throw 'held';
       return post('/api/session/'+encodeURIComponent(old.sid)+'/transcript',{lines:old.lines});
     }).then(function(){ return post('/api/session/'+encodeURIComponent(old.sid)+'/end', old.body); })
-    .then(function(){ return nextCase?loadLead(nextCase):null; })
+    .then(function(){ return clear?dropNow():(nextCase?loadLead(nextCase):null); })
     .then(function(){ var lead=S.lead||{};
       return post('/api/session/start',{case:lead.case||null,address:lead.address||null,owners:lead.owners||null,auction:lead.auction||null,phone:null,consent_ack:true}); })
     .then(function(r){ return r.json(); }).then(function(j){
@@ -2017,11 +2025,43 @@ function newCall(){
 }
 /* Another lead: from Call Mode's Coach button, or the Switch box. In a live session the current call
    is saved and the new lead's card, name, street, sale date and lane load in its place. */
-function takeLead(c, qs){
+function takeLead(c, qs, auto){
   if(S.lead&&String(S.lead.case||'')===c) return;
+  /* Call Mode only following the card that is open: never in the middle of a conversation. Words on
+     screen and speech in the last 20 seconds means a call is going; the Coach button still switches. */
+  if(auto&&S.lines.length&&now()-(S.lastSpeech||0)<20000) return;
   try{ history.replaceState(null,'','/?'+qs); }catch(e){}
-  if(S.sid&&!S.plain&&$('app').className.indexOf('on')>=0){ if(!rollCall('', c)) loadLead(c); }
+  var live=S.sid&&!S.plain&&$('app').className.indexOf('on')>=0;
+  /* No prospect yet and words already on screen: this call IS that prospect's call, so attach, do
+     not start over. A different prospect was on it: save that call and start this one clean. */
+  if(live&&S.lines.length&&S.lead){ if(!rollCall('', c)) loadLead(c); }
   else loadLead(c);
+}
+/* NO CASE NEEDED (Alex, 11-17: "stop trying to operate off of a case when there's no case needed to
+   start the coach"). The coach starts and runs with nobody attached; a prospect is something you pick,
+   from the box on the right, from the Switch box, or from Call Mode. This takes the prospect off. */
+function dropNow(){
+  S.lead=null; S.hits=[];
+  ['f_first','f_st1','f_date','q'].forEach(function(id){ if($(id)) $(id).value=''; });
+  if($('leadbox')){ $('leadbox').innerHTML=''; $('leadbox').style.display='none'; }
+  if($('leadhits')) $('leadhits').innerHTML='';
+  try{ history.replaceState(null,'','/'); }catch(e){}
+  try{ fill(); }catch(e){}
+  leadChip();
+}
+function dropLead(){
+  if(!S.lead){ dropNow(); return; }
+  if(S.sid&&!S.plain&&S.lines.length){ if(!rollCall('', null, true)) dropNow(); }
+  else dropNow();
+}
+/* A prospect picked from the list on the right. */
+function choose(i){
+  var m=S.hits[i]; if(!m) return;
+  if(!m.case){ pick(i); return; }
+  var c=String(m.case);
+  if(S.lead&&String(S.lead.case||'')===c){ $('leadhits').innerHTML=''; return; }
+  if($('leadhits')) $('leadhits').innerHTML='';
+  takeLead(c, 'case='+encodeURIComponent(c));
 }
 function switchTo(){
   var q=$('q2').value.trim(); if(q.length<2) return;
@@ -2034,7 +2074,7 @@ function switchTo(){
 }
 if(window.addEventListener) window.addEventListener('message', function(ev){
   if(ev.source!==window.parent||window.parent===window) return;
-  var m=fcLeadMsg(ev.data); if(m) takeLead(m.c, m.qs);
+  var m=fcLeadMsg(ev.data); if(m) takeLead(m.c, m.qs, m.auto);
 });
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
@@ -2046,7 +2086,7 @@ var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.s
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 
-return {newCall:newCall,switchTo:switchTo,start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
+return {newCall:newCall,switchTo:switchTo,choose:choose,dropLead:dropLead,start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
         setKey:setKey,keepGoing:keepGoing,

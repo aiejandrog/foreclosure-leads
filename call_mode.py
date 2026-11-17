@@ -9074,7 +9074,21 @@ function clientBar(){
   return '<div class="warnbar" style="border-color:var(--gold)">&#11088; <b>CLIENT</b> &mdash; this is an existing client. '
     + 'Alejandro handles them directly. Do not work them as a lead: no cold call, text, letter, door or Whitepages search.</div>';
 }
+/* THE COACH FOLLOWS THE CARD (2026-11-17, Alex: "it will show up because it's connected and wired to
+   everything like the call mode"). With the coach docked and showing, opening a lead tells the coach
+   that this is the prospect now. The coach ignores it while a conversation is going (speech in the
+   last 20 seconds), so reading another card mid-call never cuts the call in two. */
+function coachFollow(r){
+  var d = document.getElementById('coachdock');
+  if(!d || d.style.display === 'none' || !d._url || !r || !r.c) return;
+  var L = fileLinks(r), url = null;
+  for(var i = 0; i < L.length; i++) if(L[i][0] === 'Coach') url = L[i][1];
+  if(!url || url === d._url) return;
+  var f = document.getElementById('cdframe');
+  try{ f.contentWindow.postMessage({src:'bsg-callmode', v:1, type:'lead', auto:true, 'case':r.c, qs:url.split('?')[1] || ''}, COACH_ORIGIN); d._url = url; }catch(x){}
+}
 function screenLead(){
+  try{ coachFollow(cur); }catch(x){}
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
   var r=cur, d=r.p[phIdx], rk=r.r[phIdx]||'';

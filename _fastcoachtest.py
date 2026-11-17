@@ -188,7 +188,7 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
           svg:T.toneSvg(tn).indexOf('<svg')===0&&T.toneSvg(tn).indexOf('WAIT')>0&&T.toneSvg([])==='', text:document.getElementById('aibody').innerHTML.replace(/<[^>]+>/g,''),
           drawn:document.getElementById('aitone').innerHTML.indexOf('<svg')===0, marks:document.getElementById('aibody').innerHTML.split('<span class="tn').length-1};
   o.leadmsg=[T.leadMsg({src:'bsg-callmode',type:'lead','case':'2026-001234-CA-01',qs:'case=2026-001234-CA-01&eq=priced&en=17803'}),
-             T.leadMsg({src:'bsg-callmode',type:'lead','case':'CACE26004416',qs:'case=x&u=<script>'}),
+             T.leadMsg({src:'bsg-callmode',type:'lead',auto:true,'case':'CACE26004416',qs:'case=x&u=<script>'}),
              T.leadMsg({src:'evil',type:'lead','case':'2026-001234-CA-01'}), T.leadMsg({src:'bsg-callmode',type:'lead','case':'a<b'}), T.leadMsg(null)];
   var cur0={line:'What do you want to happen with the house?', step:'situation', shownMs:9000, heard:['is this about'], lines:2};
   o.keepline=[T.keepLine(cur0,{type:'unclear',step:'situation',heard:'Okay.'}),
@@ -410,9 +410,9 @@ else:
         chk(o['tone'] == {'n': 4, 'first': ['short and sure', True], 'hard': [True, 3, True, True], 'beat': True, 'split': [2, True, True, True, 3], 'ask': [True, 3, True], 'curious': [True, 3],
                           'svg': True, 'text': 'Keep him. How does six this evening sound?', 'drawn': True, 'marks': 2},
             'the tone graph: a statement lands down, the hard question is low slow and quiet then silence, the ask for the hour goes down then waits, a real question goes up, and the line text is unchanged', o['tone'])
-        chk(o['leadmsg'] == [{'c': '2026-001234-CA-01', 'qs': 'case=2026-001234-CA-01&eq=priced&en=17803'}, {'c': 'CACE26004416', 'qs': 'case=CACE26004416'}, None, None, None],
+        chk(o['leadmsg'] == [{'c': '2026-001234-CA-01', 'qs': 'case=2026-001234-CA-01&eq=priced&en=17803', 'auto': False}, {'c': 'CACE26004416', 'qs': 'case=CACE26004416', 'auto': True}, None, None, None],
             'a lead handed over by Call Mode: our tag and plain characters only, a bad query string is rebuilt, anything else is dropped', o['leadmsg'])
-        chk('function rollCall(' in src and "if(outcome!=='auto_silence'&&rollCall(outcome)) return;" in src and 'Coach.newCall()' in html and 'Coach.switchTo()' in html,
+        chk('function rollCall(' in src and "if(outcome!=='auto_silence'&&rollCall(outcome)) return;" in src and 'Coach.newCall()' in html and 'Coach.switchTo()' in html and 'Coach.dropLead()' in html and 'Coach.choose(' in html and 'function dropNow(' in src,
             'the next call starts in place: New call button, Switch box, and no reload after an outcome')
         chk(o['keepline'] == [True, True, True, True, False, False, False, False, False, False],
             'the line on screen stays for a mumble, the same thing said again, a rewording of the same step, or going back to the opener; it changes for an answer that moves on, a new objection, a new question, or a time', o['keepline'])
