@@ -229,6 +229,8 @@ code{color:var(--accent)}
       <option value="es-US">Espa&ntilde;ol</option>
     </select>
     <span class="sp"></span>
+    <input id="q2" placeholder="Switch lead: case, address or name" title="Type a case number, street or name and press Enter: the call on screen is saved and this lead loads" style="width:230px;padding:5px 8px;border-radius:6px;border:1px solid #2a3a4a;background:#0d1520;color:#e6edf3;font:inherit" onkeydown="if(event.key==='Enter') Coach.switchTo()">
+    <button title="Save what is on screen and start a clean call on the same lead (R)" style="border-color:#4aa3ff;color:#bfe0ff" onclick="Coach.newCall()">New call (R)</button>
     <button id="pausebtn" title="Hide the coach card and stop new prompts (P)" onclick="Coach.pauseCoach()">Pause coach (P)</button>
     <button title="The last things they said (C)" onclick="Coach.catchUp()">Catch me up (C)</button>
     <button onclick="Coach.back()">&larr; Back (B)</button>
@@ -929,6 +931,17 @@ function fcTone(line, type, step){
   for(var k=0;k<out.length-1;k++){ if(/\?$/.test(out[k+1].text)&&out[k].pause<2) out[k].pause=2; }   /* a beat before the ask */
   if(out.length&&out[out.length-1].pause<2) out[out.length-1].pause=2;
   return out;
+}
+/* A LEAD HANDED OVER BY CALL MODE. The docked coach is told which lead is up by a message from the
+   page that holds it, instead of being reloaded. This is the whole check on that message: our own
+   tag, a case number made of plain characters, and a query string of plain characters (it only
+   carries the case and the board's equity verdict). Anything else is dropped. */
+function fcLeadMsg(d){
+  if(!d||d.src!=='bsg-callmode'||d.type!=='lead') return null;
+  var c=String(d.case||''); if(!/^[A-Za-z0-9 ._-]{4,40}$/.test(c)) return null;
+  var qs=String(d.qs||'');
+  if(qs.length>200||!/^[A-Za-z0-9=&%._-]*$/.test(qs)||qs.indexOf('case=')!==0) qs='case='+encodeURIComponent(c);
+  return {c:c, qs:qs};
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1795,6 +1808,7 @@ function enterApp(){
     if(k==='n') next();
     else if(k==='b') back();
     else if(k==='escape') stop();
+    else if(k==='r') newCall();
     else if(k==='d') dismissObjection();
     else if(k==='h') coachHide();
     else if(k==='p') pauseCoach();
@@ -1899,6 +1913,9 @@ function finish(outcome){
   }
   $('outcome').className='overlay';
   handoff(outcome);
+  /* Saved in the background and straight on to the next call. The 90-second silence stop still shuts
+     the microphone and the page down the old way. */
+  if(outcome!=='auto_silence'&&rollCall(outcome)) return;
   clearInterval(S.fc.anT); clearTimeout(S.fc.holdT); try{ if(S.fc.ctx) S.fc.ctx.close(); }catch(e){}
   S.srOn=false; if(S.sr){ try{S.sr.stop();}catch(e){} }
   S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
@@ -1928,16 +1945,108 @@ function finish(outcome){
   } else done();
 }
 
+/* THE NEXT CALL, WITHOUT LEAVING (Alex, 11-17: "make it easy for me to reset the session when there
+   are words there already", "switch out prospect to the other and it'll have all the information of
+   the prospect there ready to go"). Ending a call used to be a popup, a page reload, the consent box
+   and Start again, and switching leads reloaded the whole coach. Now the microphone, the transcript
+   connection and the page stay as they are: the call that just ended is saved to its own folder in
+   the background, the screen is wiped at once, and a new recording starts, on the same lead or on
+   the next one. */
+function resetCall(){
+  clearTimeout(S.ai.t); clearTimeout(S.fc.holdT);
+  S.lines=[]; S.finals=''; S.interim=''; S.stagesVisited=[]; S.objFired=[]; S.rfFired=[];
+  S.ai={t:null, seq:(S.ai.seq||0)+1, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[]};
+  S.dgOpen=null; S.dgThem=[]; S.lastCard=null; S.lastCardAt=0; S.cooldown={};
+  var f=S.fc; f.cbArm=0; f.seen={}; f.said=[]; f.card=null; f.cool={}; f.fires=[]; f.heldSince=0; f.askI=0;
+  S.wrap=null; S.wrapPending=false; S.wrapWaited=false; S.outcomeAuto=false; S.idleCounting=false;
+  S.t0=now(); S.lastSpeech=now(); S.stage=S.plain?1:0;
+  $('ailine').className=''; $('aibody').textContent=''; $('aiprev').textContent=''; $('aiheard').textContent='';
+  if($('aitone')) $('aitone').innerHTML='';
+  $('aiwho').className='who'; $('outcome').className='overlay'; $('idlewarn').className='overlay';
+  try{ dismissObjection(); }catch(e){}
+  try{ fcRender(false); }catch(e){}
+  renderStage(); renderTranscript();
+}
+function loadLead(c){
+  return fetch('/api/lead?q='+encodeURIComponent(c)).then(function(r){ return r.json(); }).then(function(j){
+    var ms=j.matches||[], hit=-1;
+    for(var i=0;i<ms.length;i++) if(String(ms[i].case||'')===c){ hit=i; break; }
+    if(hit<0&&ms.length) hit=0;
+    if(hit<0) return;
+    S.hits=ms; ['f_first','f_st1','f_date'].forEach(function(id){ if($(id)) $(id).value=''; });
+    pick(hit);
+  }).catch(function(){});
+}
+function rollCall(outcome, nextCase){
+  if(S.plain||!S.sid||S.rolling) return false;
+  S.rolling=true;
+  var old={sid:S.sid, lines:S.lines, body:{duration_s:Math.round((now()-S.t0)/1000),stages_visited:S.stagesVisited,objections_fired:S.objFired,
+           redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)}};
+  resetCall();
+  $('dot').textContent='● saving the last call…';
+  var post=function(u,b){ return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}); };
+  var after=function(){
+    drainAudio(now()+8000).then(function(ok){
+      if(!ok) throw 'held';
+      return post('/api/session/'+encodeURIComponent(old.sid)+'/transcript',{lines:old.lines});
+    }).then(function(){ return post('/api/session/'+encodeURIComponent(old.sid)+'/end', old.body); })
+    .then(function(){ return nextCase?loadLead(nextCase):null; })
+    .then(function(){ var lead=S.lead||{};
+      return post('/api/session/start',{case:lead.case||null,address:lead.address||null,owners:lead.owners||null,auction:lead.auction||null,phone:null,consent_ack:true}); })
+    .then(function(r){ return r.json(); }).then(function(j){
+      S.sid=j.session_id; if(S.stream) startRecorder(S.stream);
+      S.rolling=false; $('dot').textContent='● REC · new call';
+      setTimeout(function(){ if(!S.rolling) $('dot').textContent='● REC'; },4000);
+    }).catch(function(){
+      /* Not saved: put the call back on screen and keep recording into it. Nothing is thrown away. */
+      S.rolling=false; S.lines=old.lines.concat(S.lines); renderTranscript();
+      if(S.stream&&(!S.recorder||S.recorder.state==='inactive')) startRecorder(S.stream);
+      $('dot').textContent='● REC';
+      alert('The last call could not be saved, so it is still open. Check call_coach_server.py is running, then press New call again.');
+    });
+  };
+  var rec=S.recorder; S.recorder=null;
+  if(rec&&rec.state!=='inactive'){ rec.onstop=function(){ setTimeout(after,300); }; rec.stop(); } else after();
+  return true;
+}
+/* New call (R): same lead, clean screen. With words on screen the call is saved first; with none there
+   is nothing to save. */
+function newCall(){
+  if(S.plain||!S.lines.length){ resetCall(); return; }
+  rollCall('');
+}
+/* Another lead: from Call Mode's Coach button, or the Switch box. In a live session the current call
+   is saved and the new lead's card, name, street, sale date and lane load in its place. */
+function takeLead(c, qs){
+  if(S.lead&&String(S.lead.case||'')===c) return;
+  try{ history.replaceState(null,'','/?'+qs); }catch(e){}
+  if(S.sid&&!S.plain&&$('app').className.indexOf('on')>=0){ if(!rollCall('', c)) loadLead(c); }
+  else loadLead(c);
+}
+function switchTo(){
+  var q=$('q2').value.trim(); if(q.length<2) return;
+  fetch('/api/lead?q='+encodeURIComponent(q)).then(function(r){ return r.json(); }).then(function(j){
+    var m=(j.matches||[])[0];
+    if(!m||!m.case){ $('q2').value=''; $('q2').placeholder='no match: '+q; return; }
+    $('q2').value=''; $('q2').placeholder='Switch lead: case, address or name'; $('q2').blur();
+    takeLead(String(m.case), 'case='+encodeURIComponent(m.case));
+  }).catch(function(){});
+}
+if(window.addEventListener) window.addEventListener('message', function(ev){
+  if(ev.source!==window.parent||window.parent===window) return;
+  var m=fcLeadMsg(ev.data); if(m) takeLead(m.c, m.qs);
+});
+
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, leadMsg:function(d){ return fcLeadMsg(d); }, resetCall:function(){ resetCall(); return {lines:S.lines.length, ai:S.ai.line, hist:S.ai.hist.length, box:$('ailine').className, fires:S.fc.fires.length}; }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 
-return {start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
+return {newCall:newCall,switchTo:switchTo,start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
         setKey:setKey,keepGoing:keepGoing,
