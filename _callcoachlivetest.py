@@ -356,7 +356,12 @@ with tempfile.TemporaryDirectory() as d:
         urllib.request.urlopen(req, timeout=15).read()
         chk('PLAN FACT FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'a fact already used on the call is not handed over again')
         suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
-        chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named: the model is told to ask what he is doing')
+        chk('ATTORNEY, FIRST TIME' in AI['seen'][-1]['body']['messages'][0]['content'] and 'money problem, not a legal problem' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'an attorney named the first time: the model is handed the money-problem-not-a-legal-problem reframe')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'My lawyer has it.'}], 'asked': ['This is a money problem, not a legal problem. Who is working on the money?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('ATTORNEY QUESTION FOR THIS LINE' in AI['seen'][-1]['body']['messages'][0]['content'], 'an attorney named again: the model is told to ask what he is doing')
         suggest([{'spk': '', 'text': 'Who is this?'}])
         chk('FOR THIS LINE' not in AI['seen'][-1]['body']['messages'][0]['content'], 'no plan named: no fact is pushed')
         # Busy after pushback is a brush-off; "what do I get" needs a real answer.
@@ -383,7 +388,7 @@ with tempfile.TemporaryDirectory() as d:
         urllib.request.urlopen(req, timeout=15).read()
         vp = AI['seen'][-1]['body']['messages'][0]['content']
         chk('USED UP ON THIS CALL' in vp and "why wouldn't five minutes be worth it" in vp and 'later today or first thing tomorrow' in vp
-            and 'full objection answer twice already' in vp and 'Ask a NEW way' in vp,
+            and "long 'why wouldn't five minutes' answer already" in vp and 'Ask a NEW way' in vp,
             'after two full objection answers and one ask, the model is told those words are used up and to ask a new way')
         # How we get paid is never invented.
         n3 = len(AI['seen']); AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The lender who does the work pays us a referral, so it is free to you.',
@@ -394,6 +399,37 @@ with tempfile.TemporaryDirectory() as d:
             'how we get paid: the model gets the facts, and an invented answer (a referral) is thrown away and asked again: %s' % j12.get('line'))
         AI['reply'] = ['HEARD: x\nTYPE: question\nSTEP: close\nSAY: The attorney pays us a commission.'] * 2
         chk(suggest([{'spk': '', 'text': 'So what do you guys get out of it?'}])[1].get('line') == '', 'a second invented pay answer shows nothing')
+        # The words of someone who expects a no are never shown; the callers' own chatter is never answered.
+        weak = 'HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Give him five minutes, and worst case you hang up and you have lost nothing.'
+        n4 = len(AI['seen']); AI['reply'] = [weak, work]
+        j13 = suggest([{'spk': '', 'text': 'I do not think so.'}])[1]
+        chk(j13.get('line', '').startswith('Sure. What is it') and len(AI['seen']) == n4 + 2 and 'expects a no' in AI['seen'][-1]['body']['messages'][0]['content'],
+            '"worst case you hang up and you have lost nothing" is thrown away and asked again: %s' % j13.get('line'))
+        AI['reply'] = [weak, weak]
+        chk(suggest([{'spk': '', 'text': 'I do not think so.'}])[1].get('line') == '', 'a second weak answer shows nothing')
+        n5 = len(AI['seen']); AI['reply'] = work
+        chk(suggest([{'spk': '', 'text': 'Bro this is too many words, what would you have said there?'}])[1].get('line') == '' and len(AI['seen']) == n5,
+            'the callers talking about the script is not answered, and the model is not even asked')
+        sp9 = AI['seen'][-1]['body']['messages'][0]['content']
+        chk('money problem, not a legal problem' in sp9 and 'under forty-five words' in sp9 and 'THE REFRAME' in sp9,
+            'the model is given the short objection answer: agree, one reframe, the ask')
+        # Praise filler never reaches the screen.
+        AI['reply'] = "HEARD: x\nTYPE: question\nSTEP: close\nSAY: You should check us out, that's smart. Our senior advisor has done this over thirty years. That's a great question. Judge him yourself."
+        j14 = suggest([{'spk': '', 'text': 'Is this for real though?'}])[1]
+        chk(j14.get('line') == 'You should check us out. Our senior advisor has done this over thirty years. Judge him yourself.',
+            '"that\'s smart" and "that\'s a great question" are cut out of the line: %s' % j14.get('line'))
+        AI['reply'] = "HEARD: x\nTYPE: answer\nSTEP: problem\nSAY: Okay, so you want to keep it, that's good to hear. What is the plan right now?"
+        j15 = suggest([{'spk': '', 'text': 'I want to keep it.'}])[1]
+        chk(j15.get('line') == 'Okay, so you want to keep it. What is the plan right now?', 'a compliment in the middle of a sentence is cut too: %s' % j15.get('line'))
+        # Wit: the opener's not-the-bank line is chosen for the call; a loan question gets the lender line.
+        AI['reply'] = work
+        suggest([{'spk': '', 'text': 'Hello, who is this?'}])
+        chk('OPENER WORDING FOR THIS CALL' in AI['seen'][-1]['body']['messages'][0]['content'], 'the opener is handed one witty way to say not the bank, not a buyer')
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': '', 'text': 'Can you guys get me a loan or something?'}], 'asked': ['What do you want to happen with the house?']}).encode())
+        urllib.request.urlopen(req, timeout=15).read()
+        chk('THEY ASKED ABOUT A LOAN OR A LENDER' in AI['seen'][-1]['body']['messages'][0]['content'] and 'do not lend money ourselves' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'a loan question is answered (we do not lend, licensed lenders) with the dry lender line')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
