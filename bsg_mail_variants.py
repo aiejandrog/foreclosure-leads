@@ -726,27 +726,35 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .t2 .src{margin-bottom:.08in}
 .t2 .ev{margin-bottom:.09in}
 .t2 .cta{font-size:15pt;margin:.06in 0 .02in}
-.pn{font:10.3pt/1.33 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.5in}
-.pn .nh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.16in}
-.pn .nco>b{display:block;font-size:1.25em;margin-bottom:.12in}
+.pn{font:10pt/1.3 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.36in}
+.pn .nh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.1in}
+.pn .nbar{width:1.9in;height:.23in;margin:0 0 .09in;background:repeating-linear-gradient(90deg,#000 0 2px,#fff 2px 3px,#000 3px 4px,#fff 4px 7px,#000 7px 10px,#fff 10px 11px,#000 11px 12px,#fff 12px 14px,#000 14px 15px,#fff 15px 19px);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pn .nstrip{background:#000;color:#fff;font-weight:700;font-size:.88em;white-space:nowrap;overflow:hidden;text-align:center;padding:.045in .1in;margin:0 0 .08in;letter-spacing:.02em;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pn .cols{background:#e2e2e2;border:1px solid #8f8f8f;padding:.1in .14in .03in;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pn .col+.col{border-left-color:#8f8f8f}
+.pn .nfine{font-size:6.6pt;line-height:1.24;color:#3d3d3d;text-align:justify;margin-top:.07in}
+.pn .nco>b{display:block;font-size:.95em;margin-bottom:.04in}
 .pn .natt{font-size:1em;line-height:1.4}
 .pn .nbox{border:1.5px solid #000;border-collapse:collapse;font-size:.86em;line-height:1.25;width:3.35in}
 .pn .nbox th{text-align:left;font-weight:400;padding:.028in .08in;vertical-align:top;width:54%%}
 .pn .nbox th i{font-style:normal;display:block;color:#333;font-size:.9em}
 .pn .nbox td{font-weight:700;padding:.028in .08in;vertical-align:top}
-.pn .nhead{text-align:center;font-weight:900;font-size:1.5em;line-height:1.15;margin:0 0 .03in}
-.pn .nhead.es{font-size:1.22em;margin-bottom:.05in}
-.pn .nsub{text-align:center;font-weight:700;font-size:.95em;margin:0 0 .13in}
+.pn .nhead{text-align:center;font-weight:900;font-size:1.9em;line-height:1.1;margin:0 0 .03in;border-top:3px solid #000;padding-top:.07in}
+.pn .nhead.es{font-size:1.2em;margin-bottom:.05in;border-top:0;padding-top:0}
+.pn .nsub{text-align:center;font-weight:700;font-size:.95em;margin:0 0 .07in}
 .pn .nsub span{display:block;font-weight:400}
 .pn .col{font-size:1em}
 .pn .col p{margin:0 0 .085in}
 .pn .lang{color:#000}
-.pn .cta{color:%(accent)s;font-size:1.5em;margin:.08in 0 .03in}
+.pn .cta{color:#000;font-size:1.6em;margin:.08in 0 .03in}
 .pn .nref{text-align:center;font-size:.92em;line-height:1.4;margin:0 0 .06in}
 .pn .nref b{font-weight:700}
 .pn .sigc{border-right-color:#000;color:#000}
 .t1.pn{font-size:9.9pt;line-height:1.3}
-.t2.pn{font-size:9.4pt;line-height:1.27}
+.t2.pn{font-size:9.2pt;line-height:1.24}
+.t2.pn .cols{padding:.07in .12in 0}
+.t2.pn .nfine{font-size:6.2pt;margin-top:.04in}
+.t2.pn .nhead{font-size:1.75em}
 .t2.pn .col p{margin-bottom:.06in}
 .t2.pn .nh{margin-bottom:.1in}
 .cover{font-size:11.5pt}
@@ -1065,19 +1073,22 @@ NOTICE = {
                 'Por favor, llame para hablar sobre su propiedad y el caso indicado arriba.'),
         'cta': ('CALL TODAY', 'LLAME HOY'),
         'envelope': 'Personal correspondence from %s',
-        'en': ["{recopen} I'm {signer} with {co}, a South Florida home buyer.",
+        'en': ["{recopen} **THIS MATTER IS TIME SENSITIVE.** I'm {signer} with {co}, a South "
+               'Florida home buyer.',
                '{salepara}',
-               'Tell me what you want to do with the property. If you want to sell, we can discuss a '
-               'possible purchase. If your goal is to keep the home or ask for more time, say that first.',
-               'Call **{phone}** and mention BSG File No. {fileno}. We close our outreach file on '
-               '**{callby}**. Calling gives us a chance to speak before our mailings end.'],
-        'es': ['{recopen} Soy {signer}, de {co}, una empresa que compra casas en el sur de la Florida.',
+               '**YOUR CALL IS REQUESTED** to tell us what you want to do with the property. If you '
+               'want to sell, we can discuss a purchase. If your goal is to keep the home or ask for '
+               'more time, say that first.',
+               'Call **{phone}** and refer to BSG File No. {fileno}. **FAILURE TO CALL BY {callby}** '
+               'means BSG closes this file and our letters to you end.'],
+        'es': ['{recopen} **ESTE ASUNTO ES URGENTE.** Soy {signer}, de {co}, una empresa que compra '
+               'casas en el sur de la Florida.',
                '{salepara}',
-               'Dígame qué desea hacer con la propiedad. Si desea vender, podemos hablar de una posible '
-               'compra. Si busca conservar su casa o pedir más tiempo, dígamelo primero.',
-               'Llame al **{phone}** y mencione el archivo de BSG {fileno}. Cerraremos nuestro '
-               'seguimiento el **{callby}**. Su llamada nos permite conversar antes de que terminemos '
-               'los envíos.'],
+               '**SOLICITAMOS SU LLAMADA** para que nos diga qué desea hacer con la propiedad. Si desea '
+               'vender, podemos hablar de una compra. Si busca conservar su casa o pedir más tiempo, '
+               'dígamelo primero.',
+               'Llame al **{phone}** y mencione el archivo de BSG {fileno}. **SI NO LLAMA A MÁS TARDAR '
+               'EL {callby}**, BSG cerrará este archivo y dejará de enviarle cartas.'],
     },
     2: {
         'head': ('SECOND NOTICE: WE HAVE NOT HEARD FROM YOU', 'SEGUNDO AVISO: NO HEMOS RECIBIDO SU RESPUESTA'),
@@ -1085,23 +1096,22 @@ NOTICE = {
                 'Le escribimos de nuevo sobre {street}.'),
         'cta': ('PLEASE CALL', 'POR FAVOR, LLAME'),
         'envelope': 'Personal correspondence from %s',
-        'en': ["**We have not heard from you** since our first letter about the foreclosure case "
+        'en': ['Our records indicate you have **NOT CALLED US YET** about the foreclosure case '
                "notice{rec}. I'm {signer} with {co}, a South Florida home buyer.",
                '{salepara}',
-               'You do not need to decide to sell before calling. Tell me what you want to do. If a '
-               'sale interests you, we can discuss the property and whether a purchase could fit '
-               'your plans.',
-               'Call **{phone}** by **{callby}**, when BSG closes its outreach file. Mention File '
-               'No. {fileno}. Start with: "I received your letter about my property."'],
-        'es': ['**No hemos recibido su respuesta** a nuestra primera carta sobre el aviso de ejecución '
+               '**A RESPONSE IS REQUESTED.** You do not need to decide to sell before calling. Tell me '
+               'what you want to do with the property. If a sale interests you, we can discuss a '
+               'purchase.',
+               'Call **{phone}** and refer to File No. {fileno}. **FAILURE TO CALL BY {callby}** means '
+               'BSG closes this file. Only one more letter follows this one.'],
+        'es': ['Nuestros registros indican que **AÚN NO NOS HA LLAMADO** sobre el aviso de ejecución '
                'hipotecaria{rec}. Soy {signer}, de {co}, una empresa que compra casas en el sur de '
                'la Florida.',
                '{salepara}',
-               'No necesita decidir vender antes de llamar. Cuénteme qué desea hacer. Si le interesa '
-               'vender, podemos hablar de la propiedad y ver si una compra podría ajustarse a sus '
-               'planes.',
-               'Llame al **{phone}** a más tardar el **{callby}**, cuando BSG cerrará su seguimiento. '
-               'Mencione el archivo {fileno}. Puede empezar así: "Recibí su carta sobre mi propiedad".'],
+               '**SOLICITAMOS SU RESPUESTA.** No necesita decidir vender antes de llamar. Dígame qué '
+               'desea hacer con la propiedad. Si le interesa vender, podemos hablar de una compra.',
+               'Llame al **{phone}** y mencione el archivo {fileno}. **SI NO LLAMA A MÁS TARDAR EL '
+               '{callby}**, BSG cerrará este archivo. Después de esta carta solo le enviaremos una más.'],
     },
     3: {
         'head': ('FINAL NOTICE: IMMEDIATE RESPONSE REQUIRED', 'AVISO FINAL: SE REQUIERE RESPUESTA INMEDIATA'),
@@ -1109,28 +1119,28 @@ NOTICE = {
                 'Para conversar antes de que BSG cierre su seguimiento, llame a más tardar el {callby}.'),
         'cta': ('FINAL LETTER, CALL', 'ÚLTIMA CARTA, LLAME'),
         'envelope': 'Final correspondence from %s',
-        'en': ["**This is our last letter about your property.** I'm {signer} with {co}, a South "
-               'Florida home buyer. We have not heard from you after our earlier letters.',
+        'en': ['**THIS IS OUR FINAL ATTEMPT TO REACH YOU** about your property. Our records '
+               "indicate you have **NOT CALLED US** after our earlier letters. I'm {signer} with {co}, "
+               'a South Florida home buyer.',
                '{salepara}',
-               '{recsent}If you want to discuss a possible sale, call **{phone}**. Tell me what you '
-               'want to do before we discuss a purchase.',
-               "On **{callby}**, we close **BSG's outreach file** and end this mailing series. That "
-               'date concerns our mailings. To speak before then, call and mention File No. {fileno}.'],
-        'es': ['**Esta es nuestra última carta sobre su propiedad.** Soy {signer}, de {co}, una '
-               'empresa que compra casas en el sur de la Florida. No hemos recibido su respuesta a '
-               'las cartas anteriores.',
+               '{recsent}**IMMEDIATE RESPONSE IS REQUIRED** if you want to discuss a sale before this '
+               'file closes. Call **{phone}** and tell me what you want to do.',
+               '**FAILURE TO CALL BY {callby}** means BSG closes File No. {fileno} and you will '
+               "receive no further letters from us. That date is BSG's own cutoff."],
+        'es': ['**ESTE ES NUESTRO ÚLTIMO INTENTO DE COMUNICARNOS CON USTED** sobre su propiedad. '
+               'Nuestros registros indican que **NO NOS HA LLAMADO** después de nuestras cartas '
+               'anteriores. Soy {signer}, de {co}, una empresa que compra casas en el sur de la Florida.',
                '{salepara}',
-               '{recsent}Para hablar de una posible venta, llame al **{phone}**. Cuénteme qué desea '
-               'hacer antes de que hablemos de una compra.',
-               'El **{callby}** cerraremos **el archivo de seguimiento de BSG** y terminaremos esta '
-               'serie de cartas. Esa fecha corresponde a nuestros envíos. Para conversar antes, llame '
-               'y mencione el archivo {fileno}.'],
+               '{recsent}**SE REQUIERE RESPUESTA INMEDIATA** si desea hablar de una venta antes de que '
+               'se cierre este archivo. Llame al **{phone}** y dígame qué desea hacer.',
+               '**SI NO LLAMA A MÁS TARDAR EL {callby}**, BSG cerrará el archivo {fileno} y no '
+               'recibirá más cartas nuestras. Esa fecha es el cierre propio de BSG.'],
     },
 }
 _NBOX = (('Notice Date', 'Fecha de esta carta'), ('BSG File No.', 'N.º de archivo de BSG'),
         ('Court Case No.', 'N.º de caso judicial'), ('County', 'Condado'),
         ('Call By: BSG outreach closes', 'Llame a más tardar: cierre del seguimiento de BSG'),
-        ('Phone', 'Teléfono'))
+        ('Phone', 'Teléfono'), ('File Status', 'Estado del archivo'))
 
 
 def _bold(text):
@@ -1184,9 +1194,29 @@ def notice_html(r, today, touch, cb):
     city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else ''
     place = ('%s, ' % city.title() if city else '') + '%s %s' % (r.get('to_state') or 'FL', r['zip'])
     box_v = (('%s · %s' % (date_en(today), date_es(today))), show_code(r['code']), r['case'],
-             f.get('county') or '', '%s · %s' % (date_en(cb), date_es(cb)), M.contact_phone())
+             f.get('county') or '', '%s · %s' % (date_en(cb), date_es(cb)), M.contact_phone(),
+             'OPEN · ABIERTO' if touch == 1 else 'NO RESPONSE ON FILE · SIN RESPUESTA')
+    nw = '<span style="white-space:nowrap">%s</span>' % _e(M.contact_phone())
+    county = f.get('county') or ''
+    fine = ('This notice concerns the property at %s and %scourt case no. %s%s. It is issued by %s under '
+            'BSG File No. %s. Call %s and refer to that file number. BSG closes this file on %s; after '
+            'that date this mailing series ends and the file is closed with no response on record. Have '
+            'this notice with you when you call. &middot; Este aviso se refiere a la propiedad ubicada en '
+            '%s y al caso judicial n.&ordm; %s%s%s. Lo emite %s bajo el archivo de BSG %s. Llame al %s y '
+            'mencione ese n&uacute;mero de archivo. BSG cerrar&aacute; este archivo el %s; despu&eacute;s '
+            'de esa fecha termina esta serie de cartas y el archivo se cierra sin respuesta registrada. '
+            'Tenga este aviso a la mano cuando llame.'
+            % (_e(M.street_case(r['addr'].split(',')[0])), ('%s County ' % _e(county)) if county else '',
+               _e(r['case']), _e(notice_vals(r, today, 'en', cb)['rec']), _e(_co()),
+               _e(show_code(r['code'])), nw, _e(date_en(cb)),
+               _e(M.street_case(r['addr'].split(',')[0])), _e(r['case']),
+               (' del condado de %s' % _e(county)) if county else '',
+               _e(notice_vals(r, today, 'es', cb)['rec']), _e(_co()), _e(show_code(r['code'])), nw,
+               _e(date_es(cb))))
+    strip = ('FORECLOSURE CASE NO. %s%s &nbsp;|&nbsp; CALL &middot; LLAME: %s'
+             % (_e(r['case']), (' &middot; %s COUNTY' % _e(county.upper())) if county else '', nw))
     box = ''.join('<tr><th>%s<i>%s</i></th><td>%s</td></tr>' % (_e(a), _e(b), _e(v))
-                  for (a, b), v in zip(_NBOX, box_v) if v)
+                  for (a, b), v in zip(_NBOX, box_v) if v and a != 'County')
     cols = ''
     for lang in ('en', 'es'):
         v = notice_vals(r, today, lang, cb)
@@ -1196,27 +1226,29 @@ def notice_html(r, today, touch, cb):
     hours = ('Hours: %s Eastern Time · Horario: %s, hora del Este<br>' % (NOTICE_HOURS, NOTICE_HOURS_ES or NOTICE_HOURS)
              if NOTICE_HOURS else '')
     return ('<section class="pc pn" data-case="%s" data-variant="N%d"><div class="in">'
-            '<div class="nh"><div class="nco"><b>%s</b><div class="natt">'
+            '<div class="nh"><div class="nco"><b>%s</b><div class="nbar"></div><div class="natt">'
             '<b>ATTENTION &middot; ATENCI&Oacute;N:</b> %s<br>'
             '<b>RE: PROPERTY &middot; ASUNTO: PROPIEDAD:</b><br>%s, %s</div></div>'
             '<table class="nbox">%s</table></div>'
             '<div class="nhead" lang="en">%s</div><div class="nhead es" lang="es">%s</div>'
             '<div class="nsub">%s<span>%s</span></div>'
+            '<div class="nstrip">%s</div>'
             '<div class="cols">%s</div>'
             '<div class="cta">%s &middot; %s: <span style="white-space:nowrap">%s</span></div>'
             '<div class="nref">%sRefer to <b>BSG File No. %s</b> &middot; Mencione el <b>n.&ordm; de '
             'archivo de BSG %s</b></div>'
-            '%s</div>'
+            '%s<div class="nfine">%s</div></div>'
             '<div class="ft">%s<span class="fr">Ref. %s &middot; N%d</span></div></section>'
             % (_e(r['case']), touch, _e(_co()), _e(M.person_name(r['owner'])),
                _e(M.street_case(r['addr'])), _e(place), box,
                _e(n['head'][0]), _e(n['head'][1]),
-               _e(n['sub'][0].format(**v_en)), _e(n['sub'][1].format(**v_es)),
-               cols.replace(_e(M.contact_phone()),      # a phone number never splits across lines
-                            '<span style="white-space:nowrap">%s</span>' % _e(M.contact_phone())),
+               _e(n['sub'][0].format(**v_en)), _e(n['sub'][1].format(**v_es)), strip,
+               cols.replace(_e(M.contact_phone()), nw)   # phone and file numbers never split across lines
+                   .replace(_e(show_code(r['code'])),
+                            '<span style="white-space:nowrap">%s</span>' % _e(show_code(r['code']))),
                _e(n['cta'][0]), _e(n['cta'][1]), _e(M.contact_phone()),
                _e(hours).replace('&lt;br&gt;', '<br>'), _e(show_code(r['code'])), _e(show_code(r['code'])),
-               sig_html(r, False, ''), footer_line(), _e(r['case']), touch))
+               sig_html(r, False, ''), fine, footer_line(), _e(r['case']), touch))
 
 
 def check_notices(pieces, rows, touch, today, cb_of, never=()):
