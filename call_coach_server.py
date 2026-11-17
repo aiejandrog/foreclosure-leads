@@ -101,10 +101,14 @@ def deepgram_key():
 # and gets a sentence back. Only the spoken words go out; no case number, address or owner name
 # from the lead file is ever put in the prompt.
 AI_URL = os.environ.get("COACH_AI_URL", "https://api.venice.ai/api/v1/chat/completions")
-# Scored 2026-11-16 on twelve moments from the test calls, twice each: deepseek-v4-flash 17/24 at
-# 1.5 s median (6.1 s worst), deepseek-v4-1-flash 22/24 at 1.0 s (2.7 s worst). The newer one is
-# both the faster and the one that answers "how can you help me" with the offer.
-AI_MODEL = os.environ.get("COACH_AI_MODEL", "deepseek-v4-1-flash")
+# MODEL. deepseek-v4-1-flash ran the coach on 11-16 and was fast (1.2 s typical) but could not
+# improvise: on six moments outside any script (ex-wife on the deed, a wife in surgery, already
+# scammed once) it fell back to the same "has anybody shown you what that date costs" question.
+# claude-sonnet-5-5 answered the actual thing every time, at 2.1 s typical and 6.0 s worst, and
+# about a dollar a call instead of eleven cents. claude-opus-5-5 took over ten seconds and came
+# back blank. Alejandro, 11-16: "switch to Sonnet". COACH_AI_MODEL overrides.
+AI_MODEL = os.environ.get("COACH_AI_MODEL", "claude-sonnet-5-5")
+AI_TIMEOUT = float(os.environ.get("COACH_AI_TIMEOUT", "9"))      # seconds per try; Sonnet's slow lines run 4 to 6
 # The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
 # this prompt only said "reflect and ask a question", and on test call 11-16 11:34 it circled:
 # "sounds like you're feeling overwhelmed, what would a good outcome look like" three times and
@@ -619,7 +623,7 @@ _PRAISE_CORE = (
     r"a good question|a fair question|a great point|a good point|a fair point|fair|fair enough|real|understandable|"
     r"totally understandable|the right move|the right call|the right thing|a good start|a real start|good thinking)"
     r"(?: to (?:ask|hear|know|do))?(?: of you)?"
-    r"|(?:great|good|fair|smart|excellent|awesome|love that|nice|perfect)(?: question| point| call| move)?)")
+    r"|(?:great|good|fair|smart|excellent|awesome|love that|nice|perfect)(?: question| point| call| move| enough)?)")
 _AI_PRAISE = re.compile(r"(^|[.!?,])\s*" + _PRAISE_CORE + r"\s*([.!,])\s*", re.I)
 
 
@@ -749,7 +753,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
             try:
                 req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
                                              headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=5) as r:
+                with urllib.request.urlopen(req, timeout=AI_TIMEOUT) as r:
                     j = json.loads(r.read().decode("utf-8"))
                 out = str(j["choices"][0]["message"].get("content") or "")
             except Exception:
