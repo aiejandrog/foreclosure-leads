@@ -1,58 +1,58 @@
 {
  "alerts": [
   {
-   "at": "2026-11-16T13:33:13-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "Trailing 7-day lower bound 18.3% (raw 27.7%, 18 of 65) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-16T13:33:13-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-16T13:33:13-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-15 21:11): on battery; battery 34% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DealFlow Daily Routes); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 11-16 21:09): battery 45% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-11-16T13:33:13-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
   },
   {
-   "at": "2026-11-16T13:33:13-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-16T13:33:13-05:00",
+ "published_at": "2026-11-16T21:09:28-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 7,
+   "errors": 1,
    "filings": 3134,
-   "holds": 755,
+   "holds": 769,
    "last_http_status": 0,
-   "leads_checked": 29,
-   "match_s": 3,
-   "needing_search": 3513,
+   "leads_checked": 30,
+   "match_s": 1,
+   "needing_search": 3480,
    "provider": "courtlistener",
-   "pull_age_h": 1.44,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "network",
-   "requests_used": 98,
-   "searched_this_run": 29,
+   "reason": "time_budget",
+   "requests_used": 104,
+   "searched_this_run": 30,
    "starved_runs": 0,
    "truncated": 0
   },
@@ -133,7 +133,7 @@
      "run_end": 1,
      "send_answer": 57,
      "task_open": 1,
-     "worker_loaded": 9
+     "worker_loaded": 11
     },
     "no_email": {
      "none": 6
@@ -145,7 +145,7 @@
      "followups_off": 6,
      "merge_fields": 4
     },
-    "rows": 77,
+    "rows": 79,
     "skipped": {}
    }
   },
@@ -169,7 +169,7 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-11-15T21:11:11-05:00",
+   "at": "2026-11-16T21:09:28-05:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -182,18 +182,16 @@
    "disabled_names": [
     "DEALFLOW Phones"
    ],
-   "failed": 1,
-   "failed_names": [
-    "DealFlow Daily Routes"
-   ],
+   "failed": 0,
+   "failed_names": [],
    "interactive": 3,
    "interactive_names": [
     "DEALFLOW Phones",
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": false,
-   "pct": 34,
+   "on_ac": true,
+   "pct": 45,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
