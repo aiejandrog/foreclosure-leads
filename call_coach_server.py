@@ -174,8 +174,7 @@ AI_SYSTEM = (
     "it.\n"
     "  3. Isolate: if it cost nothing and could not touch the plan they already have, is there any other reason "
     "not to take five minutes.\n"
-    "  4. Worst case: five minutes, and if nothing fits you shake hands and part friends, and they lost "
-    "nothing.\n"
+    "  4. The trade: five minutes on one side, the house on the other. Which one can they afford to skip.\n"
     "  5. What if: what if he points out one option nobody else has shown them.\n"
     "  6. Fairness: five minutes against the house is a trade worth making, right.\n"
     "  7. Busy: then name the time, later today or first thing tomorrow, and it is five minutes.\n"
@@ -215,29 +214,50 @@ AI_SYSTEM = (
     "ask them to rate themselves ('is it really the time, or are you not sure it's worth it?').\n"
     "- CALM AND SURE. No pleading, no rushing, no stacking five reasons. One picture, one question, or one "
     "full objection answer. The calendar (how far off the sale is, in words) is the only pressure you use.\n"
-    "TWO KINDS OF LINE:\n"
-    "1. A QUESTION LINE, for moving the conversation: react to what they said in their words, then one "
-    "scenario question in plain words. Around twenty to forty words. Like his buyer example.\n"
-    "2. THE OBJECTION ANSWER, for any pushback (not interested after the challenge, busy, I have a lawyer, "
-    "it's handled, what's in it for me, I need to think, call me later, a flat no). It follows his words "
-    "closely, forty to eighty words, and has these beats in this order:\n"
-    "   a. A few words that pick up what they just said.\n"
-    "   b. 'So why wouldn't five minutes be worth it' to see what solutions there are for THEIR property and "
-    "do what THEY said they want with it (keep it, keep the equity, sell it right, get time), 'instead of "
-    "going in blind' or relying on only the one thing they have going.\n"
-    "   c. What they get: in the consultation every step gets laid out in front of them.\n"
-    "   d. Nothing to lose, it's completely free.\n"
-    "   e. 'If you decide you don't want to work with us, we shake hands and we part friends.'\n"
-    "   f. End on 'How does that sound?' (or 'That's fair, right?'), or straight to the time if they are "
-    "already leaning yes.\n"
-    "   Keep it to what he can say in one breath and a half: never more than eighty-five words. If you put a "
-    "point in front of beat b, it is ONE sentence. Do not give the full objection answer twice in a row: if "
-    "your last line was one, this line is a question line or the ask.\n"
-    "   The full answer is strong the first time and tired the third. Use it at most TWICE on a call. After "
-    "that, answer the new thing they said in one or two fresh sentences and ask for the appointment a way "
-    "you have not asked yet. The words 'by the way' and 'Okay, so' are his, but not in every line: vary how "
-    "lines open and connect. Getting the appointment booked takes range, so every ask on a call uses "
-    "different words.\n"
+    "TOO MANY WORDS. Call 11-16 18:57, said out loud on the call: 'this is too many words, and words that "
+    "are not for me to say.' And: 'disgusting objection handling, like worst case you hang up and you've lost "
+    "nothing.' Both are right. An objection is not handled by saying it is free and they have nothing to lose. "
+    "It is handled by telling them the ONE thing about their situation they have not thought of. So:\n"
+    "TWO KINDS OF LINE, AND BOTH ARE SHORT:\n"
+    "1. A QUESTION LINE: react in their words, then one plain scenario question. Under thirty words.\n"
+    "2. THE OBJECTION ANSWER: three beats, under forty-five words in all.\n"
+    "   a. Agree in three to six words. Not an apology, not 'I hear you'.\n"
+    "   b. THE REFRAME: one or two plain sentences that change how they see what they just said. This is the "
+    "whole answer. Pick the one that fits:\n"
+    "      A lawyer: 'What you're dealing with is a money problem, not a legal problem. Nobody's accusing you "
+    "of a crime. Your lawyer can push the date, but every day it gets pushed, interest and fees get added, "
+    "and that comes out of your equity.'\n"
+    "      It's under control / handled: 'A week out, under control means it's in writing. Is it in writing?'\n"
+    "      The bank is helping: 'The bank looking at it and the court selling it are two different offices, "
+    "and they don't talk to each other. The sale doesn't wait for the bank.'\n"
+    "      Money is coming: 'The court doesn't wait for a check. If it's a day late, the house is already "
+    "sold.'\n"
+    "      Busy: 'This takes five minutes. The sale takes the house. Which one do you have time for?'\n"
+    "      Call me another day: 'Another day could be after the sale. It's in about a week.'\n"
+    "      Other companies keep calling: 'They're calling to buy your house cheap. I'm the one call that isn't "
+    "trying to take it.'\n"
+    "      How do I know you're legit: 'You should check. Our senior advisor has done this over thirty years. "
+    "Give him five minutes and judge him yourself.'\n"
+    "      What can you even do: name the one thing the advisor does that fits what they want (more time from "
+    "the court, a buyer who can close before the date, a new loan through a licensed lender, leaving on their "
+    "date with money in hand).\n"
+    "      I need to think about it: 'Think about what? You don't have the options yet. Get them first, then "
+    "think.'\n"
+    "      My wife / husband: 'Then bring her a list, not a guess. Five minutes gets you the list.'\n"
+    "      Giving up: 'Leaving is fine. Leaving on a date somebody else picks, with nothing, is the part to "
+    "avoid.'\n"
+    "   c. The ask, in fresh words, with a time: 'What time are you done today?'\n"
+    "   His longer answer (why wouldn't five minutes be worth it, every step laid out, shake hands and part "
+    "friends, how does that sound) is for ONE moment per call, when they are close and wavering, and even "
+    "then under fifty-five words.\n"
+    "NEVER SAY, anywhere: 'worst case', 'you hang up', 'you've lost nothing', 'nothing to lose' more than "
+    "once, 'no pressure', 'I'm not going to push you', 'I'm not picking on you', 'I'm not going to argue', "
+    "'I've been talking too much', 'I'll stop talking', 'I'll leave you be', 'shortest call of your week'. "
+    "Those are the words of someone who expects a no. You expect a yes.\n"
+    "THE CALLERS TALKING TO EACH OTHER. Two people share the caller's side and they sometimes talk about the "
+    "script out loud ('too many words', 'what would you have said there', 'let me see what it says', 'it "
+    "keeps changing'). That is not the homeowner. Never answer it. If the newest words are that, reply with "
+    "TYPE: unclear and repeat your last ask in five words.\n"
     "Other rules that still hold: never open with 'Fair question', 'That's fair', 'I understand', 'I hear "
     "you', 'It sounds like', 'No worries', 'Understood'. No dashes, no lists. Never a discovery question "
     "they already answered. The two-times question (later today or first thing tomorrow) once per call; "
@@ -384,26 +404,24 @@ def plan_hint(last_said, given, when=""):
                 "things the senior advisor does, picked to match what THIS homeowner said they want, from: asking the "
                 "court for more time; bringing a buyer who can close in cash before the sale date; replacing the loan "
                 "through a licensed lender; getting a modification resubmitted the right way; leaving on a date they "
-                "pick with money in hand. Say them plainly, as what he does, not as a promise. Then one sentence that "
-                "it is five minutes and free, and ask what time today works." + clock +
+                "pick with money in hand. Say them plainly, as what he does, not as a promise. Then ask what time "
+                "today works. Under forty-five words." + clock +
                 " This overrides the one-thought rule for this line.")
     if _AI_VALUE.search(last_said):
         return ("\n\nTHEY ASKED AGAIN WHAT THEY GET. Never say you do not offer anything. Your SAY: the ONE thing the "
                 "senior advisor does that fits what they said they want, in one plain sentence, in different words "
                 "than before; then that it is five minutes and free; then ask what exact time today they are free." + clock)
-    if _AI_BUSY.search(last_said) and len(re.findall(r"why wouldn.?t five minutes", used)) >= 2:
+    if False:
         return ("\n\nBUSY / NO TIME, and you have already given the full objection answer twice. Do not give it "
                 "again. Your SAY, in fresh words: pick up that they are busy in a few words, say why it cannot wait "
                 "in one plain sentence, then take the scheduling off them by asking what time they are done today so "
                 "the advisor calls them right then." + clock)
     if _AI_BUSY.search(last_said):
-        return ("\n\nBUSY / NO TIME. This is pushback, not a calendar problem. Your SAY is THE OBJECTION ANSWER in "
-                "Alejandro's words: pick up that they are busy in a few words, then 'so why wouldn't five minutes "
-                "of your time be worth it' to see what solutions there are for their property and do what they "
-                "said they want with it, instead of going in blind; in the consultation every step gets laid out "
-                "in front of them; nothing to lose, completely free; if they don't want to work with us we shake "
-                "hands and part friends; end on 'How does that sound?'." + clock + " Never ask whether it is "
-                "really the time or whether five minutes is worth it to them.")
+        return ("\n\nBUSY / NO TIME. This is pushback, not a calendar problem. Your SAY is the short objection answer: "
+                "agree in a few words; then the reframe in one plain sentence (this takes five minutes, the sale "
+                "takes the house, or another day could be after the sale); then ask what time they are done today so "
+                "the advisor calls them right then. Under forty-five words." + clock + " Never ask whether it is "
+                "really the time, and never say they have nothing to lose.")
     for pat, fact, key in AI_PLAN_FACTS:
         if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
             return ("\n\nPLAN FACT FOR THIS LINE. The homeowner just named a plan. Your SAY, in the spoken 'Okay, so by "
@@ -412,6 +430,12 @@ def plan_hint(last_said, given, when=""):
                     "question with their details in it. The fact: " + fact + ". Say it as what usually happens, not as a promise. This "
                     "overrides the one-thought rule for this line.")
     pat, q, key = AI_ATTY_Q
+    if re.search(pat, last_said, re.I) and not re.search(r"money problem|not a legal", used, re.I):
+        return ("\n\nATTORNEY, FIRST TIME. Your SAY is his reframe, in plain words, under forty-five words: that's good, "
+                "keep him; but what they are dealing with is a money problem, not a legal problem, and nobody is "
+                "accusing them of a crime; the lawyer can push the date, but every day it gets pushed interest and "
+                "fees get added and that comes out of their equity. Then ask, in words anybody follows, who is actually "
+                "talking to the association or the bank about what they owe. Never say 'the money side'." + clock)
     if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
         return ("\n\nATTORNEY QUESTION FOR THIS LINE. The homeowner brought up their attorney. Your SAY, in plain words "
                 "anybody follows: that's good and they should keep him, he handles the court part; then " + q +
@@ -426,14 +450,18 @@ def plan_hint(last_said, given, when=""):
 # "by the way" in nearly every line. The model is told what it has already used on THIS call and may
 # not use it again; the objection answer in his full words is good twice, then it has to find new ones.
 AI_STOCK = [
-    (r"why wouldn.?t five minutes", "why wouldn't five minutes be worth it", 2),
+    (r"why wouldn.?t five minutes", "why wouldn't five minutes be worth it", 1),
     (r"going in (kind of )?blind", "going in blind", 2),
-    (r"shake hands", "shake hands and part friends", 2),
+    (r"shake hands", "shake hands and part friends", 1),
     (r"how does that sound", "How does that sound?", 2),
-    (r"nothing to lose", "nothing to lose", 2),
+    (r"nothing to lose", "nothing to lose", 1),
+    (r"completely free|it.?s free|\bfree\b", "it's free", 2),
     (r"laid out in front of you", "every step laid out in front of you", 2),
     (r"later today or first thing tomorrow", "later today or first thing tomorrow", 1),
     (r"which (one )?is easier", "which is easier for you", 1),
+    (r"what time are you done", "what time are you done today", 1),
+    (r"call(s)? you right then|call you then", "so he can call you right then", 1),
+    (r"what time (today )?works", "what time works", 1),
     (r"what are you going to do", "what are you going to do", 2),
     (r"by the way", "by the way", 2),
     (r"sitting there", "still sitting there a week out", 1),
@@ -473,8 +501,8 @@ def variety_note(prior):
         out += "\nYour last line opened with '" + m.group(1) + "'. Open this one differently."
     if sum(1 for x in prior if re.match(r"\s*okay,? so\b", x, re.I)) >= 3:
         out += "\nYou have opened three lines with 'Okay, so'. Do not open with it again on this call."
-    if len(re.findall(r"why wouldn.?t five minutes", text)) >= 2:
-        out += ("\nYou have given the full objection answer twice already. Not again on this call. Answer what they "
+    if len(re.findall(r"why wouldn.?t five minutes", text)) >= 1:
+        out += ("\nYou have given the long 'why wouldn't five minutes' answer already. Not again on this call. Answer what they "
                 "just said in ONE or two fresh sentences, then ask for the appointment.")
     asks = len(re.findall(r"later today|first thing tomorrow|what time|when can he|give me a time|on his calendar|on the calendar", text))
     if asks >= 1:
@@ -500,6 +528,17 @@ AI_PAY_ANSWER = (
     "there are programs where both sides come out winning and they do not come out of pocket; how any of that would "
     "work for THEIR case is exactly what he lays out on the call, and they decide. NEVER say who pays us, never say "
     "referral, commission, or that a lender or attorney pays. Then ask for the appointment in fresh words.")
+
+
+# The words of someone who expects a no (his note, 11-16: "disgusting objection handling"). A line
+# that leans on them is asked again; twice, nothing is shown.
+_AI_WEAK = re.compile(r"worst case|you hang up|lost nothing|lose nothing|no pressure|not (going to|gonna) push|not picking on|"
+                      r"not (going to|gonna) argue|talking too much|stop talking|saying a lot|throwing too much|"
+                      r"shortest call", re.I)
+# The two callers talking to each other about the script, picked up by the one microphone.
+_AI_META = re.compile(r"too many (fucking |damn )?words|what would you have said|what (does|did) (it|that) say|see what (it|that) says|"
+                      r"it keeps changing|line for line|words that are not|the (script|coach|computer)\b|"
+                      r"answer (like|as if) you.?re answering|something along th(e|ose) lines", re.I)
 
 
 def folds(res):
@@ -640,11 +679,19 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         return res
 
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
+    if _AI_META.search(last_said):
+        return {}                      # the callers are talking about the script: keep what is on screen
     if not rows[-1].startswith("CALLER"):
         system += plan_hint(last_said, prior + [shown], when)
         if _AI_PAYQ.search(last_said):
             system += AI_PAY_ANSWER
     res = ask(system)
+    if res and _AI_WEAK.search(res.get("line", "")) and res.get("type") != "stop":
+        res = ask(system + "\n\nYour last answer used the words of someone who expects a no (worst case, hang up, "
+                  "lost nothing, no pressure, not going to push, talking too much). Never. Give the short objection "
+                  "answer: agree in a few words, ONE reframe about their situation, then the ask with a time.")
+        if res and _AI_WEAK.search(res.get("line", "")):
+            return {}
     # A made-up answer about how we get paid is never shown: asked again with the facts, then dropped.
     if res and _AI_PAYLIE.search(res.get("line", "")):
         res = ask(system + AI_PAY_ANSWER + " Your last answer invented how the company gets paid. That is forbidden.")
