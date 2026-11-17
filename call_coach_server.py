@@ -469,6 +469,12 @@ _AI_YESWORD = re.compile(r"^\W*(yes|yeah|yep|yup|okay|ok|sure|fine|alright|all r
                          r"go ahead|i guess( so)?|si|claro|esta bien)\b", re.I)
 _AI_ASKEDFOR = re.compile(r"five minutes|senior advis|later today|first thing tomorrow|ten tomorrow|four (today|this afternoon)|"
                           r"what time|does that work|sound\?", re.I)
+# What the CALLER says when he is closing. Call 11-17 09:36: his own "Ten tomorrow morning or later this
+# evening, how does that sound?" was heard as the homeowner giving a day, and the box jumped to "Okay,
+# ten tomorrow morning, save my number" while she was asking what we sell.
+_AI_CALLERSAID = re.compile(r"how does that sound|does that work|save my number|read it back|senior advis|he calls you", re.I)
+# The hour already agreed, read from the booking lines given so far ("he calls you right at six").
+_AI_BOOKED = re.compile(r"calls? you (?:right )?at ([a-z]+)", re.I)
 _AI_WANT = re.compile(r"\b(an offer|your (offer|price)|what'?s your price|how much (would|will|can) you|a buyer|sell it|"
                       r"more time|buy (me )?(some )?time|a loan|refinanc|keep (it|my house|the house)|stay in (it|my house))\b", re.I)
 
@@ -480,6 +486,14 @@ def mate_hint(last_said, given):
     asked_already = bool(_AI_ASKEDFOR.search(used))
     if _AI_NOTINT.search(last_said) or _AI_BUSY.search(last_said) and not _AI_DAYWORD.search(last_said):
         return ""
+    if _AI_CALLERSAID.search(last_said):
+        return ""                       # the caller reading his own close is never the homeowner booking
+    _bk = _AI_BOOKED.findall(used)
+    if _bk and _AI_YESWORD.search(last_said) and len(last_said.split()) <= 8 and not _AI_DAYWORD.search(last_said):
+        # Same call, 04:29: booked at six, she said "Okay. Sounds good. Thank you." and the box offered ten tomorrow.
+        return ("\n\nIT IS ALREADY BOOKED for " + _bk[-1].lower() + " and they just confirmed it. TYPE: time, STEP: booked. Your "
+                "SAY, fifteen words or fewer: they are set for that hour, pick up when he calls, and thank them. Do NOT "
+                "name any other hour and do NOT ask them to save or read back a number again.")
     hour = "four this afternoon" if re.search(r"\b(today|tonight|later|this (afternoon|evening)|after work|hoy|esta tarde)\b", last_said, re.I) else "ten tomorrow morning"
     if asked_already and _AI_DAYWORD.search(last_said) and not re.search(r"\b(not|can'?t|cannot|won'?t|never|don'?t)\b", last_said, re.I):
         return ("\n\nTHEY GAVE YOU A DAY. That is a yes. TYPE: time, STEP: booked. Your SAY, twenty-five words or fewer: "

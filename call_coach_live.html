@@ -90,6 +90,12 @@ code{color:var(--accent)}
 #aisteps span.now{background:#4aa3ff;color:#04121f;font-weight:700}
 #ailine .heard{font-size:12px;color:#8aa2b8;margin-bottom:6px;font-style:italic}
 #objection.behind,#sayline.behind,#saynote.behind{opacity:.4}
+#aitone{margin:2px 0 8px} #aitone svg{width:100%;height:auto;display:block;max-width:760px}
+#aitone .tl{font:700 9px system-ui,sans-serif;fill:#8aa2b8;letter-spacing:.08em} #aitone .tw{font:9px system-ui,sans-serif;fill:#56708a} #aitone .tp{font:700 8px system-ui,sans-serif;fill:#ffb347}
+#aitone .lg{font-size:10px;color:#56708a;margin-top:1px}
+#aibody .tn:after{content:attr(data-m);font-size:15px;font-weight:700;color:#8aa2b8;white-space:nowrap}
+#aibody .tn.up:after{color:#ff9a3c} #aibody .tn.dn:after{color:#6c9bff}
+#aibody .tn.key{font-weight:700} #aibody .tn.slow{letter-spacing:.02em}
 #ailine .prev{font-size:12px;line-height:1.4;color:#6f8296;margin-top:8px}
 #objection .who{color:var(--warn);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;padding-right:24px}
 #objection .back{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#38c172;margin-bottom:6px}
@@ -268,7 +274,7 @@ code{color:var(--accent)}
       </div>
     </div>
 
-    <div id="ailine"><div class="who" id="aiwho">Say this next</div><div id="aisteps"></div><div class="heard" id="aiheard"></div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
+    <div id="ailine"><div class="who" id="aiwho">Say this next</div><div id="aisteps"></div><div class="heard" id="aiheard"></div><div id="aitone"></div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
 
     <div id="objection">
       <button class="x" title="dismiss (D)" onclick="Coach.dismissObjection()">&times;</button>
@@ -882,6 +888,48 @@ function fcKeepLine(cur, j){
   if(type==='answer'&&a>=0&&b>=0&&b<=a&&cur.shownMs<25000) return true;   /* another wording of the same step */
   return false;
 }
+/* HOW TO SAY IT (Alex, 11-17: "add a graph indicating the pitch of the voice and how I should present
+   it", after Vinh Giang's five-lane graphic: speed, pitch, volume, pause). fcTone turns the line into
+   phrases, each with where the voice starts and lands (0 low .. 1 high), how loud, how fast, and how
+   long to stop after it. No model call: it is worked out from the line itself, so it costs nothing and
+   shows with the line.
+   - a statement lands DOWN (sure of itself), a real question goes UP (curious), then you stop talking
+   - the ask for the time goes DOWN, like it is already settled, then you wait
+   - the hard question ("so you're not interested in saving your property?") is low, slow and quiet
+   - the phrase carrying the key word (equity, the sale, free, the hour) is slower and a touch louder
+   - a short agreement up front ("Keep him,") is quick and warm; there is a beat before every ask */
+var FC_TONE_KEY=/\b(equity|sale|auction|foreclos\w*|court|bank|free|no fee|nothing|five minutes|more time|options?|offer|backup|ten|four|six|noon|tomorrow|today|tonight|this (?:afternoon|evening|morning)|save my number|money problem)\b/i;
+var FC_TONE_HARD=/not interested in saving|what'?s the backup|who'?s actually|what happens (?:if|when)|what'?s (?:the|your) plan/i;
+var FC_TONE_ASK=/\b(?:sound|work|good|fair|ten|four|six|noon|tomorrow|today|tonight|morning|afternoon|evening)\b[^?]*\?$/i;
+function fcTone(line, type, step){
+  var parts=String(line||'').match(/[^.?!,:;]+[.?!,:;]*\s*/g)||[], out=[];
+  for(var i=0;i<parts.length;i++){
+    var t=parts[i].replace(/\s+$/,''); if(!t) continue;
+    var end=t.charAt(t.length-1), w=t.split(/\s+/).length;
+    /* the whole sentence this phrase belongs to: a hard question is low and slow from its first word,
+       not only after its last comma */
+    for(var q=i, sent=''; q<parts.length; q++){ sent+=parts[q]; if(/[.?!]\s*$/.test(parts[q])) break; }
+    for(var q0=i-1; q0>=0&&!/[.?!]\s*$/.test(parts[q0]); q0--) sent=parts[q0]+sent;
+    var hard=/\?\s*$/.test(sent)&&FC_TONE_HARD.test(sent);
+    var s={text:t, words:w, from:.5, to:.5, vol:.5, speed:1, pause:1, key:FC_TONE_KEY.test(t), how:''};
+    if(end==='?'){
+      if(hard){ s.from=.4; s.to=.12; s.vol=.3; s.speed=.65; s.pause=3; s.how='low, slow and quiet, then silence'; }
+      else if(FC_TONE_ASK.test(t)||step==='close'||step==='booked'){ s.from=.55; s.to=.2; s.vol=.65; s.speed=.75; s.pause=3; s.how='voice down, like it is settled, then wait'; }
+      else { s.from=.45; s.to=.9; s.speed=.9; s.pause=3; s.how='voice up, curious, then stop talking'; }
+    } else if(end===','||end===':'||end===';'){
+      if(hard){ s.from=.42; s.to=.4; s.vol=.3; s.speed=.7; s.how='low and slow'; }
+      else if(w<=3){ s.from=.65; s.to=.6; s.speed=1.25; s.how='quick and warm'; }
+      else { s.from=.5; s.to=.62; s.speed=1.1; s.how='keep it moving'; }
+    } else if(w<=3){ s.from=.6; s.to=.35; s.speed=1.15; s.how='short and sure'; }
+    else { s.from=.55; s.to=.22; s.pause=2; s.how='land it, voice down'; }
+    if(s.key&&end!=='?'&&w>3){ s.speed=Math.min(s.speed,.8); s.vol=Math.min(1,s.vol+.2); s.how='slow down, hit the key word'; }
+    if((step==='consequence'||type==='stop')&&end!=='?'){ s.vol=.3; s.speed=Math.min(s.speed,.75); s.how='lower and slower, let it sink in'; }
+    out.push(s);
+  }
+  for(var k=0;k<out.length-1;k++){ if(/\?$/.test(out[k+1].text)&&out[k].pause<2) out[k].pause=2; }   /* a beat before the ask */
+  if(out.length&&out[out.length-1].pause<2) out[out.length-1].pause=2;
+  return out;
+}
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
    second time gets one short different line that ends on an open question; the third time lets
@@ -1449,13 +1497,54 @@ function aiCheck(){
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
     S.ai.line=j.line; S.ai.shownAt=now();
     S.ai.hist.push(j.line); if(S.ai.hist.length>14) S.ai.hist.shift();      /* the whole call's lines, so nothing is said twice */
-    $('aibody').textContent=j.line;
+    aiTone(j);
     aiHeard(j, fresh);
     aiSteps(j);
     aiFocus('ai');
     /* the line, what it heard and how it read it are saved with the call, so a bad line can be found afterwards */
     S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, wait:now()-heardAt, behind:S.lines.length-n, step:j.step||'', type:j.type||'', heard:j.heard||'', line:j.line});
   }).catch(function(){ S.ai.busy=false; $('aiwho').className='who'; });
+}
+/* The graph: PITCH (height and colour, blue low to orange high), VOLUME (height of the line), PACE
+   (long dashes = slow, short = quick, a gap = stop talking). Left to right is the line as you say it. */
+function toneSvg(segs){
+  if(!segs||!segs.length) return '';
+  var W=640, L=58, tot=0, i, h='', vol='';
+  for(i=0;i<segs.length;i++) tot+=segs[i].words/segs[i].speed+segs[i].pause*.7;
+  var k=(W-L-6)/tot, x=L, py=function(p){ return 52-p*46; }, vy=function(v){ return 84-v*18; },
+      col=function(p){ return 'hsl('+Math.round(225-p*200)+',85%,60%)'; }, e=function(u){ return u*u*(3-2*u); };
+  for(i=0;i<segs.length;i++){
+    var s=segs[i], w=s.words/s.speed*k, n=Math.max(2,Math.round(s.words*s.speed*1.4));
+    for(var j=0;j<n;j++){
+      var a=j/n, b=(j+.7)/n, p0=s.from+(s.to-s.from)*e(a), p1=s.from+(s.to-s.from)*e(b);
+      h+='<line x1="'+(x+a*w).toFixed(1)+'" y1="'+py(p0).toFixed(1)+'" x2="'+(x+b*w).toFixed(1)+'" y2="'+py(p1).toFixed(1)+'" stroke="'+col((p0+p1)/2)+'" stroke-width="'+(s.key?5:3.5)+'" stroke-linecap="round"/>';
+      h+='<line x1="'+(x+a*w).toFixed(1)+'" y1="100" x2="'+(x+b*w).toFixed(1)+'" y2="100" stroke="#8aa2b8" stroke-width="3" stroke-linecap="round"/>';
+    }
+    vol+=(vol?' L':'M')+x.toFixed(1)+' '+vy(s.vol).toFixed(1)+' L'+(x+w).toFixed(1)+' '+vy(s.vol).toFixed(1);
+    if(w>78) h+='<text x="'+x.toFixed(1)+'" y="116" class="tw">'+esc(s.text.split(/\s+/).slice(0,2).join(' ').replace(/[.,:;?!]+$/,''))+'</text>';
+    x+=w;
+    var pw=s.pause*.7*k;
+    if(s.pause>=2) h+='<text x="'+(x+pw/2).toFixed(1)+'" y="103" text-anchor="middle" class="tp">'+(s.pause>=3?'WAIT':'beat')+'</text>';
+    x+=pw;
+  }
+  return '<svg viewBox="0 0 '+W+' 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="how to say this line">'+
+    '<text x="0" y="32" class="tl">PITCH</text><text x="0" y="79" class="tl">VOLUME</text><text x="0" y="103" class="tl">PACE</text>'+
+    '<line x1="'+L+'" y1="29" x2="'+(W-6)+'" y2="29" stroke="#16304a" stroke-width="1" stroke-dasharray="2 5"/>'+
+    '<path d="'+vol+'" fill="none" stroke="#e8eef5" stroke-width="2.5" stroke-linejoin="round"/>'+h+'</svg>'+
+    '<div class="lg">up = voice up, down = land it &middot; long dashes = slow &middot; gap = stop talking</div>';
+}
+/* The line itself, phrase by phrase: an arrow where the voice goes at the end of each phrase, / for a
+   beat and // for the silence after an ask, the key phrase in bold. The marks are drawn by CSS, so
+   the text of the line is unchanged. */
+function aiTone(j){
+  var segs=fcTone(j.line, j.type, j.step), b=$('aibody'), t=$('aitone'), h=[];
+  if(t) t.innerHTML=toneSvg(segs);
+  if(!segs.length){ b.textContent=j.line; return; }
+  for(var i=0;i<segs.length;i++){
+    var s=segs[i], up=s.to>s.from+.1, dn=s.to<s.from-.1;
+    h.push('<span class="tn'+(up?' up':dn?' dn':'')+(s.key?' key':'')+(s.speed<=.8?' slow':'')+'" data-m="'+(up?' ↗':dn?' ↘':'')+(s.pause>=3?' //':s.pause===2?' /':'')+'" title="'+esc(s.how)+'">'+esc(s.text)+'</span>');
+  }
+  b.innerHTML=h.join(' ');
 }
 /* WHERE THE CALL IS. The model names the step its line belongs to; the strip shows the whole path
    with the done steps green and the current one lit, and the script panel underneath moves to the
@@ -1842,7 +1931,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

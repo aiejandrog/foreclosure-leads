@@ -471,6 +471,14 @@ with tempfile.TemporaryDirectory() as d:
         j18 = json.loads(urllib.request.urlopen(req, timeout=15).read()); sb18 = ALLMSG(AI['seen'][-1])
         chk('THEY GAVE YOU A DAY' in sb18 and 'ten tomorrow morning' in sb18 and 'Do NOT ask what' in sb18, '"call me tomorrow" after the ask is a booking: the model is told to name the hour itself')
         chk(AI['seen'][-1]['body'].get('model') == 'deepseek-v4-1-flash' and j18.get('model') == 'deepseek-v4-1-flash', 'a moment the server already knows goes to the fast model: %s' % AI['seen'][-1]['body'].get('model'))
+        def sug3(text, asked):
+            req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                         data=json.dumps({'lines': [{'spk': 'them', 'text': text}], 'asked': asked}).encode())
+            urllib.request.urlopen(req, timeout=15).read(); return ALLMSG(AI['seen'][-1])
+        sb19 = sug3('Okay. Sounds good. Thank you.', ['Okay, six this evening, he calls you right at six. Save my number now and read it back to me.'])
+        chk('ALREADY BOOKED for six' in sb19 and 'THEY SAID YES' not in sb19, 'a thank-you after the hour is booked confirms that hour, it does not offer a new one')
+        sb20 = sug3('Ten tomorrow morning or later this evening. How does that sound?', ['Our senior advisor lays out other options, free. Ten tomorrow morning, how does that sound?'])
+        chk('THEY GAVE YOU A DAY' not in sb20, 'the caller reading his own close is not the homeowner giving a day')
         suggest([{'spk': 'them', 'text': 'I would like an offer right now, that is what I want.'}])
         chk('CHECKMATE.' in ALLMSG(AI['seen'][-1]) and 'exactly what he does' in ALLMSG(AI['seen'][-1]), 'naming a want the advisor delivers is the close: no more questions')
         suggest2([{'spk': 'them', 'text': 'My ex wife is on the deed and she will not sign.'}])

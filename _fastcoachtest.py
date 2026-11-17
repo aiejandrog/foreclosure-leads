@@ -178,6 +178,15 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
+  var tn=T.tone("Keep him. But this is a money problem, not a legal problem. So who's actually talking to the bank about what you owe?", 'objection', 'problem');
+  var tc=T.tone("Then let's move it later. How does six this evening sound?", 'objection', 'close');
+  var th=T.tone("So you're not interested in saving your property, or the equity you've got in it?", 'objection', 'problem');
+  var tq=T.tone("Got it. What do you want to happen with the house?", 'answer', 'situation');
+  T.aiShow({line:"Keep him. How does six this evening sound?", type:'objection', step:'close'}, '');
+  o.tone={n:tn.length, first:[tn[0].how, tn[0].speed>1], hard:[tn[tn.length-1].to<tn[tn.length-1].from, tn[tn.length-1].pause, tn[tn.length-1].speed<.8, tn[tn.length-1].vol<.5],
+          beat:tn[tn.length-2].pause>=2, split:[th.length, th[0].speed<.8, th[0].vol<.5, th[1].to<th[1].from, th[1].pause], ask:[tc[tc.length-1].to<tc[tc.length-1].from, tc[tc.length-1].pause, tc[tc.length-1].key], curious:[tq[tq.length-1].to>tq[tq.length-1].from, tq[tq.length-1].pause],
+          svg:T.toneSvg(tn).indexOf('<svg')===0&&T.toneSvg(tn).indexOf('WAIT')>0&&T.toneSvg([])==='', text:document.getElementById('aibody').innerHTML.replace(/<[^>]+>/g,''),
+          drawn:document.getElementById('aitone').innerHTML.indexOf('<svg')===0, marks:document.getElementById('aibody').innerHTML.split('<span class="tn').length-1};
   var cur0={line:'What do you want to happen with the house?', step:'situation', shownMs:9000, heard:['is this about'], lines:2};
   o.keepline=[T.keepLine(cur0,{type:'unclear',step:'situation',heard:'Okay.'}),
           T.keepLine(cur0,{type:'question',step:'opener',heard:'Is this about?'}),
@@ -395,6 +404,9 @@ else:
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
         chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
+        chk(o['tone'] == {'n': 4, 'first': ['short and sure', True], 'hard': [True, 3, True, True], 'beat': True, 'split': [2, True, True, True, 3], 'ask': [True, 3, True], 'curious': [True, 3],
+                          'svg': True, 'text': 'Keep him. How does six this evening sound?', 'drawn': True, 'marks': 2},
+            'the tone graph: a statement lands down, the hard question is low slow and quiet then silence, the ask for the hour goes down then waits, a real question goes up, and the line text is unchanged', o['tone'])
         chk(o['keepline'] == [True, True, True, True, False, False, False, False, False, False],
             'the line on screen stays for a mumble, the same thing said again, a rewording of the same step, or going back to the opener; it changes for an answer that moves on, a new objection, a new question, or a time', o['keepline'])
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
