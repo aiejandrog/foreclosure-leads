@@ -1505,7 +1505,15 @@ function aiCheck(){
     if(seq!==S.ai.seq) return;
     $('aiwho').className='who';
     /* They said more while the model was thinking: that answer is to half a sentence. Ask again. */
-    if((S.fc.lastWord||0)>heardAt+250){ S.ai.n=n0; aiAsk(); return; }
+    /* STARVED (real call 11-17 17:53: 80 answers written, 4 shown, nothing on screen for the first two
+       minutes of the conversation). On one microphone somebody is always talking, him included, so
+       "any word since I asked" threw away nearly every answer. Now an answer is dropped only when a
+       real run of new words came in while the model was thinking (more than 8), and never twice in
+       a row: the second answer is shown whatever is being said. The new words stay unread, so the
+       next question includes them. */
+    var _more=aiFresh(S.finals, S.ai.n).split(' ').filter(Boolean).length;
+    if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiAsk(); return; }
+    S.ai.drops=0;
     if(!j||!j.line) return;
     /* Nothing new was said by them (same words heard as last time), or the model handed back the line
        already on screen: keep what is there. Call 11-16 17:03 showed one line five times in a row. */
