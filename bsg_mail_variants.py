@@ -728,7 +728,7 @@ body{font:10.5pt/1.3 Georgia,"Times New Roman",serif;color:%(ink)s;-webkit-print
 .t2 .cta{font-size:15pt;margin:.06in 0 .02in}
 .pn{font:10pt/1.3 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;padding-top:.36in}
 .pn .nh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.1in}
-.pn .nbar{width:2.7in;height:.3in;margin:.02in 0 .1in;background:repeating-linear-gradient(90deg,#000 0px 1px,#fff 1px 2px,#000 2px 4px,#fff 4px 5px,#000 5px 6px,#fff 6px 9px,#000 9px 10px,#fff 10px 12px,#000 12px 14px,#fff 14px 15px,#000 15px 16px,#fff 16px 17px,#000 17px 20px,#fff 20px 21px,#000 21px 22px,#fff 22px 24px,#000 24px 25px,#fff 25px 28px,#000 28px 30px,#fff 30px 31px,#000 31px 32px,#fff 32px 34px,#000 34px 35px,#fff 35px 36px,#000 36px 39px,#fff 39px 40px,#000 40px 42px,#fff 42px 43px,#000 43px 44px,#fff 44px 45px,#000 45px 47px,#fff 47px 50px,#000 50px 51px,#fff 51px 52px,#000 52px 54px,#fff 54px 55px);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pn .nbar{display:block;width:2.7in;height:.3in;margin:.02in 0 .1in}
 .pn .nstrip{background:#000;color:#fff;font-weight:700;font-size:1em;white-space:nowrap;overflow:hidden;text-align:center;padding:.045in .1in;margin:0 0 .08in;letter-spacing:.02em;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pn .cols{background:#e2e2e2;border:1px solid #8f8f8f;padding:.1in .14in .03in;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pn .col+.col{border-left-color:#8f8f8f}
@@ -1145,6 +1145,35 @@ _NBOX = (('Notice Date', 'Fecha de esta carta'), ('BSG File No.', 'N.º de archi
         ('Phone', 'Teléfono'), ('File Status', 'Estado del archivo'))
 
 
+# Code 39, the plain industrial barcode any handheld scanner reads: nine elements a character
+# (bar, space, bar, ...), 1 = wide. The strip on a notice is the piece's BSG file number.
+_C39 = {'0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000', '4': '000110001',
+        '5': '100110000', '6': '001110000', '7': '000100101', '8': '100100100', '9': '001100100',
+        'A': '100001001', 'B': '001001001', 'C': '101001000', 'D': '000011001', 'E': '100011000',
+        'F': '001011000', 'G': '000001101', 'H': '100001100', 'I': '001001100', 'J': '000011100',
+        'K': '100000011', 'L': '001000011', 'M': '101000010', 'N': '000010011', 'O': '100010010',
+        'P': '001010010', 'Q': '000000111', 'R': '100000110', 'S': '001000110', 'T': '000010110',
+        'U': '110000001', 'V': '011000001', 'W': '111000000', 'X': '010010001', 'Y': '110010000',
+        'Z': '011010000', '-': '010000101', '.': '110000100', ' ': '011000100', '*': '010010100'}
+
+
+def barcode_svg(text):
+    """The file number as a scannable Code 39 strip (inline SVG, black bars only)."""
+    data = ''.join(c for c in str(text).upper() if c in _C39 and c != '*')
+    if not data:
+        raise DataError('REFUSED: a file number with nothing a barcode can carry: %r' % (text,))
+    x, bars = 10, []                       # 10 modules of quiet zone each side
+    for ch in '*' + data + '*':
+        for k, wide in enumerate(_C39[ch]):
+            w = 3 if wide == '1' else 1
+            if k % 2 == 0:
+                bars.append('<rect x="%d" y="0" width="%d" height="10"/>' % (x, w))
+            x += w
+        x += 1                             # the gap between characters
+    return ('<svg class="nbar" viewBox="0 0 %d 10" preserveAspectRatio="none" shape-rendering="crispEdges" '
+            'xmlns="http://www.w3.org/2000/svg" data-code="%s">%s</svg>' % (x + 9, _e(data), ''.join(bars)))
+
+
 def _bold(text):
     """Escape, then turn **x** into bold."""
     return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', _e(text))
@@ -1228,7 +1257,7 @@ def notice_html(r, today, touch, cb):
     hours = ('Hours: %s Eastern Time · Horario: %s, hora del Este<br>' % (NOTICE_HOURS, NOTICE_HOURS_ES or NOTICE_HOURS)
              if NOTICE_HOURS else '')
     return ('<section class="pc pn" data-case="%s" data-variant="N%d"><div class="in">'
-            '<div class="nh"><div class="nco"><b>%s</b><div class="nbar"></div><div class="natt">'
+            '<div class="nh"><div class="nco"><b>%s</b>%s<div class="natt">'
             '<b>ATTENTION &middot; ATENCI&Oacute;N:</b> %s<br>'
             '<b>RE: PROPERTY &middot; ASUNTO: PROPIEDAD:</b><br>%s, %s</div></div>'
             '<table class="nbox">%s</table></div>'
@@ -1241,7 +1270,8 @@ def notice_html(r, today, touch, cb):
             'archivo de BSG %s</b></div>'
             '%s<div class="nfine">%s</div></div>'
             '<div class="ft">%s<span class="fr">Ref. %s &middot; N%d</span></div></section>'
-            % (_e(r['case']), touch, _e(_co()), _e(M.person_name(r['owner'])),
+            % (_e(r['case']), touch, _e(_co()), barcode_svg(show_code(r['code'])),
+               _e(M.person_name(r['owner'])),
                _e(M.street_case(r['addr'])), _e(place), box,
                _e(n['head'][0]), _e(n['head'][1]),
                _e(n['sub'][0].format(**v_en)), _e(n['sub'][1].format(**v_es)), strip,
@@ -1270,6 +1300,8 @@ def check_notices(pieces, rows, touch, today, cb_of, never=()):
             why.append('the file number or the case number')
         if p.count(_e(_co())) < 3:
             why.append('the company name (top, body, footer)')
+        if 'data-code="%s"' % _e(show_code(r['code']).upper()) not in p:
+            why.append('the barcode of the file number')
         if any(x in p for x in gone):
             why.append('a MARS or opt-out line (removed from mail 2026-11-16)')
         if '$' in p or '{' in p or '**' in p:
