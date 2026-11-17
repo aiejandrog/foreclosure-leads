@@ -250,6 +250,10 @@ AI_SYSTEM = (
     "   His longer answer (why wouldn't five minutes be worth it, every step laid out, shake hands and part "
     "friends, how does that sound) is for ONE moment per call, when they are close and wavering, and even "
     "then under fifty-five words.\n"
+    "NO GRADING THEM. Never compliment or rate what they said: no 'that's smart', 'that's good', 'good "
+    "question', 'fair enough', 'that's good to hear', 'that makes sense', 'I appreciate that', 'love that'. "
+    "A person on a cold call does not hand out grades. Start with their words or with your point. The only "
+    "'good' allowed is 'good, keep him' about a lawyer, once.\n"
     "NEVER SAY, anywhere: 'worst case', 'you hang up', 'you've lost nothing', 'nothing to lose' more than "
     "once, 'no pressure', 'I'm not going to push you', 'I'm not picking on you', 'I'm not going to argue', "
     "'I've been talking too much', 'I'll stop talking', 'I'll leave you be', 'shortest call of your week'. "
@@ -541,6 +545,41 @@ _AI_META = re.compile(r"too many (fucking |damn )?words|what would you have said
                       r"answer (like|as if) you.?re answering|something along th(e|ose) lines", re.I)
 
 
+# PRAISE FILLER. His note, 11-16: "stop throwing in phrases like 'that's smart', that sounds AI as
+# fuck." A person on a cold call does not grade the other person's remarks. These are cut out of the
+# line itself, so they can never reach the screen whatever the model writes.
+_PRAISE_CORE = (
+    r"(?:and |but |so |okay,? |yeah,? |hey,? )?"
+    r"(?:(?:that(?:'|’)?s|that is|it(?:'|’)?s|you(?:'|’)?re|that was) (?:a |really |actually |totally |very |so )*"
+    r"(?:smart|a smart move|a smart thing|good to hear|great to hear|great|awesome|perfect|wonderful|a great question|"
+    r"a good question|a fair question|a great point|a good point|a fair point|fair|fair enough|real|understandable|"
+    r"totally understandable|the right move|the right call|the right thing|a good start|a real start|good thinking)"
+    r"(?: to (?:ask|hear|know|do))?(?: of you)?"
+    r"|(?:great|good|fair|smart|excellent|awesome|love that|nice|perfect)(?: question| point| call| move)?)")
+_AI_PRAISE = re.compile(r"(^|[.!?,])\s*" + _PRAISE_CORE + r"\s*([.!,])\s*", re.I)
+
+
+def no_praise(line):
+    """The line with compliment filler removed. 'check us out, that's smart. Our' becomes 'check us
+    out. Our'; a sentence that was only a compliment is dropped."""
+    def cut(m):
+        before, after = m.group(1), m.group(2)
+        if not before:
+            return ""                                    # the line opened with it
+        if before == "," and after in ".!":
+            return ". "                                  # the clause it hung on now ends the sentence
+        return before + " "
+    out = line
+    for _ in range(4):
+        new = _AI_PRAISE.sub(cut, out)
+        if new == out:
+            break
+        out = new
+    out = " ".join(out.split()).strip(" ,")
+    out = re.sub(r"([.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), out)
+    return (out[:1].upper() + out[1:]) if out else line
+
+
 def folds(res):
     """True when a line gives up on the call: a goodbye, or reading their words as a stop request."""
     return res.get("type") == "stop" or (res.get("type") != "time" and bool(_AI_FOLD.search(res.get("line", ""))))
@@ -672,6 +711,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         line = re.sub(r"\s*[\u2014\u2013]\s*", ", ", line)        # a dash is written, not spoken
         if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 640 or bad:
             return {}
+        line = no_praise(line)
         res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
         if step:
             res["n"] = AI_STEP_IDS.index(step) + 1

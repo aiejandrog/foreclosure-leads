@@ -413,6 +413,14 @@ with tempfile.TemporaryDirectory() as d:
         sp9 = AI['seen'][-1]['body']['messages'][0]['content']
         chk('money problem, not a legal problem' in sp9 and 'under forty-five words' in sp9 and 'THE REFRAME' in sp9,
             'the model is given the short objection answer: agree, one reframe, the ask')
+        # Praise filler never reaches the screen.
+        AI['reply'] = "HEARD: x\nTYPE: question\nSTEP: close\nSAY: You should check us out, that's smart. Our senior advisor has done this over thirty years. That's a great question. Judge him yourself."
+        j14 = suggest([{'spk': '', 'text': 'Is this for real though?'}])[1]
+        chk(j14.get('line') == 'You should check us out. Our senior advisor has done this over thirty years. Judge him yourself.',
+            '"that\'s smart" and "that\'s a great question" are cut out of the line: %s' % j14.get('line'))
+        AI['reply'] = "HEARD: x\nTYPE: answer\nSTEP: problem\nSAY: Okay, so you want to keep it, that's good to hear. What is the plan right now?"
+        j15 = suggest([{'spk': '', 'text': 'I want to keep it.'}])[1]
+        chk(j15.get('line') == 'Okay, so you want to keep it. What is the plan right now?', 'a compliment in the middle of a sentence is cut too: %s' % j15.get('line'))
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])
