@@ -513,6 +513,29 @@ def mate_hint(last_said, given):
     return ""
 
 
+# SAVE THE NUMBER: ONCE. Call 11-17 09:36: the box said "save my number and read it back to me" three
+# times while she kept answering "I don't know what your number is" and "I can't read it".
+_AI_NUMASKED = re.compile(r"save my number|read it back", re.I)
+_AI_NONUM = re.compile(r"\b(don'?t|do not|can'?t|cannot|didn'?t) (see|know|have|read|get)\b.{0,40}\b(number|it)\b|what('?s| is) (your|the) number|"
+                       r"different number|which number|no number|(blocked|private|unknown|restricted) (number|caller)|no caller id", re.I)
+
+
+def num_note(last_said, given):
+    """(note, replaces) for the save-the-number step. They say they cannot see the number: give it to them
+    out loud instead, and that is the whole line. Already asked once this call: never ask again."""
+    used = " ".join(given)
+    if _AI_NUMASKED.search(used) and _AI_NONUM.search(last_said):
+        return ("\n\nTHEY CANNOT SEE YOUR NUMBER. They just told you so. Do NOT say 'save my number' or 'read it back' "
+                "again. TYPE: question. Your SAY, twenty words or fewer, no digits: no problem, grab a pen, you will "
+                "give it to them right now, slowly. Nothing else: the caller reads his number out himself. If an hour "
+                "is still open, do not settle it in this line.", True)
+    if _AI_NUMASKED.search(used):
+        return ("\n\nYOU ALREADY ASKED THEM TO SAVE THE NUMBER ON THIS CALL. Whatever any instruction above says, do "
+                "NOT say 'save my number', 'save the number' or 'read it back' again. Confirm the hour and that he "
+                "calls them then, and stop.", False)
+    return ("", False)
+
+
 def wit_hint(last_said, given):
     """Which witty wording to use on this line: the opener's not-the-bank line, or the lender / buyer
     line when they just asked about a loan or about selling."""
@@ -890,6 +913,8 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
         _given = [x for x in prior + [shown] if x]
         _ph = mate_hint(last_said, _given) or plan_hint(last_said, prior + [shown], when)
         _hint = _ph or wit_hint(last_said, _given)
+        _nn, _only = num_note(last_said, _given)
+        _hint = _nn if _only else _hint + _nn
         system += _hint
         if _AI_PAYQ.search(last_said):
             system += AI_PAY_ANSWER
