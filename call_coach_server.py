@@ -697,7 +697,7 @@ AI_LANES = {
 }
 
 
-def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
+def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
     """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
     to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
     dead model must not touch the call."""
@@ -724,6 +724,15 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
                    "sentences are examples of the idea; say the idea your own way, short, as in TALK LIKE A PERSON. "
                    "Its 'Never say' list overrides everything else, and where the playbook allows something this "
                    "prompt forbids (its numbers, its options, its attorney questions), the playbook wins.\n" + pb)
+    # EQUITY IS A FACT OR IT IS NOT SAID. Call 11-16 19:47: the line read "a house with equity in it" on a
+    # lead whose equity nobody has verified. The page says whether the board has it as a fact.
+    if str(eq or "").lower() != "verified":
+        system += ("\n\nEQUITY IS NOT VERIFIED ON THIS LEAD. Never say or imply that they have equity, that the house "
+                   "has equity in it, or that there is money in it for them. Say 'whatever you've got in the place' or "
+                   "'what you've put into it', or 'if there's equity in it, he'll tell you'. The one fixed line "
+                   "'So you're not interested in saving your property, or the equity you've got in it?' is allowed.")
+    system += ("\n\nNEVER PUT WORDS IN THEIR MOUTH. Do not say 'so you know about the case' or 'so you already "
+               "heard' unless they said exactly that. If they said they did not know, your line starts from that.")
     lane = str(lane or "").lower()
     if lane in AI_LANES:
         system += "\n\nTHIS LEAD: " + AI_LANES[lane]
@@ -1267,7 +1276,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"), b.get("lane") or "")
+            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"), b.get("lane") or "", b.get("eq") or "")
             res = dict(res or {"line": ""}, ms=int((time.time() - t0) * 1000))
             return self._send(200, res, private=True)
 
