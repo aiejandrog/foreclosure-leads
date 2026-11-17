@@ -464,6 +464,18 @@ with tempfile.TemporaryDirectory() as d:
             'the system message (rules and playbook) is identical from one request to the next, so it is billed as cached')
         chk('BUSY / NO TIME' in m2[1]['content'] and 'TRANSCRIPT SO FAR' in m2[1]['content'] and 'I am busy.' in m2[1]['content'],
             'what changes per line (the hint, the lines already given, the transcript) is in the user message')
+        # Checkmate, and the two speeds.
+        AI['reply'] = work
+        req = urllib.request.Request('http://127.0.0.1:%d/api/suggest' % port, headers={'Content-Type': 'application/json'},
+                                     data=json.dumps({'lines': [{'spk': 'them', 'text': 'Okay. So you could call me tomorrow.'}], 'asked': ['Five minutes with our senior advisor. Later today or first thing tomorrow?']}).encode())
+        j18 = json.loads(urllib.request.urlopen(req, timeout=15).read()); sb18 = ALLMSG(AI['seen'][-1])
+        chk('THEY GAVE YOU A DAY' in sb18 and 'ten tomorrow morning' in sb18 and 'Do NOT ask what' in sb18, '"call me tomorrow" after the ask is a booking: the model is told to name the hour itself')
+        chk(AI['seen'][-1]['body'].get('model') == 'deepseek-v4-1-flash' and j18.get('model') == 'deepseek-v4-1-flash', 'a moment the server already knows goes to the fast model: %s' % AI['seen'][-1]['body'].get('model'))
+        suggest([{'spk': 'them', 'text': 'I would like an offer right now, that is what I want.'}])
+        chk('CHECKMATE.' in ALLMSG(AI['seen'][-1]) and 'exactly what he does' in ALLMSG(AI['seen'][-1]), 'naming a want the advisor delivers is the close: no more questions')
+        suggest2([{'spk': 'them', 'text': 'My ex wife is on the deed and she will not sign.'}])
+        chk(AI['seen'][-1]['body'].get('model') == 'claude-sonnet-5-5', 'a moment nobody scripted goes to Sonnet: %s' % AI['seen'][-1]['body'].get('model'))
+        chk('YOU PICK THE TIME' in ALLMSG(AI['seen'][-1]), 'the model is told to name the hour, never ask for one')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

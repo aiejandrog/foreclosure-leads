@@ -108,6 +108,12 @@ AI_URL = os.environ.get("COACH_AI_URL", "https://api.venice.ai/api/v1/chat/compl
 # about a dollar a call instead of eleven cents. claude-opus-5-5 took over ten seconds and came
 # back blank. Alejandro, 11-16: "switch to Sonnet". COACH_AI_MODEL overrides.
 AI_MODEL = os.environ.get("COACH_AI_MODEL", "claude-sonnet-5-5")
+# TWO SPEEDS. Sonnet takes about 2.7 s a line; DeepSeek about 1.3 s. When the server already knows what
+# this moment is (a booking, a named plan, busy, "what do I get", a lawyer, a loan, how we get paid, the
+# opener) it hands the model the content, and the fast model only has to say it: tested 11-16, it does
+# that as well as Sonnet. Sonnet is kept for the lines nobody scripted, where judgment is the job (a
+# wife in surgery, an ex-wife on the deed). COACH_AI_FAST_MODEL="" turns the fast lane off.
+AI_FAST_MODEL = os.environ.get("COACH_AI_FAST_MODEL", "deepseek-v4-1-flash")
 AI_TIMEOUT = float(os.environ.get("COACH_AI_TIMEOUT", "9"))      # seconds per try; Sonnet's slow lines run 4 to 6
 # The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
 # this prompt only said "reflect and ask a question", and on test call 11-16 11:34 it circled:
@@ -161,7 +167,23 @@ AI_SYSTEM = (
     "many times they say it (see NEVER FOLD). A scam, who are you: public court record, not the lender, not "
     "buying, no fee. Giving up, 'let them take it': agree, then that the consultation also covers leaving on "
     "their own terms with something in their pocket.\n"
-    "- time: step booked. Repeat the day and time back and ask them to save the number.\n"
+    "- time: step booked. If they gave a day but no hour ('call me tomorrow'), YOU name the hour, do not ask "
+    "for one. Then tell them to save the number.\n"
+    "CHECKMATE. Call 11-16 20:52, said out loud on the call: 'the AI says too many words. Right then and "
+    "there it should have just been, okay, how does ten AM sound? Instead you're putting the ball in their "
+    "court and letting them decide things, and then they just don't answer.' So:\n"
+    "- YOU PICK THE TIME. Never 'what time are you done?', 'morning or after lunch?', 'what hour is best?', "
+    "'tell me a time'. Name one specific hour and ask if it works: 'How does ten tomorrow morning sound?' "
+    "'I've got him at four today. Does that work?' If they said tomorrow, it is ten tomorrow morning; if they "
+    "said today or later, it is four this afternoon; if they said nothing, it is ten tomorrow morning. If "
+    "they push back on the hour, name one other hour.\n"
+    "- THE MOMENT THEY SAY WHAT THEY WANT AND IT IS SOMETHING THE ADVISOR HANDLES (an offer or a buyer, more time, a "
+    "loan, a way to keep it, a way out with money), that is the close. No more questions about their "
+    "situation, no explaining. One short sentence that it is exactly what he does, then your hour: 'An offer "
+    "is exactly what he brings. How does ten tomorrow morning sound?'\n"
+    "- A yes, an okay, a 'fine', a 'sure', a 'call me tomorrow' is a YES. Never answer a yes with a reason "
+    "or an objection answer. Book it: the hour, then 'save my number and read it back to me'.\n"
+    "- A closing line is twenty-five words or fewer.\n"
     "- stop: confirm they are off the list and say goodbye. This is the only way a call ends.\n"
     "NEVER FOLD. Test call 11-16 17:40: the homeowner said 'really not interested, man' once and you wrote 'No "
     "problem, I'll leave you be', then read a plain 'No' as a request to be taken off the list. He never said "
@@ -440,6 +462,43 @@ _AI_LOANQ = re.compile(r"\b(loan|refinanc|refi|lender|borrow|financ|mortgage com
 _AI_BUYQ = re.compile(r"\b(sell it|selling it|just sell|a buyer|buy it|cash offer|investor)", re.I)
 
 
+_AI_DAYWORD = re.compile(r"\b(tomorrow|today|tonight|this (afternoon|evening|morning)|later|in the (morning|afternoon|evening)|"
+                         r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|after work|when i get (out|off)|"
+                         r"manana|hoy|esta tarde)\b", re.I)
+_AI_YESWORD = re.compile(r"^\W*(yes|yeah|yep|yup|okay|ok|sure|fine|alright|all right|sounds good|that works|let'?s do it|"
+                         r"go ahead|i guess( so)?|si|claro|esta bien)\b", re.I)
+_AI_ASKEDFOR = re.compile(r"five minutes|senior advis|later today|first thing tomorrow|ten tomorrow|four (today|this afternoon)|"
+                          r"what time|does that work|sound\?", re.I)
+_AI_WANT = re.compile(r"\b(an offer|your (offer|price)|what'?s your price|how much (would|will|can) you|a buyer|sell it|"
+                      r"more time|buy (me )?(some )?time|a loan|refinanc|keep (it|my house|the house)|stay in (it|my house))\b", re.I)
+
+
+def mate_hint(last_said, given):
+    """The close, when they just handed it over: a day with no hour, a plain yes after the ask, or
+    naming a want that is exactly what the advisor does. '' otherwise."""
+    used = " ".join(given)
+    asked_already = bool(_AI_ASKEDFOR.search(used))
+    if _AI_NOTINT.search(last_said) or _AI_BUSY.search(last_said) and not _AI_DAYWORD.search(last_said):
+        return ""
+    hour = "four this afternoon" if re.search(r"\b(today|tonight|later|this (afternoon|evening)|after work|hoy|esta tarde)\b", last_said, re.I) else "ten tomorrow morning"
+    if asked_already and _AI_DAYWORD.search(last_said) and not re.search(r"\b(not|can'?t|cannot|won'?t|never|don'?t)\b", last_said, re.I):
+        return ("\n\nTHEY GAVE YOU A DAY. That is a yes. TYPE: time, STEP: booked. Your SAY, twenty-five words or fewer: "
+                "name the hour yourself (" + hour + ", unless they named an hour, then use theirs), say the senior "
+                "advisor calls them right then, and tell them to save your number and read it back. Do NOT ask what "
+                "hour, do NOT give a reason, do NOT say the sale could come first.")
+    if asked_already and _AI_YESWORD.search(last_said) and len(last_said.split()) <= 8:
+        return ("\n\nTHEY SAID YES. TYPE: time, STEP: booked. Your SAY, twenty-five words or fewer: name the hour yourself ("
+                + hour + "), say the senior advisor calls them then, and tell them to save your number and read it "
+                "back. No reason, no question except 'that work?'.")
+    if _AI_WANT.search(last_said) and "exactly what he" not in used.lower() and not (_AI_LOANQ.search(last_said) and "?" in last_said):
+        return ("\n\nCHECKMATE. They just told you what they want, and it is what the senior advisor does. Do not ask "
+                "another question about their situation and do not explain. Your SAY, thirty words or fewer: pick up "
+                "their want in their words, one flat sentence that it is exactly what he does (he brings the offer, "
+                "he asks the court for more time, he works with the lenders), then name the hour: 'How does "
+                + hour + " sound?' STEP: close.")
+    return ""
+
+
 def wit_hint(last_said, given):
     """Which witty wording to use on this line: the opener's not-the-bank line, or the lender / buyer
     line when they just asked about a loan or about selling."""
@@ -532,7 +591,8 @@ AI_STOCK = [
     (r"blowing up", "your phone's been blowing up", 1), (r"telephone pole", "sign on a telephone pole", 1),
     (r"show up with (money|stories)", "buyers who show up with money, not stories", 1),
     (r"fill out paperwork|filling out paperwork", "lenders who like paperwork", 1),
-    (r"what time are you done", "what time are you done today", 1),
+    (r"what time are you done", "what time are you done today (never ask this: name the hour yourself)", 0),
+    (r"morning or (after|afternoon)|what hour|tell me a time|give me a time", "asking them to pick the hour (name it yourself)", 0),
     (r"call(s)? you right then|call you then", "so he can call you right then", 1),
     (r"what time (today )?works", "what time works", 1),
     (r"what are you going to do", "what are you going to do", 2),
@@ -547,15 +607,14 @@ AI_STOCK = [
     (r"so here.?s what i.?d want for you", "so here's what I'd want for you", 1),
 ]
 AI_CLOSES = (
-    "He has a few minutes open this afternoon. What time are you done today?",
-    "Tell me a time that works for you and I'll make him fit it.",
+    "How does ten tomorrow morning sound?",
+    "I've got him at four this afternoon. Does that work?",
+    "He's open at ten tomorrow. I'll put you down for ten.",
+    "Let's do four today, right after work. Good?",
+    "Ten tomorrow morning, he calls you. That work?",
     "I can have him call you within the hour. Does that work?",
-    "You said you need [what they said they want]. That's the first thing he looks at. When can he call you?",
-    "What if he shows you one thing nobody has told you yet? When's a good time for him to call?",
-    "Worst case, you hang up knowing more than you do right now. So when's good?",
-    "Five minutes against the house. That's a fair trade, right? Give me a time.",
-    "Let's just get it on the calendar so it's done. Morning or afternoon?",
-    "Is this the best number for him to reach you on? Then give me a time today.",
+    "Five minutes against the house, that's a fair trade. Ten tomorrow morning?",
+    "Let's get it on his calendar so it's done. Four today?",
 )
 
 
@@ -761,11 +820,13 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
                    "out. Write the line that comes after the homeowner's answer to it.")
     said = " ".join(r.split(": ", 1)[1] for r in rows[-6:])
 
+    use = {"model": AI_MODEL}
+
     def ask(sys_text):
         static, _, call = sys_text.partition(AI_SPLIT)
         user = ("FOR THIS CALL AND THIS LINE (these are instructions, with the same force as your rules):" + call
                 + "\n\nTRANSCRIPT SO FAR:\n" + "\n".join(rows)) if call.strip() else "\n".join(rows)
-        body = {"model": AI_MODEL, "max_tokens": 420, "temperature": 0.5, "stream": False,
+        body = {"model": use["model"], "max_tokens": 420, "temperature": 0.5, "stream": False,
                 "messages": [{"role": "system", "content": static}, {"role": "user", "content": user}],
                 "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                       "strip_thinking_response": True}}
@@ -802,7 +863,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
         if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 640 or bad:
             return {}
         line = no_praise(line)
-        res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200]}
+        res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200], "model": use["model"]}
         if step:
             res["n"] = AI_STEP_IDS.index(step) + 1
             res["name"] = AI_STEPS[res["n"] - 1][1]
@@ -812,10 +873,14 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
     if _AI_META.search(last_said):
         return {}                      # the callers are talking about the script: keep what is on screen
     if not rows[-1].startswith("CALLER"):
-        _ph = plan_hint(last_said, prior + [shown], when)
-        system += _ph or wit_hint(last_said, [x for x in prior + [shown] if x])
+        _given = [x for x in prior + [shown] if x]
+        _ph = mate_hint(last_said, _given) or plan_hint(last_said, prior + [shown], when)
+        _hint = _ph or wit_hint(last_said, _given)
+        system += _hint
         if _AI_PAYQ.search(last_said):
             system += AI_PAY_ANSWER
+        if AI_FAST_MODEL and (_hint or _AI_PAYQ.search(last_said) or _AI_NOTINT.search(last_said)):
+            use["model"] = AI_FAST_MODEL            # the content is handed over; the fast model says it
     res = ask(system)
     # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
     # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose.
