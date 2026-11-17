@@ -430,6 +430,19 @@ with tempfile.TemporaryDirectory() as d:
         urllib.request.urlopen(req, timeout=15).read()
         chk('THEY ASKED ABOUT A LOAN OR A LENDER' in AI['seen'][-1]['body']['messages'][0]['content'] and 'do not lend money ourselves' in AI['seen'][-1]['body']['messages'][0]['content'],
             'a loan question is answered (we do not lend, licensed lenders) with the dry lender line')
+        # "that's good" is cut like the rest, and an answer that runs long is asked for again, shorter.
+        AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Okay, so keep him, that's good. But this is a money problem, not a legal problem."
+        j16 = suggest2([{'spk': '', 'text': 'I am telling you no.'}])
+        chk(j16.get('line') == 'Okay, so keep him. But this is a money problem, not a legal problem.', '"that\'s good" is cut out of the line: %s' % j16.get('line'))
+        longline = 'HEARD: x\nTYPE: objection\nSTEP: close\nSAY: ' + ' '.join(['word'] * 70) + ' and so what do you think about that then?'
+        n6 = len(AI['seen']); AI['reply'] = [longline, 'HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Keep him. This is a money problem. Who is talking to the bank?']
+        j17 = suggest2([{'spk': '', 'text': 'I am telling you no.'}])
+        chk(j17.get('line') == 'Keep him. This is a money problem. Who is talking to the bank?' and len(AI['seen']) == n6 + 2
+            and 'too long to say out loud' in AI['seen'][-1]['body']['messages'][0]['content'],
+            'an answer over fifty-five words is asked for again and the shorter one is shown: %s' % j17.get('line'))
+        AI['reply'] = work
+        suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
+        chk('these four beats and nothing else, forty words at most' in AI['seen'][-1]['body']['messages'][0]['content'], 'the first lawyer answer is four short beats')
         AI['reply'] = 'SKIP'
         chk(suggest(talk)[1].get('line') == '', 'SKIP (the caller spoke last) shows nothing')
         n_seen = len(AI['seen'])

@@ -493,11 +493,12 @@ def plan_hint(last_said, given, when=""):
                     "overrides the one-thought rule for this line.")
     pat, q, key = AI_ATTY_Q
     if re.search(pat, last_said, re.I) and not re.search(r"money problem|not a legal", used, re.I):
-        return ("\n\nATTORNEY, FIRST TIME. Your SAY is his reframe, in plain words, under forty-five words: that's good, "
-                "keep him; but what they are dealing with is a money problem, not a legal problem, and nobody is "
-                "accusing them of a crime; the lawyer can push the date, but every day it gets pushed interest and "
-                "fees get added and that comes out of their equity. Then ask, in words anybody follows, who is actually "
-                "talking to the association or the bank about what they owe. Never say 'the money side'." + clock)
+        return ("\n\nATTORNEY, FIRST TIME. Your SAY is these four beats and nothing else, forty words at most, no "
+                "compliment and no 'that's good': (1) 'Keep him.' (2) 'But this is a money problem, not a legal "
+                "problem. Nobody's accusing you of a crime.' (3) 'Every day he pushes the date, interest and fees "
+                "come out of your equity.' (4) ONE question, in words anybody follows: who is actually talking to "
+                "the association or the bank about what they owe. Do not add the sale timing, a second question, or "
+                "anything after the question. Never say 'the money side'.")
     if re.search(pat, last_said, re.I) and not re.search(key, used, re.I):
         return ("\n\nATTORNEY QUESTION FOR THIS LINE. The homeowner brought up their attorney. Your SAY, in plain words "
                 "anybody follows: that's good and they should keep him, he handles the court part; then " + q +
@@ -614,7 +615,7 @@ _AI_META = re.compile(r"too many (fucking |damn )?words|what would you have said
 _PRAISE_CORE = (
     r"(?:and |but |so |okay,? |yeah,? |hey,? )?"
     r"(?:(?:that(?:'|’)?s|that is|it(?:'|’)?s|you(?:'|’)?re|that was) (?:a |really |actually |totally |very |so )*"
-    r"(?:smart|a smart move|a smart thing|good to hear|great to hear|great|awesome|perfect|wonderful|a great question|"
+    r"(?:smart|a smart move|a smart thing|good to hear|great to hear|good|nice|great|awesome|perfect|wonderful|a great question|"
     r"a good question|a fair question|a great point|a good point|a fair point|fair|fair enough|real|understandable|"
     r"totally understandable|the right move|the right call|the right thing|a good start|a real start|good thinking)"
     r"(?: to (?:ask|hear|know|do))?(?: of you)?"
@@ -790,6 +791,16 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane=""):
         if _AI_PAYQ.search(last_said):
             system += AI_PAY_ANSWER
     res = ask(system)
+    # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
+    # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose.
+    if (res and res.get("type") in ("objection", "question", "answer") and len(res.get("line", "").split()) > 55
+            and not _AI_PAYQ.search(last_said)):
+        n_words = len(res["line"].split())
+        short = ask(system + "\n\nYour last answer was " + str(n_words) + " words: \"" + res["line"] + "\" That is too "
+                    "long to say out loud. Say the same point in under forty words: keep the one sentence that matters "
+                    "and the one question, cut everything else. No second question, no extra reason.")
+        if short and short.get("line") and len(short["line"].split()) < n_words and not folds(short):
+            res = short
     if res and _AI_WEAK.search(res.get("line", "")) and res.get("type") != "stop":
         res = ask(system + "\n\nYour last answer used the words of someone who expects a no (worst case, hang up, "
                   "lost nothing, no pressure, not going to push, talking too much). Never. Give the short objection "
