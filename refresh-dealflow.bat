@@ -572,7 +572,7 @@ rem  2026-11-16: the owner searches FIND open liens and judgments but the county
 rem  amount for most of them. lien_amounts reads the recorded document itself in all three counties
 rem  ^(Broward AcclaimWeb image, Miami OR image, Palm Beach direct book/page link^) with free local OCR
 rem  and prices the row. $0: no search, no captcha, no paid call. Non-fatal.
-python -u lien_amounts.py --limit 60 >> "%LOG%" 2>&1
+python -u lien_amounts.py --limit 250 >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! lien_amounts failed - open liens keep "no amount" ^(board unaffected^).>> "%LOG%"
 rem  2026-11-16: the complaint on each lis pendens lead, every page: principal claimed, default date,
 rem  and the lienholders the lender had to name. Miami off the court docket, Broward the recorded

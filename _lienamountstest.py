@@ -102,8 +102,10 @@ rec('4b: an entry from an older parser is ignored',
 rec('4c: lookup never raises on junk', LA.lookup('BROWARD', None, cache) is None and LA.lookup('X', {'bp': 5}, 7) is None)
 today = dt.date(2026, 11, 16)
 rec('4d: a county gap is retried after the wait, a read document is not',
-    LA._due({'status': 'gap_pdf', 'read': '2026-10-20', 'v': LA.PARSER_VERSION}, today)
-    and not LA._due({'status': 'gap_pdf', 'read': '2026-11-10', 'v': LA.PARSER_VERSION}, today)
+    LA._due({'status': 'gap_not_in_index', 'read': '2026-10-20', 'v': LA.PARSER_VERSION}, today)
+    and not LA._due({'status': 'gap_not_in_index', 'read': '2026-11-10', 'v': LA.PARSER_VERSION}, today)
+    and LA._due({'status': 'gap_pdf', 'read': (today - dt.timedelta(days=1)).isoformat(), 'v': LA.PARSER_VERSION}, today)
+    and not LA._due({'status': 'gap_pdf', 'read': today.isoformat(), 'v': LA.PARSER_VERSION}, today)
     and not LA._due({'status': 'no_figure', 'read': '2026-01-01', 'v': LA.PARSER_VERSION}, today))
 
 # ---- 5. other_liens.rows keeps the instrument and uses the cache --------------------------------------
@@ -163,7 +165,11 @@ m2 = re.search(r"_NOT_CLAIM_DOC_RE = re\.compile\(r'([^']+)'", rl)
 rec('8a: the Miami claim filter mirrors records_liens', bool(m1) and m1.group(1) == LA._MD_CLAIM_DOC_RE.pattern)
 rec('8b: the Miami not-a-claim filter mirrors records_liens', bool(m2) and m2.group(1) == LA._MD_NOT_CLAIM_DOC_RE.pattern)
 rec('8c: records_liens consults the document cache', "lien_amounts.lookup('MIAMI-DADE', row)" in rl)
+src_la = open(os.path.join(HERE, 'lien_amounts.py'), encoding='utf-8').read()
+rec('8d: a blocked download is asked again the next run and once more in the same run',
+    LA.RETRY_TRANSIENT_DAYS == 1 and 'gap_pdf' in LA.TRANSIENT and 'SECOND PASS' in src_la and "report['recovered']" in src_la)
 bat = open(os.path.join(HERE, 'refresh-dealflow.bat'), encoding='cp1252').read()
+rec('9c: the nightly reads 250 lien documents', 'lien_amounts.py --limit 250' in bat)
 i_la, i_cr, i_build = bat.find('lien_amounts.py --limit'), bat.find('complaint_reader.py --limit'), bat.find('F.make_tracker(')
 rec('9a: the nightly reads lien amounts and complaints before the rebuild', 0 < i_la < i_cr < i_build, (i_la, i_cr, i_build))
 gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().split()
