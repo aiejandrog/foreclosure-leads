@@ -544,7 +544,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[]}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -861,6 +861,26 @@ function fcReadBack(nline, nshown){
   a.forEach(function(x){ if(said.indexOf(' '+x+' ')>=0) hit++; });
   w.forEach(function(x){ if(shown.indexOf(' '+x+' ')<0) extra++; });
   return hit/a.length>=0.6&&extra<4;
+}
+/* KEEP THE LINE THAT IS ON SCREEN? cur: {line, step, shownMs, heard:[normalized things already
+   answered], lines: how many AI lines this call}. j: the model's new answer {type, step, heard}.
+   True = keep what is showing. The line changes only when the homeowner changed the situation:
+   a new objection, a new question, a time, a stop request, or an answer that moves the call to a
+   later step. It does not change for a mumble, for the same thing said again, for another wording
+   of the same step, or to go back to the opener once the call is under way. */
+var FC_STEP_ORDER=['opener','situation','problem','solution','consequence','bridge','close','booked'];
+function fcKeepLine(cur, j){
+  if(!cur||!cur.line) return false;                       /* nothing showing yet */
+  var type=String((j&&j.type)||''), step=String((j&&j.step)||''), h=norm((j&&j.heard)||'');
+  if(type==='stop'||type==='time') return false;          /* always shown */
+  if(type==='unclear'||!type) return true;                /* a mumble is not a new situation */
+  for(var i=0;i<(cur.heard||[]).length;i++){              /* they said it again, or it is the same words re-heard */
+    var p=cur.heard[i]; if(h&&p&&(h===p||(h.length>=8&&(p.indexOf(h)>=0||h.indexOf(p)>=0)))) return true;
+  }
+  if(step==='opener'&&cur.lines>0) return true;           /* never back to the opener mid-call */
+  var a=FC_STEP_ORDER.indexOf(cur.step), b=FC_STEP_ORDER.indexOf(step);
+  if(type==='answer'&&a>=0&&b>=0&&b<=a&&cur.shownMs<25000) return true;   /* another wording of the same step */
+  return false;
 }
 /* THE SAME OBJECTION AGAIN. The first time gets the card. Reading that card twice is how a call
    dies (test call 11-15 18:38: "not interested" twice, same card twice, nothing left to say). The
@@ -1421,7 +1441,11 @@ function aiCheck(){
     /* Nothing new was said by them (same words heard as last time), or the model handed back the line
        already on screen: keep what is there. Call 11-16 17:03 showed one line five times in a row. */
     if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;
-    S.ai.heard=j.heard||'';
+    /* STICK TO ONE (Alex, 11-16: "it's switching too much, you need to stick to one, unless the
+       situation changes"). Call 20:41 showed three versions of the opener in two minutes. The line on
+       screen is replaced only when the homeowner changed the situation; see fcKeepLine. */
+    if(fcKeepLine({line:S.ai.line, step:S.ai.step, shownMs:now()-(S.ai.shownAt||0), heard:S.ai.heardAll, lines:S.ai.hist.length}, j)) return;
+    S.ai.heard=j.heard||''; S.ai.step=j.step||''; if(j.heard) S.ai.heardAll.push(norm(j.heard));
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
     S.ai.line=j.line; S.ai.shownAt=now();
     S.ai.hist.push(j.line); if(S.ai.hist.length>14) S.ai.hist.shift();      /* the whole call's lines, so nothing is said twice */
@@ -1818,7 +1842,7 @@ function finish(outcome){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; $('aibody').textContent=j.line; aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,

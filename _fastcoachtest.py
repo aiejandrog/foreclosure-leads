@@ -178,6 +178,17 @@ function card(){ var c=T.card(); return c?{id:c.id,kind:c.kind,say:c.say,ask:c.a
   o.one_join=T.lines().slice(n1).map(function(l){ return l.text; });
   o.one_hard=T.lines().filter(function(l){ return l.spk==='you'||l.spk==='them'; }).length;
   var fcEchoT=function(a,b){ return T.echo(a,b); };
+  var cur0={line:'What do you want to happen with the house?', step:'situation', shownMs:9000, heard:['is this about'], lines:2};
+  o.keepline=[T.keepLine(cur0,{type:'unclear',step:'situation',heard:'Okay.'}),
+          T.keepLine(cur0,{type:'question',step:'opener',heard:'Is this about?'}),
+          T.keepLine(cur0,{type:'answer',step:'situation',heard:'Uh I mean I guess so yeah'}),
+          T.keepLine(cur0,{type:'answer',step:'opener',heard:'Yeah hello'}),
+          T.keepLine(cur0,{type:'answer',step:'problem',heard:'I want to keep it'}),
+          T.keepLine(cur0,{type:'objection',step:'situation',heard:'I have a lawyer handling it'}),
+          T.keepLine(cur0,{type:'question',step:'situation',heard:'What can you even do for me'}),
+          T.keepLine(cur0,{type:'time',step:'booked',heard:'four'}),
+          T.keepLine(Object.assign({},cur0,{shownMs:40000}),{type:'answer',step:'situation',heard:'something else entirely new here'}),
+          T.keepLine({line:'',step:'',shownMs:0,heard:[],lines:0},{type:'question',step:'opener',heard:'Who is this'})];
   var said=' Okay I mean if the sale date comes where would you and your family locate';
   o.fresh=[T.fresh(said+' That is a great question. I have no idea.', said.length), T.fresh(said, said.length), T.fresh(' hello  there ', 0)];
   /* a Monday, 16 Nov 2026, 12:30 local */
@@ -384,6 +395,8 @@ else:
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
         chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
+        chk(o['keepline'] == [True, True, True, True, False, False, False, False, False, False],
+            'the line on screen stays for a mumble, the same thing said again, a rewording of the same step, or going back to the opener; it changes for an answer that moves on, a new objection, a new question, or a time', o['keepline'])
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
         chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')
         chk('var AI_PAUSE=800' in src and 'S.ai.n=n0; aiAsk(); return;' in src and 'line:j.line' in src, 'the AI is asked 0.8 s after the last word, an answer to half a sentence is thrown away, and each line is saved with the call')
