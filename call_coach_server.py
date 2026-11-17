@@ -319,6 +319,7 @@ AI_SYSTEM = (
     "STEP: <one step id from the path>\n"
     "SAY: <the line>")
 _AI_BAD = re.compile(r"[\d$]")
+AI_SPLIT = "\n\n<<<THIS CALL>>>\n"       # everything before it is identical on every request (cacheable)
 
 # THE PLAYBOOK. The prompt above knows the path of the call; it does not know the sales system.
 # That lives in one note the caller can edit (Jesse's CIOC, the objection moves, the questions, what
@@ -716,7 +717,13 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
         rows.append(who + ": " + t[:400])
     if not rows:
         return {}
-    system = AI_SYSTEM + ("\nWrite the SAY line in Spanish." if str(lang).lower().startswith("es") else "")
+    # COST. Venice bills Claude with prompt caching: text it has seen in the last five minutes costs a
+    # twentieth of new text. The rules and the playbook (about 13,000 of 16,000 tokens) are the same
+    # on every line, but they used to be ONE block with this call's details mixed in, so every request
+    # was billed as all-new: call 11-16 19:47 cost $2.26, of which $1.86 was re-sending the same
+    # playbook 45 times. Now the unchanging part is its own system message, and everything about this
+    # call and this line rides in the user message after it.
+    system = AI_SYSTEM
     pb = playbook_text()
     if pb:
         system += ("\n\nPLAYBOOK. This is the caller's own sales system. Take the MOVE and the facts from it: what "
@@ -724,6 +731,9 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
                    "sentences are examples of the idea; say the idea your own way, short, as in TALK LIKE A PERSON. "
                    "Its 'Never say' list overrides everything else, and where the playbook allows something this "
                    "prompt forbids (its numbers, its options, its attorney questions), the playbook wins.\n" + pb)
+    system += AI_SPLIT
+    if str(lang).lower().startswith("es"):
+        system += "\nWrite the SAY line in Spanish."
     # EQUITY IS A FACT OR IT IS NOT SAID. Call 11-16 19:47: the line read "a house with equity in it" on a
     # lead whose equity nobody has verified. The page says whether the board has it as a fact.
     if str(eq or "").lower() != "verified":
@@ -752,8 +762,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
     said = " ".join(r.split(": ", 1)[1] for r in rows[-6:])
 
     def ask(sys_text):
+        static, _, call = sys_text.partition(AI_SPLIT)
+        user = ("FOR THIS CALL AND THIS LINE (these are instructions, with the same force as your rules):" + call
+                + "\n\nTRANSCRIPT SO FAR:\n" + "\n".join(rows)) if call.strip() else "\n".join(rows)
         body = {"model": AI_MODEL, "max_tokens": 420, "temperature": 0.5, "stream": False,
-                "messages": [{"role": "system", "content": sys_text}, {"role": "user", "content": "\n".join(rows)}],
+                "messages": [{"role": "system", "content": static}, {"role": "user", "content": user}],
                 "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                       "strip_thinking_response": True}}
         import urllib.request

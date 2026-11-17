@@ -378,13 +378,15 @@ else:
             'the model is told the voice in his own words: plain, spoken, one picture that makes them think, and his full objection answer')
         chk('S.wrapPending&&!S.wrapWaited' in src and src.count('S.wrapPending=false') >= 4 and "eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''" in src,
             'picking the outcome waits for the wrap-up, and every AI line is told whether equity is verified')
+        chk('AI_GAP=2500' in src and 'if(S.ai.busy||since<AI_GAP)' in src and src.count('S.ai.busy=false') >= 2,
+            'one AI request at a time, and no more than one every 2.5 seconds')
         chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
         chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
         chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')
-        chk('var AI_PAUSE=600' in src and 'S.ai.n=n0; aiAsk(); return;' in src and 'line:j.line' in src, 'the AI is asked 0.6 s after the last word, an answer to half a sentence is thrown away, and each line is saved with the call')
+        chk('var AI_PAUSE=800' in src and 'S.ai.n=n0; aiAsk(); return;' in src and 'line:j.line' in src, 'the AI is asked 0.8 s after the last word, an answer to half a sentence is thrown away, and each line is saved with the call')
         chk('AI_PAUSE' in src and 'AI_HOLD' in src and "shown:S.ai.line" in src, 'the AI line waits for a pause, holds long enough to read, and tells the model what is on screen')
         chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
