@@ -1203,7 +1203,7 @@ def notice_html(r, today, touch, cb):
             '<div class="nhead" lang="en">%s</div><div class="nhead es" lang="es">%s</div>'
             '<div class="nsub">%s<span>%s</span></div>'
             '<div class="cols">%s</div>'
-            '<div class="cta">%s &middot; %s: %s</div>'
+            '<div class="cta">%s &middot; %s: <span style="white-space:nowrap">%s</span></div>'
             '<div class="nref">%sRefer to <b>BSG File No. %s</b> &middot; Mencione el <b>n.&ordm; de '
             'archivo de BSG %s</b></div>'
             '%s</div>'
@@ -1212,7 +1212,9 @@ def notice_html(r, today, touch, cb):
                _e(M.street_case(r['addr'])), _e(place), box,
                _e(n['head'][0]), _e(n['head'][1]),
                _e(n['sub'][0].format(**v_en)), _e(n['sub'][1].format(**v_es)),
-               cols, _e(n['cta'][0]), _e(n['cta'][1]), _e(M.contact_phone()),
+               cols.replace(_e(M.contact_phone()),      # a phone number never splits across lines
+                            '<span style="white-space:nowrap">%s</span>' % _e(M.contact_phone())),
+               _e(n['cta'][0]), _e(n['cta'][1]), _e(M.contact_phone()),
                _e(hours).replace('&lt;br&gt;', '<br>'), _e(show_code(r['code'])), _e(show_code(r['code'])),
                sig_html(r, False, ''), footer_line(), _e(r['case']), touch))
 
