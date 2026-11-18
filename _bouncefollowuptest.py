@@ -257,7 +257,7 @@ rec('clean scan: exit 0, version 2, a clean record per mailbox from this run\'s 
     and all(r.get('last_run_ok') is True and BS._parse(r.get('last_ok_started_utc')) >= before - dt.timedelta(seconds=1)
             for r in m.values()), (rc, st))
 rec('each mailbox records the date its search started from',
-    all(r.get('last_ok_since') == (TODAY - dt.timedelta(days=14)).isoformat() for r in m.values()), m)
+    all(r.get('last_ok_since') == (TODAY - dt.timedelta(days=180)).isoformat() for r in m.values()), m)   # default 180 since 2026-11-18
 rec('list_hashes are exactly the hashed list as written',
     st.get('list_hashes') == sorted(BS.addr_hash(x) for x in bl), (len(st.get('list_hashes') or []), sorted(bl)))
 rec('status carries no recipient address',
