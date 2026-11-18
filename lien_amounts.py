@@ -494,6 +494,28 @@ def resolve_broward(cases, here=HERE, limit=RESOLVE_CASES, pause=PAUSE_S, search
     return done
 
 
+def interleave(items):
+    """Take turns between counties, each county keeping its own order.
+
+    WHY (2026-11-18). The worklist came out county by county, so the nightly document limit was spent
+    on whichever county sorted first: 250 read that night = Broward 213, Miami-Dade 37, Palm Beach 0,
+    while Palm Beach chains sat 'unpriced' because the Landmark index publishes no amounts and only
+    these documents can price them."""
+    by, order = {}, []
+    for it in items:
+        if it[0] not in by:
+            by[it[0]] = []
+            order.append(it[0])
+        by[it[0]].append(it)
+    out, i = [], 0
+    while len(out) < len(items):
+        for c in order:
+            if i < len(by[c]):
+                out.append(by[c][i])
+        i += 1
+    return out
+
+
 def run(counties, limit=DEFAULT_LIMIT, dry_run=False, apply_only=False, here=HERE, today=None,
         readers=None, pause=PAUSE_S, second_wait=SECOND_PASS_WAIT_S):
     today = today or datetime.date.today()
@@ -510,7 +532,7 @@ def run(counties, limit=DEFAULT_LIMIT, dry_run=False, apply_only=False, here=HER
                 report['queued'] = len(items)
         if not dry_run:
             readers = readers or Readers()
-            for county, case, key in items:
+            for county, case, key in interleave(items):
                 if report['read'] >= limit:
                     break
                 entry = read_one(county, key, case, readers, today)

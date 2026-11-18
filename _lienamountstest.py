@@ -175,6 +175,13 @@ rec('9a: the nightly reads lien amounts and complaints before the rebuild', 0 < 
 gi = open(os.path.join(HERE, '.gitignore'), encoding='utf-8').read().split()
 rec('9b: the amount cache and the complaint file are ignored', 'lien_amounts.json' in gi and 'complaints.json' in gi)
 
+# ---- 10. counties take turns for the nightly document limit (2026-11-18) ----
+_il = LA.interleave([('BROWARD', 'a', 1), ('BROWARD', 'b', 2), ('BROWARD', 'c', 3), ('MIAMI-DADE', 'd', 4),
+                     ('PALM BEACH', 'e', 5)])
+rec('10a: counties take turns, each keeping its own order', [x[2] for x in _il] == [1, 4, 5, 2, 3], _il)
+rec('10b: interleave keeps every item, and an empty list stays empty',
+    LA.interleave([]) == [] and sorted(x[2] for x in _il) == [1, 2, 3, 4, 5])
+
 print('\n%d checks, %d failed' % (len(checks), len(fails)))
 print('ALL PASS' if not fails else 'FAILED: ' + '; '.join(fails))
 sys.exit(1 if fails else 0)
