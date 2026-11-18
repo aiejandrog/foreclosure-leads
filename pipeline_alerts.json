@@ -1,58 +1,52 @@
 {
  "alerts": [
   {
-   "at": "2026-11-17T08:38:03-05:00",
+   "at": "2026-11-17T21:09:45-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "Trailing 7-day lower bound 18.3% (raw 27.7%, 18 of 65) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-17T08:38:03-05:00",
+   "at": "2026-11-17T21:09:45-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-17T08:38:03-05:00",
+   "at": "2026-11-17T21:09:45-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-16 21:09): battery 45% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 11-17 21:09): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-11-17T08:38:03-05:00",
+   "at": "2026-11-17T21:09:45-05:00",
    "key": "paid-reads-cap",
    "severity": "fail",
    "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
-  },
-  {
-   "at": "2026-11-17T08:38:03-05:00",
-   "key": "tracerfy-credits",
-   "severity": "fail",
-   "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-17T08:38:03-05:00",
+ "published_at": "2026-11-17T21:09:45-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
+   "errors": 4,
    "filings": 3185,
-   "holds": 776,
+   "holds": 801,
    "last_http_status": 0,
-   "leads_checked": 8,
-   "match_s": 2,
-   "needing_search": 3621,
+   "leads_checked": 34,
+   "match_s": 1,
+   "needing_search": 3618,
    "provider": "courtlistener",
-   "pull_age_h": 1.05,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "searched_this_run": 8,
+   "reason": "time_budget",
+   "requests_used": 67,
+   "searched_this_run": 34,
    "starved_runs": 0,
    "truncated": 0
   },
@@ -118,7 +112,7 @@
    "caps": [],
    "date": "2026-11-17",
    "eligible": 29,
-   "judged": false,
+   "judged": true,
    "paused": false,
    "readable": true,
    "scheduled": false,
@@ -128,24 +122,25 @@
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "no_email": 6,
+     "no_email": 12,
      "open_requested": 1,
      "run_end": 1,
-     "send_answer": 30,
+     "run_start": 1,
+     "send_answer": 60,
      "task_open": 1,
-     "worker_loaded": 1
+     "worker_loaded": 4
     },
     "no_email": {
-     "none": 6
+     "none": 12
     },
     "queued": 14,
     "readable": true,
     "refused": {
-     "bounce_scan_stale": 25,
-     "followups_off": 4,
-     "stay_active": 1
+     "bounce_scan_stale": 50,
+     "followups_off": 8,
+     "stay_active": 2
     },
-    "rows": 42,
+    "rows": 82,
     "skipped": {}
    }
   },
@@ -169,7 +164,7 @@
    "spent": 0.0
   },
   "readiness": {
-   "at": "2026-11-16T21:09:28-05:00",
+   "at": "2026-11-17T21:09:45-05:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -191,7 +186,7 @@
     "DealFlow Replies"
    ],
    "on_ac": true,
-   "pct": 45,
+   "pct": 79,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
@@ -200,9 +195,7 @@
   "refresh_flag": {
    "stale": false
   },
-  "tracerfy": {
-   "credits": 1
-  },
+  "tracerfy": {},
   "wp_web": {
    "readable": false
   }
