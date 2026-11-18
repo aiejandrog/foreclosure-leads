@@ -47,7 +47,10 @@ def parcel(pid, owner, addr='12 TEST LN', hs=0, jv=400000):
 
 # ---- 1. queries --------------------------------------------------------------------------------
 rec('1a: LAST, FIRST M -> roll prefixes', PN.queries('MARTINEZ, SHAWNA E') == ['MARTINEZ SHAWNA', 'MARTINEZ'], PN.queries('MARTINEZ, SHAWNA E'))
-rec('1b: FIRST LAST -> LAST FIRST', PN.queries('PAULA DRALUCK') == ['DRALUCK PAULA', 'DRALUCK'])
+rec('1b: FIRST LAST -> LAST FIRST, then the name as written, then the surname',
+    PN.queries('PAULA DRALUCK') == ['DRALUCK PAULA', 'PAULA DRALUCK', 'DRALUCK'], PN.queries('PAULA DRALUCK'))
+rec('1f: a trailing suffix is not taken for the surname',
+    PN.queries('PAT Q TESTER JR') == ['TESTER PAT', 'PAT Q', 'TESTER'], PN.queries('PAT Q TESTER JR'))
 rec('1c: an entity is searched as written, then without its suffix',
     PN.queries('TESTCO HOLDINGS LLC') == ['TESTCO HOLDINGS LLC', 'TESTCO HOLDINGS'], PN.queries('TESTCO HOLDINGS LLC'))
 rec('1d: a quote never reaches the query', "'" not in ' '.join(PN.queries("O'TESTLY, PAT")), PN.queries("O'TESTLY, PAT"))
@@ -210,6 +213,138 @@ with tempfile.TemporaryDirectory() as td:
     open(os.path.join(td, 'notes.txt'), 'w').write('x')
     rec('7e: Broward complaints saved from the court site are found by case',
         sorted(CR.broward_inbox_files(td)) == ['CACE-26-000123', 'CACE-26-000456'], sorted(CR.broward_inbox_files(td)))
+
+# ---- 8. v2 (2026-11-18): parcel printed in the filing, non-owner parties, version re-ask -------------
+rec('8a: an association, a lender and an unknown-heirs caption are non-owner parties',
+    PN.is_nonowner('SAMPLE LAKES HOMEOWNERS ASSOCIATION INC') and PN.is_nonowner('TEST BANK NA')
+    and PN.is_nonowner('UNKNOWN HEIRS DEVISEES GRANTEES OF PAT Q TESTER') and not PN.is_nonowner('PAT Q TESTER')
+    and not PN.is_nonowner('TESTCO HOLDINGS LLC'))
+rec('8b: the person inside an unknown-heirs caption is found',
+    PN.named_in_blob('UNKNOWN HEIRS BENEFICIARIES DEVISEES OF THE ESTATE OF PAT Q TESTER, DECEASED') == 'PAT Q TESTER',
+    PN.named_in_blob('UNKNOWN HEIRS BENEFICIARIES DEVISEES OF THE ESTATE OF PAT Q TESTER, DECEASED'))
+rec('8c: a caption naming nobody yields no name',
+    PN.named_in_blob('UNKNOWN HEIRS DEVISEES GRANTEES ASSIGNEES LIENORS CREDITORS TRUSTEES AND ALL OTHER PARTIES') == ''
+    and PN.named_in_blob('UNKNOWN TENANT') == '')
+c = PN.candidate_owners({'owner': 'SAMPLE LAKES HOMEOWNERS ASSOCIATION INC', 'plaintiff': 'PAT Q TESTER'})
+rec('8d: a recorded filing with the association in the owner slot searches the other party', c == ['PAT Q TESTER'], c)
+c = PN.candidate_owners({'owner': 'SAMPLE LAKES HOMEOWNERS ASSOCIATION INC', 'plaintiff': 'PAT Q TESTER', 'src': 'court'})
+rec('8e: a court caption is never swapped (the plaintiff there IS the plaintiff)', c == [], c)
+c = PN.candidate_owners({'owner': 'TEST BANK NA', 'plaintiff': 'SAMPLE LAKES HOMEOWNERS ASSOCIATION INC'})
+rec('8f: two non-owner parties give nothing to search', c == [], c)
+c = PN.candidate_owners({'owner': 'TESTER, PAT', 'plaintiff': 'TEST BANK NA'})
+rec('8g: an ordinary owner is searched as before', c == ['TESTER, PAT'], c)
+r = PN.resolve_row({'owner': 'TEST BANK NA', 'plaintiff': 'SAMPLE ASSOCIATION INC'}, fetch=roll({}), pause=0)
+rec('8h: nothing to search is "none" with the reason, and the roll is not asked',
+    r['confidence'] == 'none' and 'non-owner' in r['evidence'], r)
+r = PN.resolve_row({'owner': 'SAMPLE LAKES HOMEOWNERS ASSOCIATION INC', 'plaintiff': 'TESTER, PAT'},
+                   fetch=roll({'TESTER PAT': [parcel('7', 'TESTER PAT', hs=50000)]}), pause=0)
+rec('8i: the swapped owner resolves', r['confidence'] == 'high' and r['folio'] == '7', r)
+
+
+def pcn_roll(rows, owner_rows=None):
+    asked = []
+
+    def fetch(where, n):
+        asked.append(where)
+        if 'PARCEL_ID=' in where:
+            return [x for x in rows if "'%s'" % x['PARCEL_ID'] in where]
+        return owner_rows or []
+    fetch.asked = asked
+    return fetch
+
+
+LEG = 'Case Number: 502099CA000001XXXAMB L: 7 SUB: SAMPLE ESTATES PCN: 00-42-47-17-19-000-1730'
+rec('8j: the parcel number printed in a recorded filing is read', PN.pcn_of(LEG) == '00424717190001730', PN.pcn_of(LEG))
+rec('8k: none, a blank mask, or two different numbers read as none',
+    PN.pcn_of('L: 7 SUB: X PCN:') == '' and PN.pcn_of('PCN: __-__-__-__-__-___-____') == ''
+    and PN.pcn_of('PCN: 00-42-47-17-19-000-1730 PCN: 00-42-47-17-19-000-1740') == '')
+f = pcn_roll([parcel('00424717190001730', 'TESTER PAT', '7 SAMPLE CT')])
+r = PN.resolve_row({'owner': 'SAMPLE ESTATES HOMEOWNERS ASSOCIATION INC', 'legal': LEG}, fetch=f, pause=0)
+rec('8l: the printed parcel is high, rung pb-pcn, with no owner name needed',
+    r['confidence'] == 'high' and r['rung'] == 'pb-pcn' and r['folio'] == '00424717190001730'
+    and r['addr'] == '7 SAMPLE CT' and r['ownerMismatch'] is False and len(f.asked) == 1, r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG}, fetch=pcn_roll([parcel('00424717190001730', 'OTHER PERSON NEW')]), pause=0)
+rec('8m: a printed parcel now owned by someone else says so', r['confidence'] == 'high' and r['ownerMismatch'] is True, r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG},
+                   fetch=pcn_roll([], [parcel('9', 'TESTER PAT', hs=1)]), pause=0)
+rec('8n: a printed parcel the roll does not have falls back to the name', r['folio'] == '9' and r['rung'] == 'pb-name', r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG}, fetch=pcn_roll([parcel('00424717190001730', 'TESTER PAT')]),
+                   pause=0, co_no=53, rung='md-name')
+rec('8o: the parcel-number rung is Palm Beach only', r.get('rung') != 'pb-pcn', r)
+today = dt.date(2026, 11, 18)
+rec('8p: a v1 "none" is asked again at once; a v2 "none" waits',
+    PN._due({'confidence': 'none', 'rung': None, 'asked': '2026-11-17'}, today)
+    and not PN._due({'confidence': 'none', 'asked': '2026-11-17', 'v': PN.RESOLVER_V}, today))
+rec('8q: a parcel another rung settled is still never overwritten',
+    not PN._due({'confidence': 'high', 'rung': 'bcpa', 'asked': '2026-01-01'}, today))
+full2 = [parcel(str(i), 'DRALUCK PERSON%d' % i) for i in range(PN.PAGE)]
+r = PN.resolve_row({'owner': 'PAULA DRALUCK'},
+                   fetch=roll({'DRALUCK PAULA': [], 'PAULA DRALUCK': [parcel('5', 'PAULA DRALUCK', hs=1)], 'DRALUCK': full2}), pause=0)
+rec('8r: a filing written LAST FIRST without a comma is found by the name as written', r['folio'] == '5', r)
+
+# ---- 9. the legal description on the county parcel layer (pb-legal) ---------------------------------
+g = PN.parse_pb_legal('B: 4 L: 8 SUB: SAMPLE ESTATES # 01 PCN: Case Number: Case Number: 502099CC000001XXXASB')
+rec('9a: block, lot and subdivision are read', g == [{'sub': 'SAMPLE ESTATES # 01', 'blk': '4', 'lot': '8', 'unit': ''}], g)
+rec('9b: block 4 lot 8 -> the parcel-number pattern', PN.pcn_pattern(g[0]) == '__________004008_', PN.pcn_pattern(g[0]))
+rec('9c: lot 173 with no block -> its last four digits', PN.pcn_pattern({'lot': '173'}) == '_____________173_')
+rec('9d: a unit stands in for a lot; a letter unit or no number gives no pattern',
+    PN.pcn_pattern({'unit': '205'}) == '_____________205_' and PN.pcn_pattern({'unit': 'C123'}) == ''
+    and PN.pcn_pattern({}) == '')
+rec('9e: the blank form template is not a legal',
+    PN.parse_pb_legal('L: BLK: U: SUB: PH: BLDG: SEC: TWN: RNG: WK: COM: LEGAL: Parcel__-__') == [])
+
+
+def gis_of(rows):
+    asked = []
+
+    def gis(where):
+        asked.append(where)
+        return rows
+    gis.asked = asked
+    return gis
+
+
+def gp(pid, owner, sub='SAMPLE ESTATES PL 1', addr='8 SAMPLE CT', hs='Y'):
+    return {'PARCEL_NUMBER': pid, 'SUBDIV_NAME': sub, 'OWNER_NAME1': owner, 'SITE_ADDR_STR': addr,
+            'CITYNAME': 'BOCA RATON', 'ZIP1': '33431', 'HMSTD_FLG': hs, 'TOTAL_MARKET': 350000.0, 'PADDR1': '9 MAIL RD'}
+
+
+LEG9 = 'B: 4 L: 8 SUB: SAMPLE ESTATES # 01 PCN: Case Number: 502099CC000001XXXASB'
+gq = gis_of([gp('00424706040040080', 'TESTER PAT')])
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({}), pause=0, gis=gq)
+rec('9f: one parcel whose owner carries the name is high, rung pb-legal',
+    r['confidence'] == 'high' and r['rung'] == 'pb-legal' and r['folio'] == '00424706040040080'
+    and r['value'] == 350000 and r['hs'] is True and r['mailAddr'].startswith('9 MAIL RD'), r)
+rec('9g: the query names the subdivision and the block/lot pattern',
+    "SUBDIV_NAME LIKE 'SAMPLE ESTATES%'" in gq.asked[0] and "PARCEL_NUMBER LIKE '__________004008_'" in gq.asked[0], gq.asked)
+r = PN.resolve_row({'owner': 'SAMPLE ESTATES HOMEOWNERS ASSOCIATION INC', 'legal': LEG9}, fetch=roll({}), pause=0,
+                   gis=gis_of([gp('00424706040040080', 'TESTER PAT')]))
+rec('9h: one parcel and no owner name to compare is medium and needs a person',
+    r['confidence'] == 'medium' and r['needsHuman'] is True, r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({}), pause=0,
+                   gis=gis_of([gp('00424706040040080', 'OTHER PERSON')]))
+rec('9i: one parcel owned by someone else is low with the candidate, never promoted',
+    r['confidence'] == 'low' and r['candidates'] and 'addr' not in r, r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({}), pause=0,
+                   gis=gis_of([gp('00424706040040080', 'TESTER PAT', sub='SAMPLE ESTATES PL 3')]))
+rec('9j: plat 3 of the same name never answers for plat 1 (falls to the name rung, which finds nothing)',
+    r['confidence'] == 'none', r)
+two9 = [gp('00424706040040080', 'TESTER PAT'), gp('00424706050040080', 'OTHER PERSON', addr='9 SAMPLE CT')]
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({}), pause=0, gis=gis_of(two9))
+rec('9k: two parcels fit and one owner agrees -> that one, high', r['confidence'] == 'high' and r['folio'] == '00424706040040080', r)
+r = PN.resolve_row({'owner': 'SAMPLE ASSOCIATION INC', 'legal': LEG9}, fetch=roll({}), pause=0, gis=gis_of(two9))
+rec('9l: two parcels and no name -> low with both candidates', r['confidence'] == 'low' and len(r['candidates']) == 2, r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({'TESTER PAT': [parcel('9', 'TESTER PAT', hs=1)]}),
+                   pause=0, gis=gis_of([]))
+rec('9m: nothing on the layer falls back to the owner name', r['rung'] == 'pb-name' and r['folio'] == '9', r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9}, fetch=roll({'TESTER PAT': [parcel('9', 'TESTER PAT', hs=1)]}),
+                   pause=0, gis=gis_of([gp('00424706040040080', 'OTHER PERSON')]))
+rec('9n: a name hit on a DIFFERENT parcel than the legal is never taken (it may be the owner\'s home)',
+    r['confidence'] == 'low' and 'addr' not in r and 'different parcel' in r['evidence'], r)
+r = PN.resolve_row({'owner': 'TESTER, PAT', 'legal': LEG9},
+                   fetch=roll({'TESTER PAT': [parcel('00424706040040080', 'TESTER PAT', hs=1)]}),
+                   pause=0, gis=gis_of([gp('00424706040040080', 'TESTER PATRICIA Q', hs='N')]))
+rec('9o: a name hit on the legal\'s own parcel stands', r['confidence'] == 'high' and r['folio'] == '00424706040040080', r)
 
 print('\n%d checks, %d failed' % (len(checks), len(fails)))
 print('ALL PASS' if not fails else 'FAILED: ' + '; '.join(fails))
