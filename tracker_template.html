@@ -3927,15 +3927,18 @@ function _contactBlockHtml(r){
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
   // No plain mailto: link while the board holds the lead (client, diligence hold, claimed, owner gone).
-  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=> _boardWrittenHeld(r) ? esc(e) : '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  if((r.emails||[]).filter(e=>!(r._wpeSet||{})[e]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).filter(e=>!(r._wpeSet||{})[e]).map(e=> _boardWrittenHeld(r) ? esc(e) : '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
-  // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
+  // Shown as text, never as a mailto link. Fed to the worker's auto-send list since 2026-11-18 (_applyWpe).
   // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
   // 2026-11-02 (Alex: "a direct link to email from the board routing the specific property to the
   // searched up one"): each one gets "Email, pre-filled", which opens THIS lead in Call Mode's
   // composer for THAT address (_cmMail below). Still Call Mode's POST /send, never a mailto. Hidden
   // while the board itself holds the lead (_boardMailHeld); Call Mode and the bridge check again.
-  const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0);
+  const _wpe = (nn.wpe||[]).filter(e => (r.emails||[]).indexOf(e) < 0 || (r._wpeSet||{})[String(e||'').trim().toLowerCase()]);
+  // relative / not-sure emails from a whole-page Whitepages capture (notes.wpre): a record only, never emailed
+  const _wpre = (nn.wpre||[]).filter(x => x && x.e);
+  if(_wpre.length) h += '<div class="csrow"><span class="csk">Relatives</span><span class="csvv">'+_wpre.map(x => esc(x.e)+' <span class="cttag">'+(x.k==='r'?'relative':'not sure')+'</span>').join(' · ')+' <span class="cttag" title="Logged from a Whitepages capture. Never emailed by the board, the worker or the bridge.">log only</span></span></div>';
   const _mh = _boardMailHeld(r);
   if(_wpe.length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+_wpe.map(function(e){
       return esc(e) + (_mh ? '' : ' <a class="cmmail" href="'+esc(_callModeUrl())+'#mail='+encodeURIComponent(r.case)+'" target="dfcall" data-c="'+esc(r.case)+'" data-em="'+esc(e)+'" onclick="return _cmMail(this)" title="Opens this property in Call Mode with the email to this address already written. It sends from the company address through the laptop send bridge, after the opt-out, bounce and stay checks.">&#9993; Email, pre-filled</a>');
@@ -13160,6 +13163,7 @@ function _filedMs(r){
 }
 function _workerQueue(lane){
   lane = lane || 'urgent';
+  _applyWpe();
   var L = WORKER_LANES[lane] || WORKER_LANES.urgent;
   var cap = _capState();
   var pool = DATA.filter(function(r){
@@ -16742,6 +16746,31 @@ function _mailable(addr){
   return !!MAILABLE_DOMAINS[d] || /\.rr\.com$/.test(d);
 }
 function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
+/* OWNER EMAILS FROM WHITEPAGES REACH THE WORKER (2026-11-18, Alejandro: "morning worker emails not
+   being generated ... when i search the prospects up on whitepage i can input the prospects email").
+   notes.wpe = addresses he saved as the OWNER's on a Call Mode card (single box or the whole-page
+   capture). Until today they were shown on the case sheet and deliberately kept off the worker, so
+   every address he dug up was used at most once, by hand. They now join r.emails, so _cardMail,
+   the lane counts and the auto-run treat them like any address on file: the same allowlist
+   (_mailable), the same ladder (_mailStage reads the send ledger), the same bridge gates.
+   Relative emails (notes.wpre) are NEVER merged: nothing on the board sends to a relative.
+   Idempotent; r._wpeSet marks which addresses came from here so the case sheet can tag them. */
+function _applyWpe(){
+  try {
+    (DATA||[]).forEach(function(r){
+      var n = (typeof notes !== 'undefined' && notes[r.case]) || null;
+      var w = n && n.wpe; if(!w || !w.length) return;
+      var have = (r.emails||[]).map(function(e){ return String(e||'').trim().toLowerCase(); });
+      w.forEach(function(x){
+        var a = String(x||'').trim().toLowerCase();
+        if(a.indexOf('@') < 1 || /\*/.test(a)) return;
+        if(have.indexOf(a) >= 0){ return; }
+        r.emails = (r.emails||[]).concat([a]); have.push(a);
+        r._wpeSet = r._wpeSet || {}; r._wpeSet[a] = 1;
+      });
+    });
+  } catch(e){}
+}
 
 /* ---- SUBJECT_STYLE — 'urgent' | 'measured'. Alejandro's call, one word, in BOTH files. ---------
    'urgent'   (default, his 2026-08-28 framing):
@@ -17858,6 +17887,19 @@ function _mergeLead(local, remote){
     if(JSON.stringify(_ro) !== JSON.stringify(local.wpr||[])) ch.note = true;
     out.wpr = _ro;
   }
+  // relative / not-sure emails from a Whitepages capture (notes.wpre, [{e, k:'r'|'u', ts, by}]): union by address
+  if((local.wpre||[]).length || (remote.wpre||[]).length){
+    const _qm = {}, _qo = [];
+    (local.wpre||[]).concat(remote.wpre||[]).forEach(x => {
+      if(!x || typeof x !== 'object') return;
+      const a = String(x.e||'').trim().toLowerCase(), k = x.k;
+      if(a.indexOf('@') < 1 || (k !== 'r' && k !== 'u')) return;
+      if(_qm[a]){ if(k === 'r') _qm[a].k = 'r'; return; }
+      _qm[a] = Object.assign({}, x, {e:a}); _qo.push(_qm[a]);
+    });
+    if(JSON.stringify(_qo) !== JSON.stringify(local.wpre||[])) ch.note = true;
+    out.wpre = _qo;
+  }
   // emails pasted from Whitepages on a Call Mode card (notes.wpe): union, same reason
   if((local.wpe||[]).length || (remote.wpe||[]).length){
     const _e = [];
@@ -18829,6 +18871,7 @@ function _doorRouteGPS(){ if(!navigator.geolocation){ _doorRoute(); return; }
     function(p){ _buildRoute({lat:p.coords.latitude, lng:p.coords.longitude}); },
     function(){ alert('Could not read your location — routing from home base instead.'); _doorRoute(); }); }
 function render(){
+  _applyWpe();
   initCountyFilter();
   const rows = view();
   // PERF: the loop below used to build BOTH the desktop table rows AND the mobile cards for every

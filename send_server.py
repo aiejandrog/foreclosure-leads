@@ -964,6 +964,35 @@ def _merge_note(cur, inc):
             merged.append(x)
         added += max(0, len(merged) - len(a))
         out[field] = merged
+    # Owner emails pasted from Whitepages (notes.wpe, plain strings): union, lower-cased, order kept.
+    # Before 2026-11-18 this fell through to newer-wins, so a second address saved on another phone
+    # never reached the disk copy (_e2ewiringtest D15). The Morning Worker now sends to these.
+    a, b = cur.get('wpe') or [], inc.get('wpe') or []
+    if a or b:
+        _we = []
+        for x in list(a) + list(b):
+            e = str(x or '').strip().lower()
+            if '@' in e[1:] and e not in _we:
+                _we.append(e)
+        out['wpe'] = _we
+    # Relative / not-sure emails from a whole-page Whitepages capture (notes.wpre, [{e, k, ts, by}]):
+    # union by address, 'r' wins over 'u'. Log only: nothing on this bridge sends to them.
+    a, b = cur.get('wpre') or [], inc.get('wpre') or []
+    if a or b:
+        _qm, _qo = {}, []
+        for x in list(a) + list(b):
+            if not isinstance(x, dict):
+                continue
+            e, k = str(x.get('e') or '').strip().lower(), x.get('k')
+            if '@' not in e[1:] or k not in ('r', 'u'):
+                continue
+            if e in _qm:
+                if k == 'r':
+                    _qm[e]['k'] = 'r'
+                continue
+            _qm[e] = dict(x, e=e)
+            _qo.append(_qm[e])
+        out['wpre'] = _qo
     for field in ('badph', 'dntph'):
         a, b = cur.get(field) or [], inc.get(field) or []
         if a or b:

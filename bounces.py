@@ -179,7 +179,11 @@ def _record_scan(started, since, boxes, failed, notices, hard, new, days, listed
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--days', type=int, default=14)
+    # 180, not 14 (2026-11-18): bounce_scan.followup_hold only trusts a scan whose IMAP SINCE date
+    # reaches back past the LAST email to the address. A 14-day nightly reset that window every
+    # morning, so any follow-up whose previous email was older than two weeks was held forever:
+    # 356 addresses on 11-18 (0 delivered on 11-17 and 11-18). The search is a few hundred notices.
+    ap.add_argument('--days', type=int, default=180)
     ap.add_argument('--account', default='')
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()

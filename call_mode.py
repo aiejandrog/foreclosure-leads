@@ -7216,7 +7216,8 @@ function lookupList(){
          + 'placeholder="Number or email you found" style="flex:1;min-width:0" value="' + esc(LKDRAFT[r.c] || '') + '">'
          + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
          + mailOnFileBtn(lkAsDial(r, ''))
-         + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
+         + wpcBtn(r.c)
+         + (wpeAddrs(r.c).length ? '<div class="sub">Owner email on file (Morning Worker sends it): ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
   }).join('');
   var more = rows.length > CAP ? '<div class="card"><b>' + (rows.length - CAP) + ' more.</b><div class="sub">'
@@ -7536,6 +7537,172 @@ function wpeAddrs(c){
   var out = [];
   (((notes[c]||{}).wpe)||[]).forEach(function(x){ var a = _mailAddr(x); if(a && out.indexOf(a) < 0) out.push(a); });
   return out;
+}
+/* ══════════════ PASTE THE WHOLE WHITEPAGES PAGE (2026-11-18, Alejandro) ══════════════
+   "when i search the prospects up on whitepage i can input the prospects email if i find it there
+   including relatives or something intelligent to log the emails". Select-all on the Whitepages
+   person page, copy, paste it here. Every phone and email on it is pulled out and sorted:
+   OWNER   = found under the owner's own name (or before any relatives heading). Phones go to
+             notes.wpm like any owner paste; emails go to notes.wpe, which the board now hands to
+             the Morning Worker as a sendable address (tracker _applyWpe), so the next run emails it.
+   RELATIVE / NOT SURE = found under a relatives / associates / neighbors heading or another
+             person's name. Phones go to notes.wpr (call only, same as the paste box); emails go to
+             notes.wpre [{e, k:'r'|'u', ts, by}], which NOTHING sends: the worker, the bridge and the
+             composer never read it. It is a record of who to ask for the owner.
+   Every item can be re-tagged (Owner / Relative / Not sure / Skip) before the one Save tap. The
+   same refusals as the single paste box apply: pasteCheck for numbers, the do-not-call list, and
+   hardSuppressed for the lead. Masked values (j***@gmail.com, (305) 555-****) are never read. */
+var WPC = null;   /* {c, items:[{t:'p'|'e', v, k:'o'|'r'|'u'|'x', nm}], back} */
+function _wpcNameTokens(s){
+  return String(s||'').toUpperCase().replace(/\b(LLC|INC|CORP|TRUST|TR|EST|ESTATE|OF|THE|JR|SR|II|III|IV|AKA|ET|AL|UNKNOWN|HEIRS?)\b/g, ' ')
+    .replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(function(w){ return w.length >= 3; });
+}
+function _wpcIsName(line){
+  /* a person-name line: 2-5 words, letters only, no digits, not a heading or a field label */
+  if(/\d|@|:|\$/.test(line) || line.length > 48) return false;
+  var w = line.replace(/[.,'’-]/g, ' ').trim().split(/\s+/);
+  if(w.length < 2 || w.length > 5) return false;
+  if(/^(view|see|show|get|unlock|age|lives|lived|current|previous|phone|email|address|relatives?|associates?|neighbors?|family|background|report|contact|possible|people|other|more|resident|landline|mobile|wireless|voip|home|work)\b/i.test(line)) return false;
+  return w.every(function(x){ return /^[A-Za-z]+$/.test(x); });
+}
+function wpParse(text, owner){
+  var own = _wpcNameTokens(owner), out = [], seen = {};
+  var REL = /^(possible\s+)?(relatives?|family( members)?|associates?|associated people|people associated|neighbors?|household( members)?|other residents|current residents|roommates?|related to|may be related)\b/i;
+  var sect = 'o', cur = null, curOwn = null;   /* cur: the last person-name line; curOwn: does it match the owner */
+  String(text||'').split(/\r?\n/).forEach(function(raw){
+    var line = raw.replace(/\s+/g, ' ').trim(); if(!line) return;
+    if(REL.test(line)){ sect = 'r'; cur = null; curOwn = null; return; }
+    if(_wpcIsName(line)){
+      var t = _wpcNameTokens(line), hit = own.filter(function(x){ return t.indexOf(x) >= 0; }).length;
+      cur = line; curOwn = own.length ? (hit >= Math.min(2, own.length)) : null;
+      return;
+    }
+    var who = curOwn === true ? 'o' : (curOwn === false ? (sect === 'r' ? 'r' : 'u') : (sect === 'r' ? 'r' : 'o'));
+    /* emails: a masked local part (j***n@) must not yield the tail after the stars */
+    var re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, m;
+    while((m = re.exec(line))){
+      var prev = m.index > 0 ? line.charAt(m.index - 1) : '';
+      if(prev === '*' || /\*/.test(m[0])) continue;
+      var a = m[0].toLowerCase();
+      if(/@(whitepages|ekata|example)\./.test(a) || seen['e' + a]) continue;
+      seen['e' + a] = 1; out.push({t:'e', v:a, k:who, nm:cur || ''});
+    }
+    var rp = /(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})(?![\d*])/g, q;
+    while((q = rp.exec(line))){
+      var d = q[1] + q[2] + q[3];
+      if(seen['p' + d]) continue;
+      seen['p' + d] = 1; out.push({t:'p', v:d, k:who, nm:cur || ''});
+    }
+  });
+  return out;
+}
+/* The lead row a capture saves onto: the open dial card, or the Find-a-number row as a dial row. */
+function _wpcRow(c){
+  var r = (ROWS || []).filter(function(x){ return x.c === c; })[0];
+  if(r) return r;
+  var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+  return lr ? lkAsDial(lr, '') : null;
+}
+function wpcBtn(c){
+  return '<button type="button" class="ghost wpcopen" data-c="' + esc(c) + '" style="margin-top:8px;width:100%">'
+       + '&#128203; Paste the whole Whitepages page (owner + relatives)</button>';
+}
+function wireWpcBtns(){
+  Array.prototype.forEach.call(document.querySelectorAll('button.wpcopen'), function(b){
+    b.onclick = function(){ var c = b.getAttribute('data-c'); if(c) screenWpPaste(c); };
+  });
+}
+function _wpcRowHtml(it, j){
+  var lab = it.t === 'e' ? esc(it.v) : esc(fmt(it.v));
+  return '<div class="wpcit" style="border-top:1px solid var(--line,#2a3550);padding:8px 0">'
+    + '<div><b>' + (it.t === 'e' ? '&#9993; ' : '&#9742; ') + lab + '</b>'
+    + (it.nm ? ' <span class="sub" style="display:inline">under ' + esc(it.nm) + '</span>' : '') + '</div>'
+    + '<div class="pckind" style="margin-top:4px">' + [['o','Owner'],['r','Relative'],['u','Not sure'],['x','Skip']].map(function(x){
+        return '<button type="button" data-j="' + j + '" data-k="' + x[0] + '" class="' + (it.k === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('')
+    + '</div></div>';
+}
+function screenWpPaste(c, back){
+  var r = _wpcRow(c);
+  if(!r){ toast('This lead is no longer on the list', {bad:true}); return; }
+  WPC = {c:c, items:(WPC && WPC.c === c) ? WPC.items : [], back:back || null, txt:(WPC && WPC.c === c) ? WPC.txt : ''};
+  SCREEN = 'wppaste';
+  try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
+  var nP = 0, nE = 0;
+  WPC.items.forEach(function(it){ if(it.k !== 'x'){ if(it.t === 'e') nE++; else nP++; } });
+  $('app').innerHTML = '<div class="card">'
+    + '<div class="ltag">WHITEPAGES CAPTURE</div>'
+    + '<b>' + esc(ownerLabel(r)) + '</b><div class="sub">' + esc(propertyLabel(r)) + '</div>'
+    + '<div class="sub" style="margin-top:6px">On the Whitepages page: select all, copy, paste below. Every number and email is pulled out and sorted owner vs relative. Check the tags, then save once.</div>'
+    + '<textarea id="wpctxt" rows="6" style="width:100%;margin-top:8px" placeholder="Paste the Whitepages page here">' + esc(WPC.txt || '') + '</textarea>'
+    + '<div id="wpclist">' + (WPC.items.length ? WPC.items.map(_wpcRowHtml).join('')
+        : (WPC.txt ? '<div class="sub" style="margin-top:8px">No full number or email found in that text. Masked ones (***) are not readable.</div>' : '')) + '</div>'
+    + (WPC.items.some(function(it){ return it.k === 'r'; }) ? _kindWarn('r') : '')
+    + '<button type="button" id="wpcsave" class="pcgo" style="margin-top:10px"' + ((nP + nE) ? '' : ' disabled') + '>Save ' + nP + ' number' + (nP === 1 ? '' : 's') + ' + ' + nE + ' email' + (nE === 1 ? '' : 's') + '</button>'
+    + '<div class="sub">Owner emails go to the Morning Worker&rsquo;s next run. Relative emails are logged only, never emailed.</div>'
+    + '<button type="button" id="wpcback" class="ghost" style="margin-top:12px">&#8592; Back</button>'
+    + '</div><div class="sheetpad"></div>';
+  var ta = $('wpctxt'), tm = null;
+  ta.oninput = function(){ clearTimeout(tm); tm = setTimeout(function(){
+    WPC.txt = ta.value; WPC.items = wpParse(ta.value, r.o || r.on || ownerLabel(r));
+    screenWpPaste(c, back); var t2 = $('wpctxt'); if(t2){ t2.focus(); t2.selectionStart = t2.selectionEnd = t2.value.length; } }, 350); };
+  Array.prototype.forEach.call(document.querySelectorAll('.wpcit button[data-j]'), function(b){
+    b.onclick = function(){ var it = WPC.items[+b.getAttribute('data-j')]; if(it){ it.k = b.getAttribute('data-k'); screenWpPaste(c, back); } };
+  });
+  $('wpcsave').onclick = function(){ wpcSave(c); };
+  $('wpcback').onclick = function(){ _wpcLeave(); };
+}
+function _wpcLeave(){
+  var b = WPC && WPC.back; WPC = null; SCREEN = 'lead';
+  if(b) return b();
+  render();
+}
+/* One tap saves everything tagged. Returns {p, e, rel, refused} for the toast (and the tests). */
+function wpcSave(c){
+  var r = _wpcRow(c); if(!r || !WPC) return null;
+  var why = hardSuppressed(r);
+  if(why){ toast('Not saved: ' + why, {bad:true}); return null; }
+  var n = notes[c] = notes[c] || {status:'', note:''};
+  var res = {p:0, e:0, rel:0, refused:0};
+  WPC.items.forEach(function(it){
+    if(it.k === 'x') return;
+    if(it.t === 'p'){
+      var v = pasteCheck(r, it.v);
+      if(!v.num || v.why || dncElsewhere(v.num)){ res.refused++; return; }
+      if(it.k === 'o'){
+        n.wpm = n.wpm || []; if(n.wpm.indexOf(v.num) < 0) n.wpm.push(v.num);
+        if(!_lkDigits(n.phone)) n.phone = v.num;
+        _addNum(r, v.num); res.p++;
+      } else {
+        n.wpr = n.wpr || [];
+        var hit = n.wpr.filter(function(e){ return e && _lkDigits(e.n) === v.num; })[0];
+        if(!hit) n.wpr.push({n:v.num, k:it.k, ts:Date.now(), by:caller()}); else if(it.k === 'r') hit.k = 'r';
+        _addNum(r, v.num, 'wpr'); res.rel++;
+      }
+    } else {
+      var a = _mailAddr(it.v); if(!a){ res.refused++; return; }
+      if(it.k === 'o'){
+        n.wpe = n.wpe || []; if(n.wpe.indexOf(a) < 0) n.wpe.push(a); res.e++;
+      } else {
+        n.wpre = n.wpre || [];
+        var h2 = n.wpre.filter(function(e){ return e && e.e === a; })[0];
+        if(!h2) n.wpre.push({e:a, k:it.k, ts:Date.now(), by:caller()}); else if(it.k === 'r') h2.k = 'r';
+        res.rel++;
+      }
+    }
+  });
+  if(res.p || res.e || res.rel){
+    n.touches = n.touches || [];
+    n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'lookup',
+                    out:'Whitepages capture: ' + res.p + ' owner number(s), ' + res.e + ' owner email(s), ' + res.rel + ' relative/not-sure', by:caller()});
+    if(!ROWS.some(function(x){ return x.c === c; }) && res.p) ROWS.push(r);
+    LKDONE[c] = 1;
+    saveNotes(); try{ queueSync(); }catch(e){}
+  }
+  toast('Saved: ' + res.p + ' owner number' + (res.p === 1 ? '' : 's') + ', ' + res.e + ' owner email' + (res.e === 1 ? '' : 's')
+        + (res.rel ? ', ' + res.rel + ' relative/not sure' : '') + (res.refused ? ' · ' + res.refused + ' refused (do-not-call or bad)' : ''),
+        res.refused && !(res.p || res.e || res.rel) ? {bad:true} : undefined);
+  _wpcLeave();
+  return res;
 }
 /* The signature fields the board keeps in localStorage.fcSender (same origin), on top of this page's
    SENDER; the company falls back to the baked legal display name. Same heals as SENDER above. */
@@ -7938,9 +8105,11 @@ function pasteBlock(r){
     + '<div class="pcnote" id="pcwhy">Save, keep searching: the number joins this lead\'s list and you stay on this card for the next one. Save &amp; call: dials it and logs it like any call' + (em ? '. An email goes out only through the laptop send bridge, from the company address' : '') + '. Pasted numbers are not checked against the do-not-call registry or line-checked with Twilio.</div>'
     + mailOnFileBtn(r)
     + _wpeList(r)
+    + wpcBtn(r.c)
     + '</div>';
 }
 function _wirePaste(r){
+  wireWpcBtns();
   Array.prototype.forEach.call(document.querySelectorAll('.pastecall .mlone'), function(b){
     b.onclick = function(){ mailOnFile(r, b); };
   });
@@ -11550,12 +11719,18 @@ function wire(){
       if(/@/.test(v)){
         var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
         if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
-        screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
+        /* KEEP IT (2026-11-18): the address is saved as the owner's (notes.wpe) the moment it is typed,
+           not only after a send, so the Morning Worker emails it on its next run even if he backs out. */
+        var _row = lkAsDial(lr, ''), _ck = mailCheck(_row, v);
+        if(_ck.addr && !_ck.why){ var _n = notes[c] = notes[c] || {status:'', note:''};
+          _n.wpe = _n.wpe || []; if(_n.wpe.indexOf(_ck.addr) < 0){ _n.wpe.push(_ck.addr); saveNotes(); try{ queueSync(); }catch(e){} } }
+        screenMail(_row, v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
         if(SCREEN === 'mail'){ delete LKDRAFT[c]; _lkSaveState(); }
         return;
       }
       lkSave(c, v); };
   });
+  wireWpcBtns();
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
   if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };

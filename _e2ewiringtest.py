@@ -392,8 +392,9 @@ try:
     p2 = json.loads((SRVDIR / 'worker_notes.json').read_text(encoding='utf-8'))['notes'][P2]
     gap('a second pasted number (wpm) on a lead already on disk does not reach the disk copy',
         'D17 (related note: wpm is not in _merge_note)', p2.get('wpm') == ['3055550201'], p2.get('wpm'))
-    gap('a second pasted email (wpe) on a lead already on disk does not reach the disk copy',
-        'D15 (callfix finding)', p2.get('wpe') == ['a@invented.test'], p2.get('wpe'))
+    # D15 wpe half CLOSED 2026-11-18: _merge_note unions wpe (the Morning Worker sends to these now).
+    rec('a second pasted email (wpe) on a lead already on disk reaches the disk copy (union)',
+        p2.get('wpe') == ['a@invented.test', 'b@invented.test'], p2.get('wpe'))
     gap('a newer replied stamp does not replace the stored one on disk',
         'D15 (callfix finding)', p2.get('replied') == T + ' 10:00:00', p2.get('replied'))
     gap('a newer hard no does not replace a stored soft no on disk (status DNC still ledgers; the recorded reason is wrong)',
