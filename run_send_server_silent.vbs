@@ -78,6 +78,10 @@ If pyw = "" Or Not fso.FileExists(pyw) Then
   WScript.Quit 1
 End If
 
+' FOLLOW-UPS ON (2026-11-18, Alejandro; OPERATING-RULES rule 3 lifted the same day). The bridge sends a
+' step 2+ email only when DEALFLOW_FOLLOWUPS_ON is exactly 1. Set for THIS process only, never user-wide,
+' so unit tests and preview builds stay unset as the amended rule requires.
+sh.Environment("PROCESS")("DEALFLOW_FOLLOWUPS_ON") = "1"
 sh.CurrentDirectory = repo
 ' 0 = hidden window, False = don't wait
 sh.Run """" & pyw & """ """ & script & """", 0, False
