@@ -857,6 +857,7 @@ def main():
     leads = leads + lp_leads_for_pb({str(r.get('case') or '') for r in leads})
     if len(leads) > _n_lp:
         print(f"  + {len(leads) - _n_lp} Palm Beach lis pendens lead(s) with a parcel folded in from lp_leads.json")
+    _kept = set(load_docs_store())
     picked = []
     skipped = {}
     for r in leads:
@@ -875,8 +876,11 @@ def main():
             if why and len(re.sub(r'\D', '', r.get('folio', '') or '')) < 14:
                 skipped.setdefault(why + ' and no PCN', []).append(r.get('owners') or '')
                 continue
-        if case in out and not (a.refresh or a.case): continue
+        # A chain traced before the search rows were kept (2026-11-18) cannot take document amounts:
+        # it is due once more. Never-traced leads go first (sorted below).
+        if case in out and case in _kept and not (a.refresh or a.case): continue
         picked.append(r)
+    picked.sort(key=lambda x: (x.get('case') or '') in out)        # never traced first, then the re-traces
     if a.limit: picked = picked[:a.limit]
     print(f"{len(picked)} Palm Beach lead(s) to trace via Landmark Web (v2-captcha gated)")
     for why, names in sorted(skipped.items()):
