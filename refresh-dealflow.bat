@@ -582,6 +582,15 @@ rem  ^(Broward AcclaimWeb image, Miami OR image, Palm Beach direct book/page lin
 rem  and prices the row. $0: no search, no captcha, no paid call. Non-fatal.
 python -u lien_amounts.py --limit 250 >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! lien_amounts failed - open liens keep "no amount" ^(board unaffected^).>> "%LOG%"
+rem  PALM BEACH MORTGAGES PRICED FROM THEIR OWN DOCUMENTS (2026-11-18). Landmark publishes no amounts, so every
+rem  Palm Beach chain stayed a ceiling. pb_mortgage_amounts reads each open mortgage's recording stamp (free,
+rem  direct book/page link) and prices it only when two printed figures agree (stamp amount, doc stamp tax,
+rem  intangible tax, the note). palmbeach_liens --reanalyze then rebuilds the chains from the kept search rows.
+rem  No search, no captcha, no spend.
+python -u pb_mortgage_amounts.py --limit 150 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! pb_mortgage_amounts failed - Palm Beach loans keep "no amount" ^(board unaffected^).>> "%LOG%"
+python -u palmbeach_liens.py --reanalyze >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! palmbeach_liens --reanalyze failed - Palm Beach chains keep their earlier state.>> "%LOG%"
 rem  2026-11-16: the complaint on each lis pendens lead, every page: principal claimed, default date,
 rem  and the lienholders the lender had to name. Miami off the court docket, Broward the recorded
 rem  notice, Palm Beach whatever the court tab posted to pb_court_inbox. $0. Non-fatal.

@@ -43,6 +43,72 @@ CURL = r'C:\Windows\System32\curl.exe' if os.name == 'nt' and os.path.exists(r'C
 DUMP = os.path.join(HERE, '_pb_last_results.html')             # raw first-success dump (parser iteration aid)
 
 
+DOCS_STORE_NAME = 'pb_docs.json'   # under DEALFLOW_DIR (homeowner names: never the repo)
+
+
+def docs_store_path():
+    import paths as _P
+    return os.path.join(_P.DEALFLOW_DIR, DOCS_STORE_NAME)
+
+
+def load_docs_store(path=None):
+    path = path or docs_store_path()
+    try:
+        with open(path, encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_docs_store(store, path=None):
+    path = path or docs_store_path()
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(store, f, separators=(',', ':'))
+    os.replace(tmp, path)
+
+
+def with_mortgage_amounts(docs, folio='', cache=None):
+    """The search rows with each mortgage's document-read amount filled in (pb_mortgage_amounts), and
+    any mortgage whose own pages print a DIFFERENT parcel number dropped (the owner's other property,
+    found by the countywide name search). -> (docs, {'priced': n, 'other_parcel': n})."""
+    import pb_mortgage_amounts as PMA
+    import lien_amounts as _LA
+    cache = _LA.load_cache() if cache is None else cache
+    pcn = re.sub(r'\D', '', str(folio or ''))
+    out, stats, other = [], {'priced': 0, 'other_parcel': 0}, set()
+    for d in docs or []:
+        if not (d.get('DocTypeDescription') or '').upper().startswith('MORTGAGE'):
+            out.append(d)
+            continue
+        e = PMA.lookup(d.get('BookPage'), cache)
+        if not e:
+            out.append(d)
+            continue
+        if len(pcn) >= 14 and e.get('pcns') and pcn not in e['pcns']:
+            other.add((d.get('BookPage') or '').strip())
+            continue
+        out.append(dict(d, Consideration=str(e['amt']), AmountSource='document:' + str(e.get('basis') or '')))
+    stats['other_parcel'] = len(other)
+    stats['priced'] = len({(d.get('BookPage') or '').strip() for d in out
+                           if str(d.get('AmountSource') or '').startswith('document')})
+    return out, stats
+
+
+def build_chain(docs, owner, judg, ftype, case, folio='', cache=None):
+    """analyze + pb_chain_truth over the rows with document amounts applied. The one place a Palm Beach
+    chain is computed, for a live trace and for --reanalyze alike."""
+    docs2, st = with_mortgage_amounts(docs, folio, cache)
+    res = analyze(docs2, owner, _num(judg), ftype=ftype, lead_case=case, county='palmbeach')
+    res = pb_chain_truth(res, docs2, owner)
+    if st['other_parcel']:
+        res['mtg_other_parcel'] = st['other_parcel']
+    res['or_events'] = _or_events(docs2, lead_case=case)
+    res['n_raw'] = len(docs)
+    return res
+
+
 PAID_SOURCE = 'palmbeach_liens'   # the monthly-ledger name for every Landmark v2 solve (incl. fl_lp/palmbeach
                                   # and broward_judgment_dates --pb, which solve through this module)
 
@@ -398,7 +464,7 @@ def gsr_rows_to_docs(rows):
     return docs
 
 
-def pb_chain_truth(res, docs):
+def pb_chain_truth(res, docs, owner=''):
     """Palm Beach chains are UNPRICED — say so instead of letting them read as clean.
 
     🔴 THE BUG THIS FIXES (measured 2026-08-17). Landmark's search grid has no consideration
@@ -438,7 +504,19 @@ def pb_chain_truth(res, docs):
                 killed.add(bp)
     res['mtg_recorded'] = len(seen_m)
     res['mtg_released'] = len(killed)
-    res['mtg_open_unpriced'] = max(0, len(seen_m) - len(killed))
+    # PRICED FROM THE DOCUMENT (2026-11-18, pb_mortgage_amounts). A mortgage whose own recording stamp
+    # gave two agreeing readings now carries Consideration, so analyze() itemizes it like a Broward loan.
+    # What stays unpriced is every unreleased mortgage of the OWNER (borrower side, exact name) that has
+    # no amount yet: one of those left means the total is not established and the chain stays a ceiling.
+    import broward_liens as _BL
+    own = _BL._exact_docs(docs, owner) if owner else []
+    own_bps = {(d.get('BookPage') or '').strip() for d in own if _BL._is_mort(d) and _BL._is_borrower(d)}
+    unpriced = [bp for bp, d in seen_m.items()
+                if bp not in killed and (not own_bps or bp in own_bps) and not _num(d.get('Consideration')) > 0]
+    priced = [bp for bp, d in seen_m.items() if _num(d.get('Consideration')) > 0]
+    res['mtg_open_unpriced'] = len(unpriced)
+    if priced:
+        res['mtg_doc_priced'] = len(priced)
     # CONFIDENCE, HONESTLY. 'unpriced' is NOT 'ok' and is NOT 'none': we reached the records and we
     # know what instruments exist — we just cannot price them. Render as a question, never as clean.
     if seen_m and not (res.get('liens') or []):
@@ -447,6 +525,10 @@ def pb_chain_truth(res, docs):
                              'records publish no dollar amounts, so no balance was computed. Ask '
                              'the owner what they still owe and to whom.'
                              % (len(seen_m), len(killed), res['mtg_open_unpriced']))
+    elif unpriced:
+        res['chain_note'] = ('%d mortgage(s) recorded / %d released; %d priced from the recorded document, '
+                             '%d still have no confirmed amount, so the total is not established.'
+                             % (len(seen_m), len(killed), len(priced), len(unpriced)))
     elif not seen_m and not (res.get('liens') or []):
         res['conf'] = 'none'
         res['chain_note'] = ('No mortgage instrument found for this owner in the Palm Beach index '
@@ -719,6 +801,8 @@ def main():
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--refresh', action='store_true')
+    ap.add_argument('--reanalyze', action='store_true',
+                    help='no search: rebuild every chain from the kept rows with the latest document amounts')
     ap.add_argument('--headed', action='store_true',
                     help='human-in-the-loop captcha fallback after 2Captcha fails')
     ap.add_argument('--no-2captcha', action='store_true',
@@ -765,8 +849,14 @@ def main():
                   f"{(d.get('Name') or '')[:28]} / {(d.get('CrossPartyName') or '')[:28]}")
         return
 
-    leads = json.load(open(LEADS, encoding='utf-8'))
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
+    if a.reanalyze:
+        return reanalyze(out)
+    leads = json.load(open(LEADS, encoding='utf-8'))
+    _n_lp = len(leads)
+    leads = leads + lp_leads_for_pb({str(r.get('case') or '') for r in leads})
+    if len(leads) > _n_lp:
+        print(f"  + {len(leads) - _n_lp} Palm Beach lis pendens lead(s) with a parcel folded in from lp_leads.json")
     picked = []
     skipped = {}
     for r in leads:
@@ -833,7 +923,70 @@ def main():
             _queue_unread(picked, out, 'not read: captcha-gated or unparsed')
 
 
+STORE = {}
+
+
+def lp_leads_for_pb(have, path=None):
+    """Palm Beach lis pendens leads (lp_leads.json) that carry a parcel number, shaped like a
+    palmbeach_leads row. WHY (2026-11-18): this scraper read only palmbeach_leads.json, the auction
+    calendar, so the ~900 Palm Beach pre-foreclosure filings were never traced and sat 'not checked' on
+    the board. The parcel search isolates the property, so only rows with a 14+ digit parcel come in.
+    The LP owner is written 'LAST, FIRST' (oname); broward_liens._lf reads that order."""
+    path = path or os.path.join(HERE, 'lp_leads.json')
+    try:
+        rows = json.load(open(path, encoding='utf-8'))
+    except (OSError, ValueError):
+        return []
+    rows = rows if isinstance(rows, list) else list(rows.values()) if isinstance(rows, dict) else []
+    out = []
+    for x in rows:
+        if not isinstance(x, dict) or str(x.get('county') or '').upper() != 'PALM BEACH':
+            continue
+        case = str(x.get('case') or '')
+        folio = re.sub(r'\D', '', str(x.get('folio') or ''))
+        if not case or case in have or len(folio) < 14:
+            continue
+        owner = ' '.join(str(x.get('oname') or x.get('owners') or '').split())
+        if not owner:
+            continue
+        out.append({'case': case, 'owners': owner, 'folio': folio, 'judg': 0,
+                    'ftype': x.get('ftype') or '', 'plaintiff': x.get('plaintiff') or '', '_src': 'lp'})
+        have.add(case)
+    return out
+
+
+def reanalyze(out, store=None, cache=None, save=True, say=print):
+    """No network. Every chain whose search rows were kept is rebuilt with the latest document amounts.
+    The trace stamp, captcha source and browser flags of the saved chain are kept."""
+    store = load_docs_store() if store is None else store
+    import equity_state as ES
+    keep = ('traced', 'captcha', 'browser_read', 'searched_as', 'truncated', 'owner')
+    n = moved = 0
+    for case, ctx in store.items():
+        prev = out.get(case)
+        if not isinstance(prev, dict) or not isinstance(ctx, dict) or not ctx.get('docs'):
+            continue
+        res = build_chain(ctx['docs'], ctx.get('owner') or prev.get('owner') or '', ctx.get('judg'),
+                          ctx.get('ftype') or prev.get('ftype') or '', case, ctx.get('folio') or '', cache)
+        for k in keep:
+            if k in prev:
+                res[k] = prev[k]
+        if prev.get('truncated') and res.get('conf') == 'ok':
+            res['conf'] = 'low'
+        res['reanalyzed'] = time.strftime('%Y-%m-%d')
+        if ES.state_of(prev) not in ES.FACT and ES.state_of(res) in ES.FACT:
+            moved += 1
+        out[case] = res
+        n += 1
+    if save and n:
+        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+    say(f"reanalyze: {n} Palm Beach chain(s) rebuilt from kept rows; {moved} now priced or clear")
+    return n, moved
+
+
 def _trace(a, picked, out):
+    global STORE
+    STORE = load_docs_store()
     gated = show_captcha()
     token = ''
     token_src = ''
@@ -944,13 +1097,14 @@ def _trace(a, picked, out):
             blocked += 1
             continue
         ftype = r.get('ftype') or _fc_type_plaintiff(r.get('plaintiff', '')) or ''
-        res = analyze(docs, owner, _num(r.get('judg')), ftype=ftype, lead_case=case, county='palmbeach')
-        # Landmark publishes no dollar amounts -> analyze() drops every PB mortgage and its zeros
-        # read as a clean chain. Restate what we actually know. See pb_chain_truth.
-        res = pb_chain_truth(res, docs)
+        # Landmark publishes no dollar amounts: build_chain fills the ones read off each mortgage's own
+        # recording stamp and pb_chain_truth says what is still unpriced. The rows are kept so the next
+        # amounts can be applied with no new (paid) search: palmbeach_liens.py --reanalyze.
+        STORE[case] = {'docs': docs, 'owner': owner, 'judg': r.get('judg') or 0, 'ftype': ftype,
+                       'folio': r.get('folio') or '', 'saved': time.strftime('%Y-%m-%d')}
+        save_docs_store(STORE)
+        res = build_chain(docs, owner, r.get('judg'), ftype, case, r.get('folio') or '')
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
-        res['or_events'] = _or_events(docs, lead_case=case)
-        res['n_raw'] = len(docs)
         if token_src:
             res['captcha'] = token_src
         out[case] = res
