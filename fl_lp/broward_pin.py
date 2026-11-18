@@ -507,11 +507,20 @@ def _details_html(inst, tries=3):
     return None, None
 
 
-def _download_pdf(token, dest, tries=3):
-    """DocumentPdfAllPages -> dest. A body without %PDF- is a challenge or error page: wait briefly and ask
-    again, then give up for this run."""
+DOWNLOAD_TRIES = 12
+
+
+def _download_pdf(token, dest, tries=DOWNLOAD_TRIES, pause=2.0):
+    """DocumentPdfAllPages -> dest. A body without %PDF- is a challenge or error page: re-arm the image and
+    ask again, then give up for this run.
+
+    WHY 12 TRIES, SHORT PAUSES (measured live 2026-11-18 on 19 documents that had failed): Cloudflare answers
+    this download 403 at random, about 1 attempt in 6 succeeds (74 x 403, 14 x 200), and waiting longer
+    between tries did not help. Three tries read 9 of 19; eight read 14 of 19. At 1-in-6, twelve tries read
+    roughly 9 in 10. The image is re-armed (StartImageRetrieval) before every try, as the probe did."""
     for attempt in range(tries):
         try:
+            BL._curl(BL.BASE + '/Image/StartImageRetrieval/%s/0' % token)
             subprocess.run([BL.CURL, '-s', '-m', '120', '-A', BL.UA, '-c', BL.JAR, '-b', BL.JAR, '-o', dest,
                             BL.BASE + '/Image/DocumentPdfAllPages/%s' % token], capture_output=True, timeout=150)
             with open(dest, 'rb') as f:
@@ -519,8 +528,8 @@ def _download_pdf(token, dest, tries=3):
                     return True
         except (OSError, subprocess.TimeoutExpired):
             pass
-        if attempt < tries - 1:
-            time.sleep(5 + 5 * attempt)
+        if attempt < tries - 1 and pause:
+            time.sleep(pause)
     return False
 
 
@@ -573,7 +582,6 @@ def _pdf_of(html_, inst, workdir):
     tok = TOKEN_RE.search(html_ or '')
     if not tok:
         return None
-    BL._curl(BL.BASE + '/Image/StartImageRetrieval/%s/0' % tok.group(1))
     pdf = os.path.join(workdir, '%s.pdf' % inst)
     return pdf if _download_pdf(tok.group(1), pdf) else None
 

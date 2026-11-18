@@ -36,3 +36,24 @@ class BrowardDocumentTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_download_pdf_rides_through_random_403s(tmp_path, monkeypatch):
+    """Cloudflare 403s this download at random (~1 in 6 succeed, measured 2026-11-18): the downloader
+    must keep asking well past three tries, and re-arm the image before each one."""
+    from fl_lp import broward_pin as PIN
+    calls = {'dl': 0, 'arm': 0}
+    monkeypatch.setattr(PIN.BL, '_curl', lambda url, *a, **k: calls.__setitem__('arm', calls['arm'] + 1) or '')
+
+    def fake_run(cmd, **kw):
+        calls['dl'] += 1
+        dest = cmd[cmd.index('-o') + 1]
+        with open(dest, 'wb') as f:
+            f.write(b'%PDF-1.7' if calls['dl'] == 7 else b'<html>403</html>')
+    monkeypatch.setattr(PIN.subprocess, 'run', fake_run)
+    dest = str(tmp_path / 'x.pdf')
+    assert PIN._download_pdf('TOK', dest, pause=0) is True
+    assert calls['dl'] == 7 and calls['arm'] == 7
+    calls['dl'] = calls['arm'] = 0
+    monkeypatch.setattr(PIN.subprocess, 'run', lambda cmd, **kw: open(cmd[cmd.index('-o') + 1], 'wb').write(b'no'))
+    assert PIN._download_pdf('TOK', dest, pause=0) is False
