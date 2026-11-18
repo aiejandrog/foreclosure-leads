@@ -299,7 +299,11 @@ rem  gen_records_qs, the lis pendens sweep and the document stage. No --spend-le
 rem  would make $0.50 a total for all time, not a nightly cap.
 python -u records_liens.py --all --limit 120 --retries 80 --max-spend 0.50 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
+if exist "%TEMP%\dealflow_broward_retry.flag" del "%TEMP%\dealflow_broward_retry.flag"
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
+rem  Exit 2 = no AcclaimWeb session (a Cloudflare block). It is often over within the hour: on 2026-11-18
+rem  the 05:50 run aborted while [3o/5] reached the same site fine at 07:30. Flag it and retry after [3o/5].
+if exist broward_leads.json if errorlevel 2 echo retry> "%TEMP%\dealflow_broward_retry.flag"
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
 rem  Replaces the BatchData lien feed (BATCHDATA-EXIT, 2026-08-11): old bd chains keep merging from
 rem  the committed batchdata_liens.json cache; only NEW purchases stopped.
@@ -604,6 +608,11 @@ python -u county_plaintiffs.py --county broward --near >> "%LOG%" 2>&1
 python -u refresh_progress.py step 3o
 echo [3o/5] Broward private-lender mortgages (AcclaimWeb, needs Schannel curl)...
 python -u fl_lp\broward_mortgages.py >> "%LOG%" 2>&1
+if exist "%TEMP%\dealflow_broward_retry.flag" (
+    echo [3o2/5] Broward lien chains, second try - the early session was blocked>> "%LOG%"
+    python -u broward_liens.py --all >> "%LOG%" 2>&1
+    del "%TEMP%\dealflow_broward_retry.flag"
+)
 
 python -u refresh_progress.py step 3q
 echo [3q/5] Sale results from the Miami-Dade docket - held, cancelled, moved, at risk, amended judgments...
