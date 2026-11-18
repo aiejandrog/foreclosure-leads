@@ -844,6 +844,13 @@ def _trace(a, picked, out):
         print(f'  captcha path: {token_src}')
 
     done = blocked = 0
+    # ONE GATED LEAD IS NOT A GATED NIGHT (2026-11-18). A captcha-gated answer used to end the whole run,
+    # which made sense when every solve needed a human click. With paid solves on, _search_docs has already
+    # asked once more with a fresh token; a second refusal is that lead's, not the session's. Measured
+    # 2026-11-18: 187 leads queued, the run stopped at lead 11 on one stale token (minted 12, discarded 1).
+    # Count it, skip it, and stop only after GATED_STREAK_MAX refusals in a row.
+    gated_streak = 0
+    GATED_STREAK_MAX = 3
     # WALL-CLOCK BOUND (2026-08-26). --limit was doing this job and doing it badly: it caps the
     # number of LEADS, but the cost of a lead is one or two 2Captcha solves at 60-180s each, so the
     # same --limit is a 6-minute run on a good night and a 25-minute one on a bad night. That is why
@@ -870,7 +877,12 @@ def _trace(a, picked, out):
             if st == 'captcha':
                 blocked += 1
                 print(f"  --  {case:24} {owner[:26]:26} (captcha-gated parcel)")
-                break
+                gated_streak += 1
+                token = ''
+                if gated_streak >= GATED_STREAK_MAX:
+                    print(f"  .. {gated_streak} captcha refusals in a row; stopping")
+                    break
+                continue
             if st == 'unparsed':
                 blocked += 1
                 print(f"  ??  {case:24} {owner[:26]:26} (unparsed parcel GSR -> {os.path.basename(DUMP)})")
@@ -916,7 +928,12 @@ def _trace(a, picked, out):
             if st == 'captcha':
                 blocked += 1
                 print(f"  --  {case:24} {owner[:26]:26} (captcha-gated)")
-                break
+                gated_streak += 1
+                token = ''
+                if gated_streak >= GATED_STREAK_MAX:
+                    print(f"  .. {gated_streak} captcha refusals in a row; stopping")
+                    break
+                continue
             if st == 'unparsed':
                 blocked += 1
                 print(f"  ??  {case:24} {owner[:26]:26} (unparsed results -> {os.path.basename(DUMP)})")
@@ -938,6 +955,7 @@ def _trace(a, picked, out):
             res['captcha'] = token_src
         out[case] = res
         done += 1
+        gated_streak = 0
         flag = ''
         if res.get('deeded'): flag = f"  <-- TAKEN->{res['deeded']['grantee']}"
         elif res.get('second_fc'): flag = f"  <-- 2ND-FC {res['second_fc']['case']}"
