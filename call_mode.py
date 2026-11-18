@@ -7071,6 +7071,21 @@ var LKDONE = {}, LKSHOW = 200, LKEQ = false;
    was typed in each box and not saved yet. All three are saved on this phone (_lkSaveState). */
 var LKFOCUS = null, LKFROM = null, LKDRAFT = {};
 function _lkDigits(v){ var d = String(v || '').replace(/\D/g, ''); if(d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? d : ''; }
+/* PHONES OUT OF WHATEVER WAS COPIED (2026-11-18, Carlos: copy, paste, call, log is the slow part).
+   A Whitepages copy is rarely just the number: a name, "Age 54", the number, "Mobile", city and ZIP
+   has 17 digits, so _lkDigits refused it and he had to clean it by hand. This pulls each US number
+   out of the text, in order, de-duplicated: (NPA) NXX-XXXX with optional +1 and the usual
+   separators, or a bare run of 10 digits. Area code and exchange must start 2-9, and a number
+   glued to more digits is skipped, so ages, ZIP codes and house numbers are never read as one. */
+function _lkPhones(v){
+  /* An email address is never a number (ten digits before the @), and a foreign number (a +57 mobile)
+     is not a US one: both are blanked out before the search. */
+  var t = String(v || '').slice(0, 20000).replace(/[^\s@]+@[^\s@]+/g, ' ')
+            .replace(/\+(?!1)\d{1,3}[\s.\-]?\(?\d[\d\s.\-()]{5,}\d/g, ' '), out = [], m;
+  var re = /(?:^|[^\d])(?:\+?1[\s.\-]?)?\(?([2-9]\d{2})\)?[\s.\-]{0,3}([2-9]\d{2})[\s.\-]{0,3}(\d{4})(?!\d)/g;
+  while((m = re.exec(t))){ var d = m[1] + m[2] + m[3]; if(out.indexOf(d) < 0) out.push(d); }
+  return out;
+}
 function lkAsDial(r, num){
   var o = {c:r.c, o:(r.o || r.on || ''), on:(r.on || ''), a:(r.a || ''), x:(r.x || ''), d:(typeof r.d === 'number' ? r.d : 9999),
            p:(num ? [num] : []), r:(num ? [''] : []), nl:1, sb:r.sb, pk:(r.pk || ('C' + r.c))};
@@ -7215,6 +7230,10 @@ function lookupList(){
          + '<div style="display:flex;gap:6px;margin-top:8px"><input class="lknum" data-c="' + esc(r.c) + '" type="text" autocapitalize="off" '
          + 'placeholder="Number or email you found" style="flex:1;min-width:0" value="' + esc(LKDRAFT[r.c] || '') + '">'
          + '<button class="lkadd" data-c="' + esc(r.c) + '">Call or email</button></div>'
+         + (navigator.clipboard && navigator.clipboard.readText
+             ? '<button class="lkclip big" data-c="' + esc(r.c) + '" style="width:100%;margin-top:6px;background:#1F6FEB'
+               + (typeof _LKRING !== 'undefined' && _LKRING && _LKRING.c === r.c && Date.now() < _LKRING.until ? ';box-shadow:0 0 0 3px var(--gold)' : '') + '">&#128203; Paste &amp; call</button>' : '')
+         + _lkPickHtml(r.c)
          + mailOnFileBtn(lkAsDial(r, ''))
          + (wpeAddrs(r.c).length ? '<div class="sub">Emailed before: ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
@@ -7241,10 +7260,43 @@ function wpBlock(r){
                 + ' &middot; ' + (ks[n] === 'owner' ? 'owner' : 'likely owner') + '</button></div>'; }).join('')
          : '<div class="sub">Whitepages had no number for the owner.</div>');
 }
+/* MORE THAN ONE NUMBER IN THE PASTE: one button per number, under the box. Built from the box's own
+   draft, so a background repaint of the list keeps them. Each button goes through lkSave like a
+   typed number: same do-not-call and hardSuppressed checks, nothing loosened. */
+function _lkPickHtml(c){
+  var ph = _lkPhones(LKDRAFT[c] || '');
+  if(ph.length < 2) return '';
+  return '<div class="sub" style="margin-top:6px">' + ph.length + ' numbers in what you pasted. Tap the one to call:</div>'
+       + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' + ph.slice(0, 8).map(function(n){
+           return '<button class="lkpn" data-c="' + esc(c) + '" data-n="' + esc(n) + '">&#9742; ' + esc(fmt(n)) + '</button>'; }).join('') + '</div>';
+}
+/* PASTE & CALL (2026-11-18): one tap reads the clipboard (the tap is the gesture iOS and Android
+   require), takes the number out of whatever was copied, saves it and dials, the same as typing it
+   and tapping Call. Two or more numbers: they become buttons under the box. */
+function lkClip(c){
+  var inp = document.querySelector('input.lknum[data-c="' + String(c).replace(/"/g, '') + '"]');
+  var manual = function(){ if(inp) inp.focus(); toast('Long-press the box and choose Paste, then tap Call'); };
+  if(!(navigator.clipboard && navigator.clipboard.readText)){ manual(); return; }
+  navigator.clipboard.readText().then(function(t){
+    t = String(t || '');
+    var ph = _lkPhones(t);
+    if(ph.length === 1){ lkSave(c, ph[0]); return; }
+    if(ph.length > 1){ LKDRAFT[c] = ph.map(fmt).join(' / '); LKFOCUS = c; _lkSaveState(); render();
+      toast(ph.length + ' numbers found. Tap the one to call.'); return; }
+    var em = (t.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/) || [])[0];
+    if(em && MAIL_OK){ LKDRAFT[c] = em; _lkSaveState(); render(); toast('An email was copied. Tap Call or email to write to it.'); return; }
+    toast('No phone number on the clipboard. Copy it on Whitepages first.', {bad:true});
+  }).catch(manual);
+}
 function lkSave(c, raw){
   var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
   if(!r){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
-  var num = _lkDigits(raw);
+  var _ph = _lkPhones(raw);
+  if(_ph.length > 1){ LKDRAFT[c] = _ph.map(fmt).join(' / '); LKFOCUS = c; _lkSaveState(); render();
+    toast(_ph.length + ' numbers in that. Tap the one to call.'); return; }
+  /* the old digits-only reading, only for text that is nothing but a number: "Age 54 33172 Apt 123"
+     must not glue its digits into one number and dial it */
+  var num = _ph[0] || (/^[\d\s().+\-]*$/.test(String(raw || '')) ? _lkDigits(raw) : '');
   if(!num){ toast('Type a 10-digit number', {bad:true}); return; }
   if(dncElsewhere(num)){ toast('Not saved: that number is on the do-not-call list', {bad:true}); return; }
   var row = lkAsDial(r, num), why = hardSuppressed(row);
@@ -7369,8 +7421,31 @@ function _lkWire(){
       _lkSaveState(); };
     el.addEventListener('focusin', pick);
     el.addEventListener('click', pick, true);
+    Array.prototype.forEach.call(el.querySelectorAll('.flinks a'), function(a){
+      a.addEventListener('click', function(){ _LKWP = {c: el.getAttribute('data-lkc'), t: Date.now()}; });
+    });
   });
 }
+/* BACK FROM WHITEPAGES (2026-11-18). He taps a Whitepages link on a list card, copies the number in
+   the other tab and comes back. A sync landing while he was away repaints the list, so the card he
+   searched for can be off screen. On return the page scrolls that card to the middle of the screen
+   and rings its Paste & call button: one tap to save and dial. Only within 20 minutes. */
+var _LKWP = null, _LKRING = null;
+if(typeof document !== 'undefined') document.addEventListener('visibilitychange', function(){
+  try{
+    if(document.visibilityState !== 'visible' || !_LKWP || BLANE !== '__lk') return;
+    if(Date.now() - _LKWP.t > 20 * 60000){ _LKWP = null; return; }
+    var c = _LKWP.c; _LKWP = null;
+    var el = document.querySelector('.lkcard[data-lkc="' + String(c).replace(/"/g, '') + '"]');
+    if(!el) return;
+    el.scrollIntoView({block: 'center'});
+    /* the ring is page state, so a repaint in the next few seconds draws it again */
+    _LKRING = {c: c, until: Date.now() + 4000};
+    var b = el.querySelector('button.lkclip');
+    if(b){ b.style.boxShadow = '0 0 0 3px var(--gold)';
+      setTimeout(function(){ var b2 = document.querySelector('.lkcard[data-lkc="' + String(c).replace(/"/g, '') + '"] button.lkclip'); if(b2) b2.style.boxShadow = ''; }, 4100); }
+  }catch(e){ logErr(e, 'lk-back'); }
+});
 var _lkScrollT = null;
 if(typeof window !== 'undefined') window.addEventListener('scroll', function(){
   if(BLANE !== '__lk' || SCREEN !== 'lead') return;
@@ -11539,6 +11614,12 @@ function wire(){
       mailOnFile(lkAsDial(lr, ''), b);
     };
   });
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkclip'), function(b){
+    b.onclick = function(){ lkClip(b.getAttribute('data-c')); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkpn'), function(b){
+    b.onclick = function(){ lkSave(b.getAttribute('data-c'), b.getAttribute('data-n')); };
+  });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkadd'), function(b){
     b.onclick=function(){ var c = b.getAttribute('data-c');
       var inp = document.querySelector('input.lknum[data-c="' + c.replace(/"/g, '') + '"]');
@@ -11547,7 +11628,7 @@ function wire(){
          template email"). An address goes to the same templated composer and the same mailCheck as a
          dial card (opt-out, hard no, do-not-contact hold, reply on file, three-email ladder, bounce
          pause, investor lane); a number still goes to lkSave. */
-      if(/@/.test(v)){
+      if(/@/.test(v) && !_lkPhones(v).length){
         var lr = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
         if(!lr){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
         screenMail(lkAsDial(lr, ''), v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
