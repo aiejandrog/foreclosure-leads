@@ -321,7 +321,11 @@ rem  one stopped. Worst case spend is ~$0.36 on a night that traces the full 60.
 rem  THE CLOUD CANNOT DO THIS YET: refresh.yml's PB step skipped in 0s on run #45 because there is
 rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is the ONLY thing
 rem  moving Palm Beach coverage.
-if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
+rem  --workers 6 -> 1, --deadline 720 -> 1500 (2026-11-18, measured with paid solves on): the pool of 6
+rem  mints tokens ahead and they go stale before use - two runs stopped after 10 and 11 leads on
+rem  refused tokens (13 minted, 3 discarded stale). One solver traced 25 of 25 with 0 refused, about
+rem  one solve per 5 leads, in about 20 minutes.
+if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 1 --deadline 1500 >> "%LOG%" 2>&1
 
 python -u refresh_progress.py step 2e
 echo [2e/5] Title discovery + owner tokens - off unless DEALFLOW_TITLE=1
