@@ -7165,7 +7165,7 @@ function ownerLabel(r){
    dial row with that one number, so the card, the outcome screen, the cooldowns and
    hardSuppressed() all apply to it exactly as to a traced number. Nothing here dials a lead the
    build held: an unmarked coverage row is never offered. */
-var LKDONE = {}, LKSHOW = 200, LKEQ = false;
+var LKDONE = {}, LKSHOW = 200, LKEQ = false, LKSALE = false;
 /* LKFOCUS: the list lead tapped last (its card has the gold border and the script drawer is filled
    for it). LKFROM: the lead opened from this list, so logging its call comes back here. LKDRAFT: what
    was typed in each box and not saved yet. All three are saved on this phone (_lkSaveState). */
@@ -7224,12 +7224,18 @@ function promoteLookups(){
    we look them up through whitepages"). 0 = the Morning Worker sent it over (.wq), 1 = filed in the last
    14 days, newest first (the first call on a new filing is the edge), 2 = a dated sale, soonest first,
    3 = the rest, newest filing first. Order only: lkRows() still decides who is on the list. */
+/* SALE SOON FIRST (2026-11-19, Alejandro: "where are the other leads? with a sale date and the ones
+   that are about to hit their sale?"). 405 lis pendens filed in the last 14 days sat above every
+   dated sale, so a lead going to auction this week was hundreds of cards down. Now a sale in the next
+   14 days comes right after the Morning Worker picks, soonest first, ahead of the new filings. */
+function _lkSoon(r){ return !!r && !r.lp && !r.xf && typeof r.d === 'number' && r.d >= 0 && r.d <= 14; }
 function _lkGroup(r){
   try{ if(wqSet()[r.c]) return 0; }catch(e){}
+  if(_lkSoon(r)) return 1;
   var f = _filedMs(r);
-  if((r.lp || r.xf) && f && (Date.now() - f) <= 14*86400000) return 1;
-  if(!r.lp && !r.xf && typeof r.d === 'number' && r.d >= 0 && r.d < 9999) return 2;
-  return 3;
+  if((r.lp || r.xf) && f && (Date.now() - f) <= 14*86400000) return 2;
+  if(!r.lp && !r.xf && typeof r.d === 'number' && r.d >= 0 && r.d < 9999) return 3;
+  return 4;
 }
 function lkSorted(){
   _WQSET = null;
@@ -7239,7 +7245,7 @@ function lkSorted(){
     if(a.g === 0){ var da = (typeof a.r.d === 'number' && a.r.d >= 0) ? a.r.d : 99999,
                          db = (typeof b.r.d === 'number' && b.r.d >= 0) ? b.r.d : 99999;
                    return (da - db) || (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix); }
-    if(a.g === 2) return (a.r.d - b.r.d) || (a.ix - b.ix);
+    if(a.g === 1 || a.g === 3) return (a.r.d - b.r.d) || (a.ix - b.ix);
     return (_filedMs(b.r) - _filedMs(a.r)) || (a.ix - b.ix);
   }).map(function(o){ return o.r; });
 }
@@ -7251,16 +7257,17 @@ function lookupList(){
      figure, which is not the Has equity lane: the 166 recorded-debt leads were missing from it. It now
      asks the lane's own question (isEquity: verified chain, net above zero), so what is under this
      button is exactly the verified-equity leads that still need a number. */
-  var nEq = all.filter(isEquity).length;
-  var rows = LKEQ ? all.filter(isEquity) : all;
+  var nEq = all.filter(isEquity).length, nSoon = all.filter(_lkSoon).length;
+  var rows = LKSALE ? all.filter(_lkSoon) : LKEQ ? all.filter(isEquity) : all;
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
             + '<div class="sub">Look up the owner on Whitepages and enter a number you trust. '
             + 'Recent filings can appear before a sale date or verified equity is available.</div>'
             + '<div class="sub">The call script at the bottom is for the lead you tapped last (gold border). '
             + 'After you log the call you come back here, to the next lead on this list.</div>'
             + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
-            + '<button class="lkf' + (LKEQ ? '' : ' on') + '" data-eq="0">All ' + all.length + '</button>'
-            + '<button class="lkf' + (LKEQ ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button></div></div>';
+            + '<button class="lkf' + (LKEQ || LKSALE ? '' : ' on') + '" data-eq="0">All ' + all.length + '</button>'
+            + '<button class="lkf' + (LKSALE ? ' on' : '') + '" data-eq="2">Sale in 14 days ' + nSoon + '</button>'
+            + '<button class="lkf' + (LKEQ && !LKSALE ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button></div></div>';
   if(!rows.length) return head() + head_ + '<div class="card">Nothing to look up right now.</div><div class="sheetpad"></div>';
   var CAP = LKSHOW, shown = rows.slice(0, CAP);
   /* the script drawer is for the lead with the gold border: the first card until he taps another */
@@ -7317,7 +7324,7 @@ function lookupList(){
     var _g = _lkGroup(r), _on = (LKFOCUS === r.c);
     return '<div class="card lkcard" data-lkc="' + esc(r.c) + '"' + (_on ? ' style="border:1px solid var(--gold)"' : '') + '><b>' + esc(ownerLabel(r)) + '</b>'
          + (_on ? ' <span class="chip ok lkon">script below</span>' : '')
-         + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">new filing</span>' : ''))
+         + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">sale soon</span>' : (_g === 2 ? ' <span class="chip hot">new filing</span>' : '')))
          + '<div class="sub">' + esc(propertyLabel(r)) + wpCopyBtn(r) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
          + (typeof r.v === 'number' && r.v > 0 ? '<div class="sub">Property value ' + money(r.v) + '</div>' : '')
@@ -7456,7 +7463,7 @@ function _lkSaveState(){
   try{
     if(BLANE === '__lk') _LKY = window.scrollY || 0;
     localStorage.setItem(_LKK, JSON.stringify({d: new Date().toDateString(), ts: Date.now(),
-      on: BLANE === '__lk' ? 1 : 0, eq: LKEQ ? 1 : 0, show: LKSHOW, f: LKFOCUS, from: LKFROM, y: _LKY, dr: LKDRAFT}));
+      on: BLANE === '__lk' ? 1 : 0, eq: LKEQ ? 1 : 0, sale: LKSALE ? 1 : 0, show: LKSHOW, f: LKFOCUS, from: LKFROM, y: _LKY, dr: LKDRAFT}));
   }catch(e){}
 }
 function _lkLoadState(){
@@ -7467,7 +7474,7 @@ function _lkLoadState(){
     Object.keys(s.dr).forEach(function(c){ var v = s.dr[c]; if(typeof v === 'string' && v && LKDRAFT[c] === undefined) LKDRAFT[c] = v.slice(0, 200); });
   }
   if(s.d !== new Date().toDateString()) return null;
-  LKEQ = s.eq === 1;
+  LKEQ = s.eq === 1; LKSALE = s.sale === 1;
   if(typeof s.show === 'number' && s.show >= 200) LKSHOW = Math.min(s.show, 5000);
   if(typeof s.f === 'string') LKFOCUS = s.f;
   if(typeof s.y === 'number') _LKY = s.y;
@@ -11974,7 +11981,7 @@ function wire(){
       BLANE = '__lk'; i=0; render(); _lkScroll(true); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkf'), function(b){
-    b.onclick=function(){ LKEQ = b.getAttribute('data-eq') === '1'; LKSHOW = 200; render(); _lkSaveState(); };
+    b.onclick=function(){ var v = b.getAttribute('data-eq'); LKEQ = v === '1'; LKSALE = v === '2'; LKSHOW = 200; render(); _lkSaveState(); };
   });
   var _lkm = $('lkmore');
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };

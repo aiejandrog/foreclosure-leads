@@ -220,7 +220,7 @@ rec('the tick runs on a timer and after the return-to-page pull',
     "workerWatch(); }catch(e){ logErr(e, 'workerWatch'); } }, 20000)" in SRC and "try{ workerWatch(); }catch(e){}\n    if(touched)" in SRC)
 
 print('\nFIND A NUMBER: ORDER AND EMAIL')
-H3 = 'var _WQSET=null;\n' + ''.join(grab_fn(n) for n in ('workerQ', 'wqSet', '_filedMs', '_lkGroup', 'lkSorted')) + r'''
+H3 = 'var _WQSET=null;\n' + ''.join(grab_fn(n) for n in ('workerQ', 'wqSet', '_filedMs', '_lkSoon', '_lkGroup', 'lkSorted')) + r'''
 var localStorage = {getItem:function(){ return null; }};
 function pad(n){ return (n<10?'0':'')+n; }
 function mdy(daysAgo){ var t=new Date(Date.now()-daysAgo*86400000); return (t.getMonth()+1)+'/'+t.getDate()+'/'+t.getFullYear(); }
@@ -233,8 +233,8 @@ console.log(JSON.stringify(lkSorted().map(function(r){ return r.c; })));
 rc, so, se = node(H3)
 rec('lookup harness runs', rc == 0, se)
 order = json.loads(so.strip().splitlines()[-1]) if rc == 0 else []
-rec('Find a number: worker picks (soonest sale first), then filings from the last 14 days newest first, then soonest sale, then the rest',
-    order == ['W2', 'W', 'NEW2', 'NEW6', 'S5', 'S30', 'OLDLP'], order)
+rec('Find a number: worker picks, then a sale within 14 days (soonest), then filings from the last 14 days newest first, then later sales, then the rest',
+    order == ['W2', 'W', 'S5', 'NEW2', 'NEW6', 'S30', 'OLDLP'], order)
 rec('the lookup box takes an email too and routes it to the same gated composer',
     "if(/@/.test(v) && !_lkPhones(v).length){" in SRC and "screenMail(_row, v, function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });" in SRC
     and "_n.wpe.push(_ck.addr)" in SRC
@@ -261,7 +261,7 @@ rec('each seat page prints its own Find a number count (a count, no lead)',
     "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 
 print('\nFIND A NUMBER: SHOW ALL, HAS EQUITY')
-H5 = 'var LKSHOW = 200, LKEQ = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', 'lookupList')) + r"""
+H5 = 'var LKSHOW = 200, LKEQ = false, LKSALE = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', '_lkSoon', 'lookupList')) + r"""
 function esc(x){ return String(x); } function head(){ return ''; } function ownerLabel(r){ return r.c; }
 function propertyLabel(){ return ''; } function _bView(){ return {auction:''}; } function fileLinks(){ return []; }
 function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function wpcBtn(){ return ''; } function wpCopyBtn(){ return ''; } function lkAsDial(r){ return r; } function money(x){ return String(x); } function _lkPickHtml(){ return ''; }
