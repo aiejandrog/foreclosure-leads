@@ -482,6 +482,9 @@ rec('search-box text: Whitepages spelling (ordinal, suffix), no unit',
 rec('our street in Whitepages link spelling', W._wp_street('8600 NW 34 PL #B105') == '8600 NW 34th Pl Apt B105'
     and W._wp_street('2929 NW 123 TER') == '2929 NW 123rd Ter' and W._wp_street('10442 SUNRISE LAKES BLVD 105')
     == '10442 Sunrise Lakes Blvd Apt 105', W._wp_street('8600 NW 34 PL #B105'))
+rec('a bare hyphen unit stays whole ("ST 9-14" -> "Apt 9-14", never "9th 14th"), and leaves the search stem',
+    W._wp_street('100 SW 5 ST 9-14') == '100 SW 5th St Apt 9-14' and W._search_stem('100 SW 5 ST 9-14') == '100 SW 5th St'
+    and W._wp_street('5000 US HIGHWAY 1') == '5000 US Highway 1', W._wp_street('100 SW 5 ST 9-14'))
 
 rec('State Road 7 keeps its number, not a unit', W._wp_street('4500 N STATE ROAD 7') == '4500 N State Road 7', W._wp_street('4500 N STATE ROAD 7'))
 rec('US Highway 1 is not "1st"', W._wp_street('1234 US HIGHWAY 1') == '1234 US Highway 1', W._wp_street('1234 US HIGHWAY 1'))
