@@ -553,7 +553,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[]}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[], stats:{}}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -1498,11 +1498,17 @@ function aiCheck(){
   $('aiwho').className='who busy';
   S.ai.busy=true; S.ai.sentAt=now();
   if($('ailine').className.indexOf('on')<0){ $('ailine').className='on'; $('aibody').textContent='…'; }
-  fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
+  aiStat('asked');
+  /* NEVER STUCK. The server gives a line at most AI_BUDGET (8 s) of model time; if the answer still has not
+     come back the request is cut here, so a hung connection cannot hold S.ai.busy and silence the box. */
+  var _ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  var _kill=_ac?setTimeout(function(){ try{ _ac.abort(); }catch(e){} },AI_CUT):null;
+  fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},signal:_ac?_ac.signal:undefined,
     body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
-  .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
+  .then(function(r){ return r.ok?r.json():{why:'http'+r.status}; }).then(function(j){
+    clearTimeout(_kill);
     S.ai.busy=false;
-    if(seq!==S.ai.seq) return;
+    if(seq!==S.ai.seq){ aiStat('stale'); return; }
     $('aiwho').className='who';
     /* They said more while the model was thinking: that answer is to half a sentence. Ask again. */
     /* STARVED (real call 11-17 17:53: 80 answers written, 4 shown, nothing on screen for the first two
@@ -1512,16 +1518,17 @@ function aiCheck(){
        a row: the second answer is shown whatever is being said. The new words stay unread, so the
        next question includes them. */
     var _more=aiFresh(S.finals, S.ai.n).split(' ').filter(Boolean).length;
-    if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiAsk(); return; }
+    if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiStat('talked_over'); aiAsk(); return; }
     S.ai.drops=0;
-    if(!j||!j.line) return;
+    if(!j||!j.line){ aiStat('blank:'+((j&&j.why)||'empty')); return; }
     /* Nothing new was said by them (same words heard as last time), or the model handed back the line
        already on screen: keep what is there. Call 11-16 17:03 showed one line five times in a row. */
-    if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;
+    if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)){ aiStat('same'); return; }
     /* STICK TO ONE (Alex, 11-16: "it's switching too much, you need to stick to one, unless the
        situation changes"). Call 20:41 showed three versions of the opener in two minutes. The line on
        screen is replaced only when the homeowner changed the situation; see fcKeepLine. */
-    if(fcKeepLine({line:S.ai.line, step:S.ai.step, shownMs:now()-(S.ai.shownAt||0), heard:S.ai.heardAll, lines:S.ai.hist.length}, j)) return;
+    if(fcKeepLine({line:S.ai.line, step:S.ai.step, shownMs:now()-(S.ai.shownAt||0), heard:S.ai.heardAll, lines:S.ai.hist.length}, j)){ aiStat('kept'); return; }
+    aiStat('shown');
     S.ai.heard=j.heard||''; S.ai.step=j.step||''; if(j.heard) S.ai.heardAll.push(norm(j.heard));
     $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):'';
     S.ai.line=j.line; S.ai.shownAt=now();
@@ -1532,8 +1539,12 @@ function aiCheck(){
     aiFocus('ai');
     /* the line, what it heard and how it read it are saved with the call, so a bad line can be found afterwards */
     S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, wait:now()-heardAt, behind:S.lines.length-n, step:j.step||'', type:j.type||'', heard:j.heard||'', line:j.line});
-  }).catch(function(){ S.ai.busy=false; $('aiwho').className='who'; });
+  }).catch(function(e){ clearTimeout(_kill); S.ai.busy=false; $('aiwho').className='who'; aiStat((e&&e.name==='AbortError')?'cut':'failed'); });
 }
+/* WHERE THE ASKS WENT. Before 11-18 only shown lines were saved, so 921 asks on finished calls left 288
+   lines and no record of what happened to the other 633. Each outcome is counted and saved with the call. */
+var AI_CUT=12000;
+function aiStat(k){ var s=S.ai.stats||(S.ai.stats={}); s[k]=(s[k]||0)+1; }
 /* The graph: PITCH (height and colour, blue low to orange high), VOLUME (height of the line), PACE
    (long dashes = slow, short = quick, a gap = stop talking). Left to right is the line as you say it. */
 function toneSvg(segs){
@@ -1582,6 +1593,9 @@ var AI_PATH=[['opener','Opener'],['situation','Situation'],['problem','Problem']
 function aiSteps(j){
   var at=-1, h='';
   AI_PATH.forEach(function(p,i){ if(p[0]===j.step) at=i; });
+  /* "unclear" means stay on the step (the prompt says so); 6 of 29 step regressions on 11-16/17 were an
+     unclear line dragging the strip back from Lock time to Book it. */
+  if(at>=0&&j.type==='unclear'&&S.ai.at>at) at=S.ai.at;
   if(at<0) at=S.ai.at; else S.ai.at=at;
   AI_PATH.forEach(function(p,i){ h+='<span class="'+(i<at?'done':i===at?'now':'')+'">'+p[1]+'</span>'; });
   $('aisteps').innerHTML=h;
@@ -1937,6 +1951,7 @@ function finish(outcome){
   S.dgOn=false; if(S.dg){ try{S.dg.close();}catch(e){} }
   if(S.dgRecorder&&S.dgRecorder.state!=='inactive') try{S.dgRecorder.stop();}catch(e){}
   var done=function(){
+    S.ended=true;                         /* no checkpoint may land after the real end */
     var dur=Math.round((now()-S.t0)/1000);
     drainAudio(now()+15000).then(function(ok){
       if(!ok){ alert('NOT SAVED YET: '+S.pending.length+' audio chunk(s) still in this tab. Check call_coach_server.py is running, then press Esc again. Do not close this tab.'); throw 'held'; }
@@ -1944,7 +1959,7 @@ function finish(outcome){
       body:JSON.stringify({lines:S.lines})});
     })
     .then(function(){ return fetch('/api/session/'+encodeURIComponent(S.sid)+'/end',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)})}); })
+      body:JSON.stringify({duration_s:dur,stages_visited:S.stagesVisited,objections_fired:S.objFired,redflags_fired:S.rfFired,coach_fires:S.fc.fires,ai_stats:S.ai.stats||{},consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)})}); })
     .then(function(r){return r.json();})
     .then(function(j){
       alert('Saved — '+((j.meta&&j.meta.session_id)||S.sid)+'\n'+S.lines.length+' transcript lines · '+mmss(now()-S.t0)
@@ -1968,13 +1983,37 @@ function finish(outcome){
    connection and the page stay as they are: the call that just ended is saved to its own folder in
    the background, the screen is wiped at once, and a new recording starts, on the same lead or on
    the next one. */
+/* CHECKPOINT (forensics 11-18: 28 of 64 sessions were never ended, a reload or a closed tab, and kept no
+   transcript and no coach_fires). The call so far is saved every minute and when the page is hidden for good.
+   The server ignores a checkpoint for an ended session and never shortens what it already has. */
+function ckBody(){
+  return {duration_s:Math.round((now()-S.t0)/1000), stages_visited:S.stagesVisited, objections_fired:S.objFired,
+          redflags_fired:S.rfFired, coach_fires:S.fc.fires, ai_stats:S.ai.stats||{}, lines:S.lines};
+}
+function ckSave(beacon){
+  if(S.plain||!S.sid||S.rolling||S.ended) return false;
+  if(!S.lines.length&&!S.fc.fires.length) return false;
+  var u='/api/session/'+encodeURIComponent(S.sid)+'/checkpoint', b=JSON.stringify(ckBody());
+  try{
+    if(beacon&&typeof navigator!=='undefined'&&navigator.sendBeacon){
+      /* a beacon carries about 64 KB: a long call's transcript may not fit, the coach record always does */
+      if(navigator.sendBeacon(u, new Blob([b],{type:'application/json'}))) return true;
+      var lite=ckBody(); delete lite.lines;
+      return navigator.sendBeacon(u, new Blob([JSON.stringify(lite)],{type:'application/json'}));
+    }
+    fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:b.length<60000}).catch(function(){});
+    return true;
+  }catch(e){ return false; }
+}
+setInterval(function(){ ckSave(false); },60000);
+if(window.addEventListener) window.addEventListener('pagehide',function(){ ckSave(true); });
 function resetCall(){
   clearTimeout(S.ai.t); clearTimeout(S.fc.holdT);
   S.lines=[]; S.finals=''; S.interim=''; S.stagesVisited=[]; S.objFired=[]; S.rfFired=[];
-  S.ai={t:null, seq:(S.ai.seq||0)+1, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[]};
+  S.ai={t:null, seq:(S.ai.seq||0)+1, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[], stats:{}};
   S.dgOpen=null; S.dgThem=[]; S.lastCard=null; S.lastCardAt=0; S.cooldown={};
   var f=S.fc; f.cbArm=0; f.seen={}; f.said=[]; f.card=null; f.cool={}; f.fires=[]; f.heldSince=0; f.askI=0;
-  S.wrap=null; S.wrapPending=false; S.wrapWaited=false; S.outcomeAuto=false; S.idleCounting=false;
+  S.wrap=null; S.wrapPending=false; S.wrapWaited=false; S.outcomeAuto=false; S.idleCounting=false; S.ended=false;
   S.t0=now(); S.lastSpeech=now(); S.stage=S.plain?1:0;
   $('ailine').className=''; $('aibody').textContent=''; $('aiprev').textContent=''; $('aiheard').textContent='';
   if($('aitone')) $('aitone').innerHTML='';
@@ -1997,7 +2036,7 @@ function rollCall(outcome, nextCase, clear){
   if(S.plain||!S.sid||S.rolling) return false;
   S.rolling=true;
   var old={sid:S.sid, lines:S.lines, body:{duration_s:Math.round((now()-S.t0)/1000),stages_visited:S.stagesVisited,objections_fired:S.objFired,
-           redflags_fired:S.rfFired,coach_fires:S.fc.fires,consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)}};
+           redflags_fired:S.rfFired,coach_fires:S.fc.fires,ai_stats:S.ai.stats||{},consent_ack:true,outcome:outcome||null,wrapup:wrapOut(outcome)}};
   resetCall();
   $('dot').textContent='● saving the last call…';
   var post=function(u,b){ return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}); };
@@ -2091,6 +2130,8 @@ var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.s
             echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, leadMsg:function(d){ return fcLeadMsg(d); }, resetCall:function(){ resetCall(); return {lines:S.lines.length, ai:S.ai.line, hist:S.ai.hist.length, box:$('ailine').className, fires:S.fc.fires.length}; }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
+            S:function(){ return S; }, aiCheck:function(){ aiCheck(); }, aiSteps:function(j){ aiSteps(j); },
+            ckSave:function(b){ return ckSave(b); }, setCut:function(ms){ AI_CUT=ms; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
                                       lines:S.lines.map(function(l){return [l.spk,l.text];})}; } };
 

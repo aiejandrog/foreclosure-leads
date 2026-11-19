@@ -396,7 +396,7 @@ else:
             'the outcome screen scrolls, and choosing an outcome is not treated as a silent call')
         chk(o['fresh'] == ['That is a great question. I have no idea.', '', 'hello there'] and 'fresh=aiFresh(S.finals, S.ai.n)' in src and 'S.ai.n=S.finals.length' in src,
             'an answer joined onto the line he just read back still counts as new, so the AI is asked', o['fresh'])
-        chk("if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)) return;" in src, 'the same line, or a line for the same words heard again, does not replace what is on screen')
+        chk("if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)){ aiStat('same'); return; }" in src, 'the same line, or a line for the same words heard again, does not replace what is on screen')
         chk('TALK LIKE A PERSON, WITH CONTROLLED URGENCY' in srv and 'NO CIRCLES' in srv and 'DUMMY-PROOF' in srv and 'THE OBJECTION ANSWER' in srv and 'How does that sound?' in srv,
             'the model is told the voice in his own words: plain, spoken, one picture that makes them think, and his full objection answer')
         chk('S.wrapPending&&!S.wrapWaited' in src and src.count('S.wrapPending=false') >= 4 and "eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''" in src,
@@ -418,7 +418,7 @@ else:
             'the line on screen stays for a mumble, the same thing said again, a rewording of the same step, or going back to the opener; it changes for an answer that moves on, a new objection, a new question, or a time', o['keepline'])
         chk(o['readback'] == [True, True, False, False, False, False], 'reading the AI line back is not a reason to change it; their answer is, even in the same breath', o['readback'])
         chk('function aiSteps(' in src and 'function aiFocus(' in src and 'asked:S.ai.hist' in src, 'the AI box shows the step of the path, one box is bright at a time, and earlier lines are sent so none repeats')
-        chk('var AI_PAUSE=800' in src and 'if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiAsk(); return; }' in src and 'line:j.line' in src, 'the AI is asked 0.8 s after the last word, an answer is dropped only for a real run of new words and never twice in a row, and each line is saved with the call')
+        chk('var AI_PAUSE=800' in src and "if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiStat('talked_over'); aiAsk(); return; }" in src and 'line:j.line' in src, 'the AI is asked 0.8 s after the last word, an answer is dropped only for a real run of new words and never twice in a row, and each line is saved with the call')
         chk('AI_PAUSE' in src and 'AI_HOLD' in src and "shown:S.ai.line" in src, 'the AI line waits for a pause, holds long enough to read, and tells the model what is on screen')
         chk(o['echo'] == [True, True, False, False], 'echo test: their words in the mic are a leak, your own sentence is not', o['echo'])
         chk(o['stage'] == 2, 'reading the opener moves the script to the next stage', o['stage'])
