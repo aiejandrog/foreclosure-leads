@@ -7106,7 +7106,10 @@ function head(){
      buttons, which put Pause / +30 min / End work about 415-490px down the first screen. The script
      bar is fixed to the bottom, so on a short screen (375x553, an iPhone SE with Safari's bars up) it
      covered those buttons until he scrolled. Up here they are clear of it on every phone. */
-  return DFNAV + _qh + '<div class="top">'+wfBar()+'<div class="lane">'+laneBtns+_lkBtn+'</div>'
+  /* FIND A LEAD (2026-11-19): the search over every lead on this phone, first in the lane row. Opened
+     by the document-level [data-find] listener, so it works on screens that never run wire(). */
+  var _flBtn = '<button data-find="1" title="Find a lead by case, owner or street">&#128270; Find a lead</button>';
+  return DFNAV + _qh + '<div class="top">'+wfBar()+'<div class="lane">'+_flBtn+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
@@ -12244,6 +12247,276 @@ function _openCase(c){
   toast(_clmOwner(c) ? 'A teammate is on this lead right now'
                      : 'Not in a dial lane right now \u2014 suppressed, or on the other phone');
 }
+/* ══════════════ FIND A LEAD (2026-11-19, Alejandro) ══════════════
+   "what about all of the leads that aren't on that screen and I'm trying to look up? Something like
+   a search bar ... that works and looks up the cases with no issue at all."
+   The search button in the top bar opens this screen. It searches every lead this page carries: the
+   dial rows (ROWS) and the coverage rows for the rest of the book (COV), one result per case, the
+   dial row winning when a case is in both. A case number in any format (CACE-26-018699, 26-018699,
+   2026-018699-CA-01), an owner name in any order or part of one, or a piece of the street.
+   READ ONLY, AND IT LOOSENS NOTHING. The status on each result is worked out from the same gates the
+   lists use: hardSuppressed(), the coverage row's own build-time holds, _clmOwner(), _seatMine(),
+   supReason() per dial lane and _lkOk(). A lead in the dial queue opens through _openCase, which runs
+   pool() and every gate again; a Find a number lead lands on its own card on that list, where lkSave,
+   mailCheck and screenMail still decide. Everything else opens a detail with the reason and no dial,
+   text or email button. The last query is kept on this phone only; nothing is synced or sent. */
+var FL_KEY = 'fcFindQ', FL_MAX = 25, _FLIX = null, _FLQ = '', _FLT = null, _FLRES = [], _FLSHEET = false;
+function _flLoadQ(){ try{ var v = localStorage.getItem(FL_KEY); return typeof v === 'string' ? v.slice(0, 80) : ''; }catch(e){ return ''; } }
+function _flSaveQ(q){ try{ if(q) localStorage.setItem(FL_KEY, String(q).slice(0, 80)); else localStorage.removeItem(FL_KEY); }catch(e){} }
+/* A case number reduced to {yy, seq}: the two digits of the filing year and the sequence number
+   without its leading zeros. "CACE-26-018699", "26-018699", "2026-018699-CA-01", "CACE26018699" and
+   "50-2026-CA-018699-XXXA-MB" all come out as {yy:'26', seq:'18699'}. pre = the digits as typed
+   (four-digit year cut to two) for prefix matching while he is still typing. */
+function _flCaseKey(s){
+  var runs = String(s || '').match(/\d+/g) || [], yy = '', seq = '', seqRaw = '', k, r;
+  for(k = 0; k < runs.length && !yy; k++){
+    r = runs[k];
+    if(r.length === 4 && /^(19|20)/.test(r)){ yy = r.slice(2); runs.splice(k, 1); break; }
+  }
+  if(!yy){
+    for(k = 0; k < runs.length; k++){
+      r = runs[k];
+      if(r.length === 2 && runs.length > 1){ yy = r; runs.splice(k, 1); break; }
+      if(r.length >= 7 && r.length <= 9){ yy = r.slice(0, 2); runs[k] = r.slice(2); break; }
+    }
+  }
+  for(k = 0; k < runs.length; k++){ if(runs[k].length >= 3 && runs[k].length > seqRaw.length) seqRaw = runs[k]; }
+  if(!seqRaw && runs.length) seqRaw = runs[0];
+  seq = seqRaw.replace(/^0+/, '');
+  return {yy: yy, seq: seq, raw: seqRaw};
+}
+/* Lower case words between spaces. "44th" and "44" are the same street: the page shows ordinals
+   ("NW 44th AVE") but he may type either, so the ordinal ending is dropped on both sides. */
+function _flWords(s){
+  return ' ' + String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/(\d+)(st|nd|rd|th)/g, '$1').trim() + ' ';
+}
+var _FLCT = {MI:'Miami-Dade', BR:'Broward', PA:'Palm Beach'};
+function _flIndex(){
+  var R = (typeof ROWS !== 'undefined' && ROWS) || [], C = (typeof COV !== 'undefined' && COV) || [];
+  if(_FLIX && _FLIX.r === R && _FLIX.rn === R.length && _FLIX.c === C && _FLIX.cn === C.length) return _FLIX.list;
+  var seen = Object.create(null), list = [];
+  var add = function(r, dial){
+    if(!r || !r.c || seen[r.c]) return;
+    seen[r.c] = 1;
+    var ck = _flCaseKey(r.c);
+    list.push({c: r.c, r: r, dial: dial,
+               cn: String(r.c).toUpperCase().replace(/[^A-Z0-9]/g, ''),
+               yy: ck.yy, seq: ck.seq, dig: ck.yy + (ck.seq ? ('000000' + ck.seq).slice(-Math.max(6, ck.seq.length)) : ''),
+               nm: _flWords([r.o, r.on].join(' ')),
+               ad: _flWords([r.a, r.ag].join(' '))});
+  };
+  R.forEach(function(r){ add(r, true); });
+  C.forEach(function(r){ add(r, false); });
+  _FLIX = {r: R, rn: R.length, c: C, cn: C.length, list: list};
+  return list;
+}
+/* Best match first: 0 exact case, 1 case prefix, 2 name or street (whole words before partial
+   ones), then the soonest sale. */
+function flSearch(q){
+  q = String(q || '').trim().slice(0, 80);
+  if(!q) return [];
+  var L = _flIndex(), hits = [];
+  var hasDig = /\d/.test(q);
+  var caseLike = hasDig && (/^[\d\s\-\/]+$/.test(q) || !/\s/.test(q));
+  var qk = caseLike ? _flCaseKey(q) : null;
+  var qcn = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  var qdig = qk ? (qk.yy + qk.raw) : '';
+  var toks = _flWords(q).trim().split(' ').filter(Boolean);
+  for(var k = 0; k < L.length; k++){
+    var e = L[k], sc = 9, whole = 0;
+    if(qk && qk.seq){
+      if(e.seq === qk.seq && (!qk.yy || qk.yy === e.yy)) sc = 0;
+      else if((qk.yy && qdig.length >= 4 && e.dig.indexOf(qdig) === 0)
+              || (!qk.yy && qk.raw.length >= 3 && (e.dig.slice(2).indexOf(qk.raw) === 0 || e.seq.indexOf(qk.raw.replace(/^0+/, '')) === 0))
+              || (qcn.length >= 4 && e.cn.indexOf(qcn) === 0)) sc = 1;
+    } else if(qcn.length >= 4 && e.cn.indexOf(qcn) === 0) sc = 1;
+    if(sc > 2 && toks.length){
+      var all = true, hay = e.nm + e.ad;
+      for(var t = 0; t < toks.length; t++){
+        var tk = toks[t];
+        if(hay.indexOf(' ' + tk + ' ') >= 0) whole++;
+        else if(hay.indexOf(' ' + tk) < 0){ all = false; break; }
+      }
+      if(all) sc = 2;
+    }
+    if(sc < 9) hits.push({e: e, sc: sc, w: whole});
+  }
+  hits.sort(function(a, b){
+    if(a.sc !== b.sc) return a.sc - b.sc;
+    if(a.w !== b.w) return b.w - a.w;
+    var da = _flDays(a.e.r), db = _flDays(b.e.r);
+    return (da - db) || (a.e.c < b.e.c ? -1 : a.e.c > b.e.c ? 1 : 0);
+  });
+  return hits.slice(0, FL_MAX).map(function(h){ return h.e; });
+}
+function _flDays(r){
+  var v = (typeof r.d === 'number') ? r.d : (typeof r.days === 'number' ? r.days : 99999);
+  return v >= 0 ? v : 99999;
+}
+function _flWhen(r){
+  var bv = _bView(r);
+  if(bv.auction){
+    var t = 'Sale ' + bv.auction;
+    if(bv.days != null && bv.days < NO_SALE) t += bv.days < 0 ? ' (date passed)' : bv.days === 0 ? ' (today)' : ' (in ' + bv.days + 'd)';
+    return t;
+  }
+  if(r.lp || r.xf || r.st === 'LP') return 'New filing' + (r.x ? ' &middot; filed ' + esc(r.x) : '');
+  return 'No sale date on file';
+}
+/* WHERE THIS LEAD IS, worked out now from the same gates the lists use (never cached: a teammate's
+   opt-out or claim can land between two searches).
+   k: 'queue' | 'lk' | 'seat' | 'claim' | 'held' | 'off'.  Only 'queue' and 'lk' are tappable into a
+   card; the rest open a read-only detail. */
+function flStatus(e){
+  var r = e.r, c = e.c, h, who;
+  if(e.dial){
+    h = hardSuppressed(r);
+    if(h) return {k:'held', t:'Held: ' + h};
+    if((r.p || []).length && nextLivePh(r, 0) < 0) return {k:'held', t:'Held: every number marked bad'};
+    who = _clmOwner(c);
+    if(who) return {k:'claim', t:'A teammate is on it right now', w:who};
+    if(!_seatMine(r)) return {k:'seat', t:'On the other caller\'s list'};
+    var first = '', ok = false;
+    for(var q = 0; q < LANES.length && !ok; q++){
+      var L = LANES[q];
+      if(!L.pred(r)) continue;
+      var sr = supReason(r, L.k);
+      if(!sr.k) ok = true; else if(!first) first = sr.t;
+    }
+    if(ok) return {k:'queue', t:'In your dial queue'};
+    return {k:'held', t:'Held: ' + (first || 'not in a dial lane right now')};
+  }
+  /* coverage row: the build's own holds first, then the person-wide notes */
+  if(r.oo) return {k:'held', t:'Held: on the do-not-contact list'};
+  if(r.client) return {k:'held', t:'Held: existing client, Alejandro handles it directly'};
+  if(r.saleBkAct) return {k:'held', t:'Held: bankruptcy stay on the sale'};
+  if(r.lpDismissed) return {k:'held', t:'Held: the lis pendens was dismissed'};
+  if(r.sibclaimed) return {k:'held', t:'Held: claimed on a related case'};
+  h = hardSuppressed(lkAsDial(r, ''));
+  if(h) return {k:'held', t:'Held: ' + h};
+  who = _clmOwner(c);
+  if(who) return {k:'claim', t:'A teammate is on it right now', w:who};
+  if(r.lk){
+    if(!_seatMine(r)) return {k:'seat', t:'On the other caller\'s list'};
+    if(_lkOk(r)) return {k:'lk', t:'On Find a number'};
+    return {k:'held', t:'Held: not on a list right now'};
+  }
+  var np = r.np || 0;
+  if(np && r.kd && r.kd >= np) return {k:'held', t:'Held: do-not-call on every number'};
+  return {k:'off', t:'Not on a call list: ' + (np ? 'has a number, not in today\'s dial queue'
+                                                  : 'no number on file and not cleared for Find a number')};
+}
+var _FLCOL = {queue:'#1f8a4c', lk:'#1F6FEB', seat:'#6b5a2a', claim:'#8a5a1f', held:'#8a2a2a', off:'#3a4a6b'};
+function _flCard(e, ix){
+  var r = e.r, st = flStatus(e), ct = r.ct ? (_FLCT[r.ct] || r.ct) : '';
+  return '<div class="card flres" data-fx="' + ix + '" style="cursor:pointer"><b>' + esc(ownerLabel(r)) + '</b>'
+       + ' <span class="chip" style="background:' + _FLCOL[st.k] + ';color:#fff">' + esc(st.t) + (st.w ? ' (' + esc(st.w) + ')' : '') + '</span>'
+       + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
+       + '<div class="sub">' + esc(r.c) + (ct ? ' &middot; ' + esc(ct) : '') + ' &middot; ' + _flWhen(r) + '</div></div>';
+}
+function _flResults(q){
+  var box = $('flres'); if(!box) return;
+  q = String(q || '').trim();
+  _FLRES = q ? flSearch(q) : [];
+  if(!q){ box.innerHTML = '<div class="sub" style="padding:8px 2px">Type a case number, an owner\'s name or part of the street.</div>'; return; }
+  if(!_FLRES.length){ box.innerHTML = '<div class="card"><b>No lead matches &ldquo;' + esc(q) + '&rdquo;.</b><div class="sub">'
+    + 'Searched all ' + _flIndex().length + ' leads on this phone. A lead not in this build is not on the phone yet.</div></div>'; return; }
+  box.innerHTML = _FLRES.map(_flCard).join('')
+    + (_FLRES.length >= FL_MAX ? '<div class="sub" style="padding:6px 2px">Top ' + FL_MAX + ' shown. Type more to narrow it.</div>' : '');
+  Array.prototype.forEach.call(box.querySelectorAll('.flres'), function(el){
+    el.onclick = function(){ var e = _FLRES[+el.getAttribute('data-fx')]; if(e) flOpen(e); };
+  });
+}
+function screenFind(){
+  if(SCREEN !== 'find' && SCREEN !== 'finddetail'){
+    _sideEnter();
+    try{ _FLSHEET = document.getElementById('sheet').classList.contains('hid'); }catch(e){ _FLSHEET = false; }
+  }
+  SCREEN = 'find';
+  try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
+  if(!_FLQ) _FLQ = _flLoadQ();
+  $('app').innerHTML = DFNAV + '<div class="card"><b>&#128270; Find a lead</b>'
+    + '<div class="sub">Case number in any format, the owner\'s name in any order, or part of the street. '
+    + 'Searches every lead on this phone (' + _flIndex().length + ').</div>'
+    + '<input id="flq" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" '
+    + 'placeholder="26-018699 &middot; Yang Danny &middot; 4272 SW 124" style="width:100%;margin-top:8px" value="' + esc(_FLQ) + '">'
+    + '<button class="ghost" id="flback" style="margin-top:8px">&larr; Back</button></div>'
+    + '<div id="flres"></div><div class="sheetpad"></div>';
+  var inp = $('flq');
+  inp.oninput = function(){
+    _FLQ = inp.value; clearTimeout(_FLT);
+    _FLT = setTimeout(function(){ _flSaveQ(_FLQ); _flResults(_FLQ); }, 120);
+  };
+  inp.onkeydown = function(ev){ if(ev.key === 'Enter'){ clearTimeout(_FLT); _FLQ = inp.value; _flSaveQ(_FLQ); _flResults(_FLQ); try{ inp.blur(); }catch(e){} } };
+  $('flback').onclick = flClose;
+  _flResults(_FLQ);
+  try{ window.scrollTo(0, 0); inp.focus(); }catch(e){}
+}
+function flClose(){
+  clearTimeout(_FLT);
+  try{ if(!_FLSHEET) document.getElementById('sheet').classList.remove('hid'); }catch(e){}
+  _sideBack();
+}
+/* Tap a result. Status is re-read at the tap: a claim or an opt-out may have landed since the list
+   was drawn. */
+function flOpen(e){
+  var st = flStatus(e);
+  if(st.k === 'queue'){
+    try{ document.getElementById('sheet').classList.remove('hid'); }catch(_e){}
+    _SIDEUP = null; LKFROM = null; SCREEN = 'lead';
+    _openCase(e.c);
+    if(!(cur && cur.c === e.c)) flDetail(e);      /* _openCase refused it: say why, read-only */
+    return;
+  }
+  if(st.k === 'lk'){
+    try{ document.getElementById('sheet').classList.remove('hid'); }catch(_e){}
+    _SIDEUP = null; LKFROM = null; LKEQ = false; LKSALE = false; LKFOCUS = e.c;
+    var L = lkSorted(), at = -1;
+    for(var k = 0; k < L.length; k++) if(L[k].c === e.c){ at = k; break; }
+    if(at < 0){ flDetail(e); return; }
+    if(at >= LKSHOW) LKSHOW = Math.min(5000, Math.ceil((at + 1) / 200) * 200);
+    SCREEN = 'lead'; BLANE = '__lk';
+    render();
+    _lkSaveState();
+    try{
+      var sel = String(e.c).replace(/"/g, '');
+      var card = document.querySelector('.lkcard[data-lkc="' + sel + '"]');
+      if(card && card.scrollIntoView) card.scrollIntoView({block: 'center'});
+      var inp = document.querySelector('input.lknum[data-c="' + sel + '"]');
+      if(inp) inp.focus();
+    }catch(_e){}
+    return;
+  }
+  flDetail(e);
+}
+/* READ-ONLY. No dial, text or email control is drawn here, for any status. */
+function flDetail(e){
+  var r = e.r, st = flStatus(e), ct = r.ct ? (_FLCT[r.ct] || r.ct) : '';
+  SCREEN = 'finddetail';
+  try{ document.getElementById('sheet').classList.add('hid'); }catch(_e){}
+  var why = st.k === 'claim' ? (esc(st.w) + ' opened this lead in the last 90 minutes. It comes back when they log the call or the claim runs out.')
+          : st.k === 'seat' ? 'The team split puts this lead on the other phone. It is theirs to call.'
+          : st.k === 'queue' ? 'It is in the dial queue but could not be opened right now (cooling down, or the list moved). Try again from the queue.'
+          : st.k === 'lk' ? 'It is on Find a number but could not be found on the list right now.'
+          : st.k === 'off' ? 'This lead is on the board but not on any call list on this phone.'
+          : 'This lead is held. Nothing on this phone may call, text or email it.';
+  $('app').innerHTML = DFNAV + '<div class="card fldet"><b>' + esc(ownerLabel(r)) + '</b>'
+    + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
+    + '<div class="sub">' + esc(r.c) + (ct ? ' &middot; ' + esc(ct) : '') + ' &middot; ' + _flWhen(r) + '</div>'
+    + '<div class="band" style="margin-top:10px"><div class="bl">' + esc(st.t) + '</div>'
+    + '<div class="regsub" style="margin-top:4px">' + why + '</div></div>'
+    + '<button class="ghost" id="fldback" style="margin-top:10px">&larr; Back to the search</button></div><div class="sheetpad"></div>';
+  $('fldback').onclick = function(){ screenFind(); };
+  try{ window.scrollTo(0, 0); }catch(_e){}
+}
+/* One listener for the search button in every top bar, so a screen that never runs wire() still
+   opens it. */
+if(typeof document !== 'undefined') document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-find]') : null;
+  if(!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  try{ screenFind(); }catch(e){ logErr(e, 'find'); }
+}, true);
 /* Stale-cache heal. iPhone Safari is the named worst offender and a phone quietly serving last
    week's list is the failure most likely to go unnoticed. Never auto-reload once an outcome has
    been logged — that would lose his position mid-sequence. Offer the pill instead. */
