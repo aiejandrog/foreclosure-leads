@@ -4339,6 +4339,14 @@ a.dial,button.big{display:block;width:100%;min-height:58px;margin-top:12px;borde
      border:0;font-size:19px;font-weight:700;text-align:center;line-height:58px;text-decoration:none;
      touch-action:manipulation}
 a.dial{background:var(--ok);color:#fff}
+/* Paste & call could not dial for him (no tap of his was still active when the clipboard answered,
+   so a popup blocker may stop the dialer): the button says so, big. */
+a.dial.tapdial{font-size:24px;line-height:1.25;padding:18px 10px;box-shadow:0 0 0 4px var(--gold);animation:tdpulse 1.1s ease-in-out infinite}
+@keyframes tdpulse{50%{box-shadow:0 0 0 9px rgba(244,229,167,.35)}}
+/* One-tap No answer / Voicemail under the number on the outcome screen */
+.ocfast button.big{margin-top:8px;font-size:17px;line-height:1.2;padding:10px 8px}
+.ocfast button.ghost{display:block;width:100%;min-height:44px;margin-top:8px;border-radius:12px;border:0;
+     background:#2a3f6b;color:#fff;font-size:15px;font-weight:700;touch-action:manipulation}
 /* Redial: same tel: mechanics as the main dial button, styled as the secondary action it is —
    outlined, not filled, so the outcome buttons stay the visual priority on the screen. */
 /* VOICEMAIL BUTTON + full-screen script (2026-10-12, Alejandro: "a button i press and the voice
@@ -6564,6 +6572,7 @@ function start(){
   try{ _posRestore(); }catch(e){ i=0; }   // back to the lead he was on, same lane, same day
   render();
   try{ _lkResume(); }catch(e){ logErr(e, 'lk-resume'); }   // or back on Find a number, where he was
+  try{ _ocResume(); }catch(e){ logErr(e, 'oc-resume'); }   // or back on the call he had not logged yet
   freshCheck();
   paintSync();
   try{ pollTextHold(); }catch(e){}
@@ -7362,7 +7371,7 @@ function lkClip(c){
   navigator.clipboard.readText().then(function(t){
     t = String(t || '');
     var ph = _lkPhones(t);
-    if(ph.length === 1){ lkSave(c, ph[0]); return; }
+    if(ph.length === 1){ lkSave(c, ph[0], true); return; }
     if(ph.length > 1){ LKDRAFT[c] = ph.map(fmt).join(' / '); LKFOCUS = c; _lkSaveState(); render();
       toast(ph.length + ' numbers found. Tap the one to call.'); return; }
     var em = (t.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/) || [])[0];
@@ -7370,7 +7379,7 @@ function lkClip(c){
     toast('No phone number on the clipboard. Copy it on Whitepages first.', {bad:true});
   }).catch(manual);
 }
-function lkSave(c, raw){
+function lkSave(c, raw, viaClip){
   var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
   if(!r){ toast('This lead is no longer on the lookup list', {bad:true}); return; }
   var _ph = _lkPhones(raw);
@@ -7403,7 +7412,22 @@ function lkSave(c, raw){
   _lkSaveState();
   /* SAVE & CALL means call: the card is open on that number, so tap its dial button for him. The
      same handler logs the attempt and opens the outcome screen; outside 8-8 it only arms. */
-  if(cur && cur.c === c && SCREEN === 'lead'){ var _d = $('dial'); if(_d) _d.click(); }
+  if(cur && cur.c === c && SCREEN === 'lead'){ var _d = $('dial'); if(_d){
+    /* Paste & call reaches here after the clipboard promise, outside his tap. Clicking the dial link
+       then may be stopped by the popup blocker (a dialer that opens a new tab), and the click would
+       still have logged a dial and opened the outcome screen for a call that never rang. When the
+       browser cannot confirm his tap is still active, the card asks for the tap instead. */
+    if(viaClip && !_lkInTap()) _lkTapToDial(_d, num); else _d.click(); } }
+}
+function _lkInTap(){
+  try{ return !!(navigator.userActivation && navigator.userActivation.isActive); }catch(e){ return false; }
+}
+function _lkTapToDial(a, num){
+  if(!a || a.getAttribute('href') === '#') return;   /* log-only or outside-hours button: leave it as it is */
+  a.classList.add('tapdial');
+  a.innerHTML = '&#128222; Tap to dial<br>' + esc(fmt(num));
+  try{ a.scrollIntoView({block:'center'}); }catch(e){}
+  toast('Number saved. Tap the big green button to dial.', {ms:4000});
 }
 /* ══════════════ FIND A NUMBER: SAVED PLACE AND THE WAY BACK (2026-11-09, Alex) ══════════════
    "From whenever you land on the page, I want you to save a ... format for you to retrace and go back
@@ -9647,8 +9671,11 @@ function screenLead(){
          real outcome. The hold is read-side now: suppressed() sees oc:'pending' and holds
          PENDING_HOLD_H. Same protection, nothing written, nothing propagated. */
       saveNotes(); queueSync();
+      _ocPendSave(r, phIdx, d);
     }catch(e){ try{ logErr(e,'dial-prelog'); }catch(_e){} }
-    setTimeout(screenOutcome,0);
+    /* top of the outcome screen, where the one-tap No answer / Voicemail sit: the card was scrolled
+       down to its dial button, and that offset used to carry over to a random spot on this screen */
+    setTimeout(function(){ screenOutcome(); try{ window.scrollTo(0, 0); }catch(e){} }, 0);
   });
   /* OUTSIDE FTSA HOURS: the first tap does not dial. It arms the button and says why; the second
      tap dials (a callback they asked for is legitimate outside the window, a cold dial is not, and
@@ -10071,8 +10098,25 @@ function screenOutcome(){
       + briefButtons(r)
       + '</div>'
     : '';
+  /* ONE TAP FROM THE CALL TO THE NEXT DIAL (2026-11-18). No answer and voicemail are most of a
+     calling day, and logging one took four or five taps over four screens (outcome, after-call
+     panel, "call another number?", the Complete sheet), with the outcome buttons ~700px below the
+     fold on a 390px phone. These two buttons sit under the number: one tap logs the outcome through
+     the same logOutcome() as the full buttons (same cooldown, same 3-touch count, same pending-row
+     replace) and goes straight to the next dial: this lead's next number not yet rung today, else
+     the next lead through advance() (pool() re-applies every gate; a Find a number lead goes back
+     to that list). No follow-up text from this path: the full No answer button below still opens
+     the after-call panel with the text, callbacks and the paste box. */
+  var _fk = _fastNextPh(r, phIdx);
+  var _fto = _fk >= 0 ? ('number ' + (_fk + 1) + ' of ' + r.p.length) : 'next lead';
+  var fast = '<div class="ocfast">'
+    + '<button class="big" data-fast="noanswer">No answer &rarr; ' + _fto + '</button>'
+    + (_vmHold(r, phIdx) ? '' : '<button class="big" data-fast="voicemail">Left voicemail &rarr; ' + _fto + '</button>')
+    + '<button class="ghost" id="ocjump">Other outcome &darr; callback, appointment, no, wrong</button>'
+    + '</div>';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    + fast
     /* BACK TO THE NUMBERS (2026-11-02, Alex: "from when you click on a number ... i want to be able to
        go back in case i wanted to press on another number"). Returns to this lead's card, same number
        on the button, so another number can be picked. Logs no outcome and does not advance. The dial
@@ -10103,8 +10147,38 @@ function screenOutcome(){
   if($('vmbtn')) $('vmbtn').onclick = function(){ vmOpen(r); };
   if($('ocback')) $('ocback').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
+    _ocPendClear();
     screenLead();
   };
+  if($('ocjump')) $('ocjump').onclick = function(){
+    var g = document.querySelector('.oc');
+    if(g){ try{ g.scrollIntoView({block:'start'}); }catch(e){ g.scrollIntoView(); } }
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-fast]'), function(b){
+    b.onclick = function(){
+      var all = document.querySelectorAll('.oc button, [data-fast]');
+      Array.prototype.forEach.call(all, function(x){ x.disabled = true; });
+      try{
+        var o = OUTCOMES.filter(function(z){ return z.k === b.dataset.fast; })[0];
+        var _fresh = logOutcome(r, o, d);
+        _ocPendClear();
+        var _ch = cheer(o);
+        var _msg = (_fresh ? ('✓ ' + o.t + ' — logged') : ('✓ dial counted — ' + o.t + ' already logged today')) + ' · ' + _ch.msg;
+        window._tapShieldUntil = Date.now() + 400;
+        try{ vmClose(); }catch(_e){}   /* the next-number path goes to screenLead, which does not close it */
+        /* re-read after the write: the number on the label could have been marked bad elsewhere */
+        var k = hardSuppressed(r) ? -1 : _fastNextPh(r, phIdx);
+        toast(_msg, {ms: _ch.big ? 3200 : 1800});
+        if(k >= 0){ phIdx = k; screenLead(); _ocScroll('#dial', true); return; }
+        advance(r.c, nextC);
+        if(SCREEN === 'lead' && !BLANE) _ocScroll('#app .card', false);
+      }catch(err){
+        Array.prototype.forEach.call(all, function(x){ x.disabled = false; });
+        logErr(err, 'outcome-fast:' + (b.dataset.fast || ''));
+        toast('Error logging that — buttons re-enabled, try again');
+      }
+    };
+  });
   if($('redial')) $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
@@ -10163,6 +10237,7 @@ function screenOutcome(){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
       var _fresh = logOutcome(r,o,d);
+      _ocPendClear();
       var _ch = cheer(o);
       var _okmsg = (_fresh ? ('✓ '+o.t+' — logged') : ('✓ dial counted — '+o.t+' already logged today')) + ' · ' + _ch.msg;
       /* The shield arms INSIDE go() — at the actual screen swap — not at outcome-tap time. On the
@@ -10204,6 +10279,59 @@ function untriedEarlierPh(r, ix){
     if(!bad[dg] && !rung[dg.slice(-4)]) return k;
   }
   return -1;
+}
+/* The number the one-tap No answer / Voicemail goes to: the next live number after ix not rung today,
+   else an earlier one skipped past (untriedEarlierPh), else -1 = the next lead. */
+function _fastNextPh(r, ix){
+  var p = (r && r.p) || [], bad = badSet(r), t = today(), rung = {};
+  (((notes[r.c]||{}).dials)||[]).forEach(function(x){ if(x && x.d === t) rung[String(x.ph4||'')] = 1; });
+  for(var k = ix + 1; k < p.length; k++){
+    var dg = String(p[k]).replace(/\D/g,'');
+    if(!bad[dg] && !rung[dg.slice(-4)]) return k;
+  }
+  return untriedEarlierPh(r, ix);
+}
+function _ocScroll(sel, center){
+  try{
+    var el = document.querySelector(sel); if(!el) return;
+    if(center && el.scrollIntoView) el.scrollIntoView({block:'center'});
+    else window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + (window.scrollY || 0) - 8));
+  }catch(e){}
+}
+/* A CALL IN PROGRESS SURVIVES A RELOAD (2026-11-18). iOS drops the tab while the dialer is open, and
+   pull-to-refresh or a new build reloads it. The dial tap's 'pending' row holds the lead out of pool()
+   for PENDING_HOLD_H, so after a reload the card could not reopen and the outcome of the call just made
+   was never logged (Find a number leads too: "just dialled, so it is cooling down"). The dial tap keeps
+   {d, ts, c, pi, ph4, from} on this phone; start() reopens that outcome screen once, if it is the same
+   day, under OC_RESUME_MS old, the lead is still on this page and not hard-suppressed, and its last dial
+   row is still the open one for that number. Logging, Back to the numbers, or any failed check clears it.
+   Nothing is synced, and it decides nothing about who may be called. */
+var _OCK = 'fcOcOpen:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
+var OC_RESUME_MS = 2 * 3600000;
+function _ocPendSave(r, ix, d){
+  try{ localStorage.setItem(_OCK, JSON.stringify({d:today(), ts:Date.now(), c:r.c, pi:ix,
+    ph4:String(d).replace(/\D/g,'').slice(-4), from:(LKFROM && LKFROM === r.c) ? r.c : null})); }catch(e){}
+}
+function _ocPendClear(){ try{ localStorage.removeItem(_OCK); }catch(e){} }
+function _ocResume(){
+  var s = null;
+  try{ s = JSON.parse(localStorage.getItem(_OCK) || 'null'); }catch(e){ s = null; }
+  if(!s || typeof s !== 'object' || typeof s.c !== 'string') return false;
+  if(s.d !== today() || !(Date.now() - (+s.ts || 0) < OC_RESUME_MS)){ _ocPendClear(); return false; }
+  var r = ROWS.filter(function(x){ return x.c === s.c; })[0];
+  var ix = +s.pi;
+  if(!r || hardSuppressed(r) || !(ix >= 0 && ix < (r.p||[]).length)
+     || String(r.p[ix]).replace(/\D/g,'').slice(-4) !== s.ph4){ _ocPendClear(); return false; }
+  var dl = (notes[r.c] || {}).dials || [], x = dl[dl.length - 1];
+  if(!(x && (x.oc === 'pending' || x.oc === 'redial') && x.d === today() && x.ph4 === s.ph4)){ _ocPendClear(); return false; }
+  BLANE = null;
+  LKFROM = (s.from && s.from === r.c) ? r.c : null;
+  cur = r; phIdx = ix;
+  screenOutcome();
+  try{ window.scrollTo(0, 0); }catch(e){}
+  try{ _lkSaveState(); }catch(e){}
+  toast('Back on your call to ' + fmt(r.p[ix]) + '. Log how it went.', {ms:3500});
+  return true;
 }
 /* How many of this lead's numbers, other than the one just dialled, are not marked bad. */
 function otherLivePh(r, ix){
