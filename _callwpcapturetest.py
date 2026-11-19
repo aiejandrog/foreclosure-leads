@@ -79,7 +79,7 @@ html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig'
 path = os.path.join(_T, 'call.html')
 open(path, 'w', encoding='utf-8').write(html)
 
-JS = """async ([rows, cov, A, E, PAGE]) => {
+JS = """async ([rows, cov, A, E, PAGE, B]) => {
   try { localStorage.clear(); } catch(e) {}
   notes = {}; ROWS = rows; COV = cov;
   start();
@@ -112,6 +112,30 @@ JS = """async ([rows, cov, A, E, PAGE]) => {
   document.getElementById('wpcsave').click();
   await sleep(100);
   o.mail = SCREEN + '|' + ((notes[E]||{}).wpe||[]).join(',');
+  // LEAD CARD (2026-11-19): the capture button on a dial card comes back to that card
+  SCREEN = 'lead'; BLANE = null; LKFROM = null; _openCase(B);
+  const cb = document.querySelector('.pastecall button.wpcopen[data-c="' + B + '"]');
+  o.cardBtn = !!cb;
+  cb.click(); o.cardScreen = SCREEN;
+  document.getElementById('wpcback').click();
+  o.cardBack = SCREEN + '|' + (cur && cur.c);
+  const nb = ((notes[B]||{}).dials||[]).length;
+  document.querySelector('.pastecall button.wpcopen[data-c="' + B + '"]').click();
+  const t3 = document.getElementById('wpctxt');
+  t3.value = "Owners & Residents\\nDan Dialer\\nOwner\\nCell Phone\\n(786) 555-0144\\nLiz Sister\\nResident\\n(786) 555-0145";
+  t3.dispatchEvent(new Event('input')); await sleep(600);
+  document.getElementById('wpcsave').click(); await sleep(100);
+  o.cardAfter = SCREEN + '|' + (cur && cur.c) + '|' + LKFROM;
+  o.cardNum = String(cur.p[phIdx]||'').replace(/\\D/g,'').slice(-10);
+  o.cardDial = ((notes[B]||{}).dials||[]).length - nb;
+  o.cardRel = ((notes[B]||{}).wpr||[]).map(x => x.n + ':' + x.k).join(',');
+  const ph1 = cur.p[phIdx];
+  document.querySelector('.pastecall button.wpcopen[data-c="' + B + '"]').click();
+  const t4 = document.getElementById('wpctxt');
+  t4.value = "Possible relatives\\nMo Cousin\\n(786) 555-0146";
+  t4.dispatchEvent(new Event('input')); await sleep(600);
+  document.getElementById('wpcsave').click(); await sleep(100);
+  o.relOnly = SCREEN + '|' + (cur && cur.c) + '|' + (cur.p[phIdx] === ph1);
   return o; }"""
 
 with sync_playwright() as p:
@@ -121,7 +145,7 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto('file://' + path)
     pg.wait_for_timeout(300)
-    out = pg.evaluate(JS, [rows, cov, A['case'], E['case'], PAGE])
+    out = pg.evaluate(JS, [rows, cov, A['case'], E['case'], PAGE, B['case']])
     b.close()
 
 rec('page runs without a script error', not errs, errs)
@@ -140,6 +164,15 @@ rec('owner email saved for the Morning Worker (notes.wpe)', out['wpe'] == 'tomq_
 rec('the other resident\'s number is call-only (notes.wpr, not sure)', out['wpr'] == '9545550103:u', out['wpr'])
 rec('the other resident\'s email is log-only (notes.wpre)', out['wpre'] == 'cara_b@invented.test:u', out['wpre'])
 rec('an email-only capture opens the composer and keeps the address', out['mail'] == 'mail|eve_owner@invented.test', out['mail'])
+
+rec('lead card: the capture button is in the paste box', out['cardBtn'])
+rec('lead card: the button opens the capture screen', out['cardScreen'] == 'wppaste', out['cardScreen'])
+rec('lead card: Back returns to the same card', out['cardBack'] == 'lead|%s' % B['case'], out['cardBack'])
+rec('LEAD CARD: Save stays on this card, with no list hand-off', out['cardAfter'] == 'lead|%s|null' % B['case'], out['cardAfter'])
+rec('...and the new owner number is on the dial button', out['cardNum'] == '7865550144', out['cardNum'])
+rec('...nothing dialled by itself', out['cardDial'] == 0, out['cardDial'])
+rec('...the other resident is call-only, not sure', out['cardRel'] == '7865550145:u', out['cardRel'])
+rec('lead card, relatives only: stays on the card, dial number unchanged', out['relOnly'] == 'lead|%s|true' % B['case'], out['relOnly'])
 
 print('\n%d failed' % len(FAILS) if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)
