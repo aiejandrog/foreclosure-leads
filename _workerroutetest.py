@@ -264,7 +264,7 @@ print('\nFIND A NUMBER: SHOW ALL, HAS EQUITY')
 H5 = 'var LKSHOW = 200, LKEQ = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', 'lookupList')) + r"""
 function esc(x){ return String(x); } function head(){ return ''; } function ownerLabel(r){ return r.c; }
 function propertyLabel(){ return ''; } function _bView(){ return {auction:''}; } function fileLinks(){ return []; }
-function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function wpcBtn(){ return ''; } function lkAsDial(r){ return r; } function money(x){ return String(x); } function _lkPickHtml(){ return ''; }
+function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function wpcBtn(){ return ''; } function wpCopyBtn(){ return ''; } function lkAsDial(r){ return r; } function money(x){ return String(x); } function _lkPickHtml(){ return ''; }
 var ALL = []; for(var k=0;k<450;k++) ALL.push({c:'L'+k, eqc:(k%3===0 ? {q:1, n:40} : (k%3===1 ? {q:1, n:-5} : (k%2===0 ? {q:0, r:1, rn:5} : null)))});
 function lkSorted(){ return ALL; }
 var out = {};

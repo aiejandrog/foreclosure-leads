@@ -7047,6 +7047,78 @@ function boardBar(){
 /* The list behind a board-lane button. Read-only on purpose for the rows that are not dialable:
    the point of putting TRACE on the phone is to be able to SEE and HAND OFF the 1,068 leads nobody
    can call yet, not to invent a way to call them. */
+function wpStreetFmt(street){
+  /* Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; ours ("2929 NW 123 TER #B105")
+     lands on the city's property list instead of the house. Same rules as wp_web._wp_street. */
+  var SUF = {st:1, ave:1, ct:1, ter:1, dr:1, rd:1, ln:1, pl:1, blvd:1, way:1, cir:1, pkwy:1, hwy:1, trl:1,
+             street:1, avenue:1, court:1, terrace:1, drive:1, road:1, lane:1, place:1, circle:1};
+  var ROUTE = {road:1, rd:1, highway:1, hwy:1, sr:1, us:1, route:1, rte:1, cr:1};
+  var DIR = {n:1, s:1, e:1, w:1, ne:1, nw:1, se:1, sw:1};
+  var ord = function(n){ n = parseInt(n, 10); var m = n % 100, d = n % 10;
+    return n + ((m >= 10 && m <= 20) ? 'th' : (d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th')); };
+  var s = String(street || ''), unit = '';
+  var um = s.match(/(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)/i);
+  if(um){ unit = um[1]; s = s.replace(um[0], ' '); }
+  /* A BARE UNIT AFTER THE SUFFIX ("100 SW 5 ST 9-14"): taken whole, before the split below would
+     cut "9-14" into two numbers and make them "9th 14th" (2026-11-18, found against the paid
+     Whitepages records, which spell it "Apt 9-14"). */
+  if(!unit){
+    var _rw = s.trim().split(/\s+/);
+    if(_rw.length >= 3){
+      var _lt = _rw[_rw.length-1], _pt = _rw[_rw.length-2].toLowerCase().replace(/[^a-z]/g, '');
+      if(/\d/.test(_lt) && SUF[_pt] && !ROUTE[_pt]){ unit = _lt.replace(/[^0-9A-Za-z\-]/g, ''); _rw.pop(); s = _rw.join(' '); }
+    }
+  }
+  var t = s.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if(!unit && t.length >= 3 && /^\d+$/.test(t[t.length-1]) && SUF[t[t.length-2].toLowerCase()]
+     && !ROUTE[t[t.length-2].toLowerCase()]) unit = t.pop();
+  var out = t.map(function(w, i){
+    var lo = w.toLowerCase();
+    if(i > 0 && /^\d+$/.test(w)) return ROUTE[t[i-1].toLowerCase()] ? w : ord(w);
+    if(DIR[lo] || lo === 'us' || lo === 'sr' || lo === 'cr') return w.toUpperCase();
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+  if(unit) out.push('Apt', unit.toUpperCase());
+  return out.join(' ');
+}
+/* COPY ADDRESS (2026-11-18, Alejandro: "add a copy address button"). The string to paste into the
+   Whitepages search bar, in Whitepages' own spelling: "5800 Margate Blvd Apt 111, Margate, FL 33063".
+   Street through wpStreetFmt (ordinal numbered streets, "Apt" for # / unit, title case), then the
+   city, FL and the ZIP. Ours is "5800 MARGATE BLVD APT 111, MARGATE, 33063" with no state, which the
+   search bar does not match as reliably. */
+function wpSearchAddr(r){
+  var a = String((r && r.a) || '').trim();
+  if(!a) return '';
+  var parts = a.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+  var street = wpStreetFmt(parts[0] || '');
+  var zip = (a.match(/(\d{5})(?:-\d{4})?\s*$/) || [])[1] || String((r && r.z) || '');
+  var city = '';
+  for(var k = 1; k < parts.length && !city; k++){
+    var c = parts[k].replace(/\b(FL|FLA|FLORIDA)\b\.?/ig, ' ').replace(/\d{5}(-\d{4})?/g, ' ')
+                    .replace(/[^A-Za-z .'\-]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[\-.' ]+|[\-.' ]+$/g, '');
+    if(/[A-Za-z]/.test(c)) city = c.toLowerCase().replace(/(^|[\s\-'])([a-z])/g, function(m, p1, p2){ return p1 + p2.toUpperCase(); });
+  }
+  return street + (city ? ', ' + city : '') + ', FL' + (zip ? ' ' + zip : '');
+}
+function wpCopyBtn(r){
+  var q = wpSearchAddr(r);
+  if(!q) return '';
+  return '<button type="button" class="wpcopy" data-addr="' + esc(q) + '" title="' + esc(q) + '" '
+       + 'style="margin-left:6px;padding:2px 10px;min-height:30px;border-radius:8px;border:1px solid #2a3f6b;background:#132244;color:var(--gold);font:700 12.5px system-ui,sans-serif">'
+       + '&#128203; Copy address</button>';
+}
+/* One listener for every Copy address button, so a repaint never leaves one unwired. */
+if(typeof document !== 'undefined') document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('button.wpcopy') : null;
+  if(!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  var q = b.getAttribute('data-addr') || '';
+  var done = function(){ toast('Copied: ' + q + '. Paste it in the Whitepages search bar.'); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(q).then(done, function(){ prompt('Copy this:', q); }); }
+    else prompt('Copy this:', q);
+  }catch(e){ prompt('Copy this:', q); }
+}, true);
 function propertyLabel(r){
   if(r.a) return r.a;
   if(r.ag) return 'Possible property: ' + r.ag + ' — unverified';
@@ -7218,7 +7290,7 @@ function lookupList(){
     return '<div class="card lkcard" data-lkc="' + esc(r.c) + '"' + (_on ? ' style="border:1px solid var(--gold)"' : '') + '><b>' + esc(ownerLabel(r)) + '</b>'
          + (_on ? ' <span class="chip ok lkon">script below</span>' : '')
          + (_g === 0 ? ' <span class="chip ok">from Morning Worker</span>' : (_g === 1 ? ' <span class="chip hot">new filing</span>' : ''))
-         + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
+         + '<div class="sub">' + esc(propertyLabel(r)) + wpCopyBtn(r) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq + (r.ne ? ' &middot; has an email' : '') + '</div>'
          + (typeof r.v === 'number' && r.v > 0 ? '<div class="sub">Property value ' + money(r.v) + '</div>' : '')
          + (owedLine ? '<div class="sub">' + owedLine + '</div>' : '')
@@ -8160,10 +8232,10 @@ function _wpeList(r){
    search is one tap from where he pastes. */
 function _pcWpLinks(r){
   var L = (typeof fileLinks === 'function' ? fileLinks(r) : []).filter(function(x){ return /^Whitepages/.test(x[0]); });
-  if(!L.length) return '';
+  if(!L.length && !r.a) return '';
   return '<div class="pcwp">' + L.map(function(x){
     return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0] === 'Whitepages' ? 'Whitepages by name' : 'Whitepages by address') + ' &#8599;</a>';
-  }).join('') + '</div>';
+  }).join('') + wpCopyBtn(r) + '</div>';
 }
 function pasteBlock(r){
   var em = MAIL_OK;
@@ -8985,30 +9057,7 @@ function fileLinks(r){
      more long strings per lead. The /property/{id} deep-link is deliberately NOT here: the id is
      per-lead, so it would be exactly the per-row string this band exists to avoid. */
   var wpSlug = function(s){ return String(s || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().replace(/\s+/g, '-'); };
-  var wpStreet = function(street){
-    /* Whitepages spells its own links "2929 NW 123rd Ter Apt B105"; ours ("2929 NW 123 TER #B105")
-       lands on the city's property list instead of the house. Same rules as wp_web._wp_street. */
-    var SUF = {st:1, ave:1, ct:1, ter:1, dr:1, rd:1, ln:1, pl:1, blvd:1, way:1, cir:1, pkwy:1, hwy:1, trl:1,
-               street:1, avenue:1, court:1, terrace:1, drive:1, road:1, lane:1, place:1, circle:1};
-    var ROUTE = {road:1, rd:1, highway:1, hwy:1, sr:1, us:1, route:1, rte:1, cr:1};
-    var DIR = {n:1, s:1, e:1, w:1, ne:1, nw:1, se:1, sw:1};
-    var ord = function(n){ n = parseInt(n, 10); var m = n % 100, d = n % 10;
-      return n + ((m >= 10 && m <= 20) ? 'th' : (d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th')); };
-    var s = String(street || ''), unit = '';
-    var um = s.match(/(?:\b(?:apt|unit|ste|suite)\b\.?|#)\s*#?\s*([0-9A-Za-z\-]+)/i);
-    if(um){ unit = um[1]; s = s.replace(um[0], ' '); }
-    var t = s.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
-    if(!unit && t.length >= 3 && /^\d+$/.test(t[t.length-1]) && SUF[t[t.length-2].toLowerCase()]
-       && !ROUTE[t[t.length-2].toLowerCase()]) unit = t.pop();
-    var out = t.map(function(w, i){
-      var lo = w.toLowerCase();
-      if(i > 0 && /^\d+$/.test(w)) return ROUTE[t[i-1].toLowerCase()] ? w : ord(w);
-      if(DIR[lo] || lo === 'us' || lo === 'sr' || lo === 'cr') return w.toUpperCase();
-      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-    });
-    if(unit) out.push('Apt', unit.toUpperCase());
-    return out.join(' ');
-  };
+  var wpStreet = wpStreetFmt;
   var ap = String(r.a || '').split(',');
   var wpCity = ap.length >= 2 ? wpSlug(ap[1]) : '';
   if(ap[0] && wpCity)
