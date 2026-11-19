@@ -267,6 +267,28 @@ function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
   arm('honestly the plan is my brother is going to lend me the money for it');
   T.aiCheck(); await wait(60);
   o.shown=S.ai.stats.shown||0;
+  /* Credit failures retain the unheard turn so retry after replenishment needs no new speech. */
+  global.fetch=function(){ return Promise.resolve({ok:true,json:function(){ return Promise.resolve({line:'',why:'model:http402'}); }}); };
+  arm('my brother is going to lend me the money for it');
+  T.aiCheck(); await wait(60);
+  o.credit=[S.ai.n, els.aistatus.textContent, els.airetry.style.display];
+  global.fetch=function(){ return Promise.resolve({ok:true,json:function(){ return Promise.resolve({line:'What happens if that money falls through?',step:'problem',type:'answer',heard:'my brother'}); }}); };
+  C.retryAI(); await wait(220);
+  o.recovered=S.ai.line;
+  clearTimeout(S.ai.t);
+  /* A shared screen with no prospect audio must expose the one-mic recovery during the call. */
+  S.lines=[]; S.finals=''; S.ai.n=0; S.ai.line=''; S.sid=null;
+  T.dgTwo(true);
+  for(var k=0;k<3;k++) T.dg({is_final:true,channel_index:[0,2],channel:{alternatives:[{transcript:'Test microphone sentence '+k+'.'}]}});
+  o.micWarning=[els.aimic.style.display,els.aistatus.textContent];
+  C.useMicCoach();
+  o.micRecovered=[S.dgTwo, S.lines.some(function(l){ return l.spk==='you'; }), els.aimic.style.display];
+  var micLines=S.lines.length;
+  T.dg({is_final:true,channel_index:[1,2],channel:{alternatives:[{transcript:'Shared audio returned.'}]}});
+  o.ignoredShared=S.lines.length===micLines;
+  T.dg({is_final:true,channel_index:[0,2],channel:{alternatives:[{transcript:'A microphone answer.'}]}});
+  o.heardMic=S.lines.length===micLines+1;
+  S.sid='sid-test';
   /* 4. unclear does not pull the strip back; a real answer may */
   S.ai.at=7; T.aiSteps({step:'close',type:'unclear'}); o.st1=S.ai.at;
   T.aiSteps({step:'close',type:'objection'}); o.st2=S.ai.at;
@@ -295,6 +317,16 @@ else:
         chk(o['cut'] == [False, 1, 1], 'a request that never answers is cut and the box is free to ask again (busy, asked, cut)', o['cut'])
         chk(o['blank'] == 1, 'a blank answer is counted with its reason')
         chk(o['shown'] == 1, 'a shown line is counted')
+        chk(o['credit'][0] == 0 and 'credits' in o['credit'][1] and o['credit'][2] == '',
+            'credit refusal shows its cause and retains the turn for retry', o['credit'])
+        chk(o['recovered'] == 'What happens if that money falls through?',
+            'retry recovers the same turn after credits return without more speech', o['recovered'])
+        chk(o['micWarning'][0] == '' and 'Only your microphone' in o['micWarning'][1],
+            'missing prospect audio exposes a recovery button', o['micWarning'])
+        chk(o['micRecovered'] == [False, False, 'none'],
+            'microphone recovery removes hard caller-only labels and clears the warning button', o['micRecovered'])
+        chk(o['ignoredShared'] and o['heardMic'],
+            'microphone recovery hears only channel zero if shared audio resumes')
         chk(o['st1'] == 7 and o['st2'] == 6, 'an unclear line keeps the step strip where it is; an objection may move it', [o['st1'], o['st2']])
         chk(o['ck1'] is True and o['ckBody'] == ['/api/session/sid-test/checkpoint', True, True, 1],
             'the page checkpoints the coach record, the ask counts and the transcript', o['ckBody'])

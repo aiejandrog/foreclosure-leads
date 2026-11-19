@@ -277,6 +277,9 @@ code{color:var(--accent)}
       </div>
     </div>
 
+    <div id="aistatus" role="status" style="color:#ffcf83;margin:8px 0"></div>
+    <button id="aimic" style="display:none" onclick="Coach.useMicCoach()">Use speakerphone microphone</button>
+    <button id="airetry" style="display:none" onclick="Coach.retryAI()">Retry AI response</button>
     <div id="ailine"><div class="who" id="aiwho">Say this next</div><div id="aisteps"></div><div class="heard" id="aiheard"></div><div id="aitone"></div><div class="body" id="aibody"></div><div class="prev" id="aiprev"></div></div>
 
     <div id="objection">
@@ -560,7 +563,7 @@ var S = {
   stagesVisited:[], objFired:[], rfFired:[],
   lines:[], finals:'', interim:'',
   recorder:null, dgRecorder:null, stream:null, sr:null, srOn:false, lang:'en-US',
-  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[], stats:{}}, dgGot:false, dgTwo:false, dgThem:[], raw:[], mixCtx:null,
+  dg:null, dgOn:false, dgKeyMem:'', dgOpen:null, ai:{t:null, seq:0, n:0, line:'', shownAt:0, hist:[], at:-1, step:'', heardAll:[], stats:{}}, dgGot:false, dgTwo:false, dgMicOnly:false, dgThem:[], raw:[], mixCtx:null,
   pending:[],
   autoCards:CARDS, manualCards:[],
   lastCard:null, lastCardAt:0, cooldown:{},
@@ -1485,6 +1488,33 @@ function aiAsk(){
   S.ai.t=setTimeout(aiCheck,150);
 }
 function aiFresh(all, from){ return String(all||'').slice(from||0).replace(/\s+/g,' ').trim(); }
+function aiUnavailable(why, from){
+  var msg=why==='model:http402'?'Venice credits are unavailable. After adding credits, retry this response.'
+         :why==='model:http401'||why==='model:http403'?'Venice refused the API key. Check the key, then retry.'
+         :'The AI response could not be loaded. Retry when the connection is ready.';
+  S.ai.n=from;
+  $('aistatus').textContent=msg;
+  $('airetry').style.display='';
+  if(!S.ai.line) $('aibody').textContent='AI response unavailable';
+}
+function retryAI(){
+  if(S.ai.busy||S.plain||!S.sid) return;
+  $('airetry').style.display='none';
+  $('aistatus').textContent='';
+  S.ai.sentAt=0;
+  aiAsk();
+}
+function useMicCoach(){
+  S.dgTwo=false; S.dgMicOnly=true; S.dgOpen=null; S.dgThem=[];
+  setSys(false);
+  S.lines.forEach(function(l){ if(l.dg==='c0') l.spk=guessSpeaker(norm(l.text)); });
+  S.ai.n=0;
+  $('aimic').style.display='none';
+  $('aistatus').textContent='Listening through the microphone. Put the call on speaker so both voices are heard.';
+  $('eng').textContent='engine: Deepgram · microphone · speakers inferred from words';
+  renderTranscript();
+  retryAI();
+}
 function aiCheck(){
   var t=now(), quiet=t-(S.fc.lastWord||0), held=t-(S.ai.shownAt||0);
   if(quiet<AI_PAUSE){ S.ai.t=setTimeout(aiCheck, AI_PAUSE-quiet+30); return; }
@@ -1514,8 +1544,8 @@ function aiCheck(){
     body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
   .then(function(r){ return r.ok?r.json():{why:'http'+r.status}; }).then(function(j){
     clearTimeout(_kill);
-    S.ai.busy=false;
     if(seq!==S.ai.seq){ aiStat('stale'); return; }
+    S.ai.busy=false;
     $('aiwho').className='who';
     /* They said more while the model was thinking: that answer is to half a sentence. Ask again. */
     /* STARVED (real call 11-17 17:53: 80 answers written, 4 shown, nothing on screen for the first two
@@ -1527,7 +1557,13 @@ function aiCheck(){
     var _more=aiFresh(S.finals, S.ai.n).split(' ').filter(Boolean).length;
     if(_more>8&&!(S.ai.drops>0)){ S.ai.n=n0; S.ai.drops=1; aiStat('talked_over'); aiAsk(); return; }
     S.ai.drops=0;
-    if(!j||!j.line){ aiStat('blank:'+((j&&j.why)||'empty')); return; }
+    if(!j||!j.line){
+      var why=(j&&j.why)||'empty';
+      aiStat('blank:'+why);
+      if(/^(model:|http|error:)/.test(why)) aiUnavailable(why,n0);
+      return;
+    }
+    $('aistatus').textContent=''; $('airetry').style.display='none';
     /* Nothing new was said by them (same words heard as last time), or the model handed back the line
        already on screen: keep what is there. Call 11-16 17:03 showed one line five times in a row. */
     if(j.line===S.ai.line||(j.heard&&j.heard===S.ai.heard&&S.ai.line)){ aiStat('same'); return; }
@@ -1546,7 +1582,13 @@ function aiCheck(){
     aiFocus('ai');
     /* the line, what it heard and how it read it are saved with the call, so a bad line can be found afterwards */
     S.fc.fires.push({id:'ai', at:mmss(now()-S.t0), ms:now()-t0, wait:now()-heardAt, behind:S.lines.length-n, step:j.step||'', type:j.type||'', heard:j.heard||'', line:j.line});
-  }).catch(function(e){ clearTimeout(_kill); S.ai.busy=false; $('aiwho').className='who'; aiStat((e&&e.name==='AbortError')?'cut':'failed'); });
+  }).catch(function(e){
+    clearTimeout(_kill);
+    if(seq!==S.ai.seq) return;
+    S.ai.busy=false; $('aiwho').className='who';
+    aiStat((e&&e.name==='AbortError')?'cut':'failed');
+    aiUnavailable('connection',n0);
+  });
 }
 /* WHERE THE ASKS WENT. Before 11-18 only shown lines were saved, so 921 asks on finished calls left 288
    lines and no record of what happened to the other 633. Each outcome is counted and saved with the call. */
@@ -1691,6 +1733,8 @@ function setKey(){
    card is held back only when the words are you reading the screen. Exact labels need two
    channels (dgTwoMessage). */
 function dgMessage(j){
+  // The existing capture socket stays stereo after microphone recovery.
+  if(S.dgMicOnly&&j&&j.channel_index&&j.channel_index[0]!==0) return;
   var alt=j&&j.channel&&j.channel.alternatives&&j.channel.alternatives[0];
   if(!alt) return;
   var txt=alt.transcript||'';
@@ -1720,6 +1764,14 @@ function dgTwoMessage(j, txt){
     S.interim='';
     if(ch===1) S.dgThem.push({at:t, text:txt, fin:true});
     pushFinal(txt, tag, 'c'+ch, true);
+    if(ch===0&&!S.lines.some(function(l){ return l.dg==='c1'; })
+       &&S.lines.filter(function(l){ return l.dg==='c0'; }).length>=3){
+      $('aistatus').textContent='Only your microphone is reaching the coach. The shared laptop audio has no prospect speech. Check Phone Link audio, or use the speakerphone microphone.';
+      $('aimic').style.display='';
+    } else if(ch===1){
+      $('aimic').style.display='none';
+      if($('airetry').style.display==='none') $('aistatus').textContent='';
+    }
     S.dgOpen=/[.?!]$/.test(txt)?null:{i:S.lines.length-1, spk:'c'+ch, at:now()};
   } else {
     if(ch===1){ S.dgThem=S.dgThem.filter(function(x){ return x.fin; }); S.dgThem.push({at:t, text:txt, fin:false}); }
@@ -1866,7 +1918,7 @@ function start(){
     if(!disp.getAudioTracks().length){ disp.getTracks().forEach(function(t){ t.stop(); }); disp=null; sysNote=' · no laptop sound was shared, one mic only'; } }
   else if(want) sysNote=' · screen share cancelled, one mic only';
   navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(mic){
-    var stream=mic; S.raw=[mic]; S.dgTwo=false;
+    var stream=mic; S.raw=[mic]; S.dgTwo=false; S.dgMicOnly=false;
     if(disp){ try{ stream=twoChannel(mic, disp); S.raw.push(disp); S.dgTwo=true; }catch(e){ disp.getTracks().forEach(function(t){ t.stop(); }); sysNote=' · could not mix the laptop sound, one mic only'; } }
     S.stream=stream; S.plain=false;
     var lead=S.lead||{};
@@ -2040,6 +2092,7 @@ function resetCall(){
   S.wrap=null; S.wrapPending=false; S.wrapWaited=false; S.outcomeAuto=false; S.idleCounting=false; S.ended=false;
   S.t0=now(); S.lastSpeech=now(); S.stage=S.plain?1:0;
   $('ailine').className=''; $('aibody').textContent=''; $('aiprev').textContent=''; $('aiheard').textContent='';
+  $('aistatus').textContent=''; $('airetry').style.display='none'; $('aimic').style.display='none';
   if($('aitone')) $('aitone').innerHTML='';
   $('aiwho').className='who'; $('outcome').className='overlay'; $('idlewarn').className='overlay';
   try{ dismissObjection(); }catch(e){}
@@ -2163,7 +2216,7 @@ return {newCall:newCall,switchTo:switchTo,choose:choose,dropLead:dropLead,start:
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
         setKey:setKey,keepGoing:keepGoing,
-        coachMore:coachMore,coachHide:coachHide,pauseCoach:pauseCoach,catchUp:catchUp,_test:_test};
+        coachMore:coachMore,coachHide:coachHide,pauseCoach:pauseCoach,catchUp:catchUp,retryAI:retryAI,useMicCoach:useMicCoach,_test:_test};
 })();
 </script>
 </body>
