@@ -7754,24 +7754,30 @@ function _wpcNameTokens(s){
   return String(s||'').toUpperCase().replace(/\b(LLC|INC|CORP|TRUST|TR|EST|ESTATE|OF|THE|JR|SR|II|III|IV|AKA|ET|AL|UNKNOWN|HEIRS?)\b/g, ' ')
     .replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(function(w){ return w.length >= 3; });
 }
+var _WPC_LABEL = {'address':1,'addresses':1,'alerts':1,'apartment':1,'api':1,'app':1,'appreciation':1,'ave':1,'background':1,'blog':1,'blvd':1,'careers':1,'cell':1,'center':1,'checks':1,'choices':1,'cities':1,'city':1,'clear':1,'company':1,'comparable':1,'comps':1,'condo':1,'counties':1,'county':1,'ct':1,'data':1,'details':1,'directory':1,'documentation':1,'dr':1,'email':1,'emails':1,'est':1,'estimate':1,'falls':1,'family':1,'forecast':1,'free':1,'ft':1,'gardens':1,'get':1,'help':1,'hialeah':1,'home':1,'homes':1,'info':1,'intel':1,'landline':1,'ln':1,'locka':1,'lookup':1,'miramar':1,'more':1,'mortgage':1,'nearby':1,'neighbor':1,'neighbors':1,'occupancy':1,'occupied':1,'opa':1,'owner':1,'owners':1,'pembroke':1,'people':1,'phone':1,'phones':1,'pod':1,'pricing':1,'privacy':1,'properties':1,'property':1,'purchase':1,'ranches':1,'rd':1,'rented':1,'resident':1,'residents':1,'reverse':1,'sale':1,'search':1,'see':1,'signal':1,'signals':1,'single':1,'sitemap':1,'sold':1,'southwest':1,'sq':1,'st':1,'status':1,'street':1,'tax':1,'taxes':1,'ter':1,'terms':1,'vacant':1,'value':1,'view':1,'watch':1,'way':1};
 function _wpcIsName(line){
   /* a person-name line: 2-5 words, letters only, no digits, not a heading or a field label */
   if(/\d|@|:|\$/.test(line) || line.length > 48) return false;
   var w = line.replace(/[.,'’-]/g, ' ').trim().split(/\s+/);
   if(w.length < 2 || w.length > 5) return false;
   if(/^(view|see|show|get|unlock|age|lives|lived|current|previous|phone|email|address|relatives?|associates?|neighbors?|family|background|report|contact|possible|people|other|more|resident|landline|mobile|wireless|voip|home|work)\b/i.test(line)) return false;
+  /* Address pages (2026-11-19): "Cell Phone", "Silver Falls", "Nearby Homes", "Free and Clear" passed as
+     names, and each one reset the current person, so the owner's numbers came out "Not sure". A label
+     word anywhere on the line means it is not a person. */
+  if(w.some(function(x){ return _WPC_LABEL[x.toLowerCase()]; })) return false;
   return w.every(function(x){ return /^[A-Za-z]+$/.test(x); });
 }
 function wpParse(text, owner){
   var own = _wpcNameTokens(owner), out = [], seen = {};
   var REL = /^(possible\s+)?(relatives?|family( members)?|associates?|associated people|people associated|neighbors?|household( members)?|other residents|current residents|roommates?|related to|may be related)\b/i;
-  var sect = 'o', cur = null, curOwn = null;   /* cur: the last person-name line; curOwn: does it match the owner */
+  var sect = 'o', cur = null, curOwn = null, labeled = false;   /* labeled: the page has named its Owner   /* cur: the last person-name line; curOwn: does it match the owner */
   String(text||'').split(/\r?\n/).forEach(function(raw){
     var line = raw.replace(/\s+/g, ' ').trim(); if(!line) return;
     if(REL.test(line)){ sect = 'r'; cur = null; curOwn = null; return; }
+    if(/^owner$/i.test(line)){ if(cur){ curOwn = true; labeled = true; } return; }
     if(_wpcIsName(line)){
       var t = _wpcNameTokens(line), hit = own.filter(function(x){ return t.indexOf(x) >= 0; }).length;
-      cur = line; curOwn = own.length ? (hit >= Math.min(2, own.length)) : null;
+      cur = line; curOwn = own.length ? (hit >= Math.min(2, own.length)) : (labeled ? false : null);
       return;
     }
     var who = curOwn === true ? 'o' : (curOwn === false ? (sect === 'r' ? 'r' : 'u') : (sect === 'r' ? 'r' : 'o'));
@@ -7786,6 +7792,7 @@ function wpParse(text, owner){
     }
     var rp = /(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})(?![\d*])/g, q;
     while((q = rp.exec(line))){
+      if(q.index > 0 && /\d/.test(line.charAt(q.index - 1))) continue;
       var d = q[1] + q[2] + q[3];
       if(seen['p' + d]) continue;
       seen['p' + d] = 1; out.push({t:'p', v:d, k:who, nm:cur || ''});
@@ -7898,7 +7905,28 @@ function wpcSave(c){
   toast('Saved: ' + res.p + ' owner number' + (res.p === 1 ? '' : 's') + ', ' + res.e + ' owner email' + (res.e === 1 ? '' : 's')
         + (res.rel ? ', ' + res.rel + ' relative/not sure' : '') + (res.refused ? ' · ' + res.refused + ' refused (do-not-call or bad)' : ''),
         res.refused && !(res.p || res.e || res.rel) ? {bad:true} : undefined);
-  _wpcLeave();
+  /* GO TO THE PROSPECT (2026-11-19, Alex: "it saved but it didnt take me directly to that prospects page
+     to call ... it took me out to look at the other prospects"). Same hand-off as Save & call on the
+     list (lkSave): an owner number opens this lead's card on that number with the way back to the next
+     lead to look up, but it does not dial by itself. An owner email with no number opens the composer. */
+  var _back = WPC && WPC.back; WPC = null; SCREEN = 'lead';
+  if(res.p){
+    var _lks = (typeof lkSorted === 'function') ? lkSorted() : [], _nx = null;
+    for(var _q = 0; _q < _lks.length; _q++) if(_lks[_q].c === c){ _nx = (_lks[_q + 1] || _lks[_q - 1] || {}).c || null; break; }
+    delete LKDRAFT[c];
+    LKFOCUS = _nx; BLANE = null; LKFROM = c;
+    _openCase(c);
+    if(!(cur && cur.c === c)){ LKFROM = null; if(_back) _back(); else render(); }
+    else { var _k = (r.p || []).map(function(x){ return _lkDigits(x); }).indexOf(_lkDigits(n.phone)); if(_k >= 0){ phIdx = _k; screenLead(); } }
+    try{ _lkSaveState(); }catch(e){}
+    return res;
+  }
+  if(res.e){
+    var _em = (n.wpe || [])[n.wpe.length - 1];
+    screenMail(r, _em, _back || function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); });
+    if(SCREEN === 'mail') return res;
+  }
+  if(_back) _back(); else render();
   return res;
 }
 /* The signature fields the board keeps in localStorage.fcSender (same origin), on top of this page's
