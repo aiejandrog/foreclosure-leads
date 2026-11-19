@@ -292,7 +292,7 @@ AI_SIT_REFRAMES = (
     "THE REFRAMES (beat b of the objection answer). Pick the one that fits:\n"
     "      A lawyer: 'What you're dealing with is a money problem, not a legal problem. Nobody's accusing you "
     "of a crime. Your lawyer can push the date, but every day it gets pushed, interest and fees get added, "
-    "and that comes out of your equity.'\n"
+    "and that comes out of whatever you've got in the place.'\n"
     "      It's under control / handled: 'A week out, under control means it's in writing. Is it in writing?'\n"
     "      The bank is helping: 'The bank looking at it and the court selling it are two different offices, "
     "and they don't talk to each other. The sale doesn't wait for the bank.'\n"
@@ -875,7 +875,10 @@ FACT_RULES = (
      "professionals carry them out."),
     ("promise", re.compile(r"\bkeep (?:a|the) roof over|\byou(?:['’]ll| will)? (?:get to )?keep (?:the|your) (?:house|home|place)\b"
                            r"|\bmake[s]? sure (?:the|your) (?:sale|closing|deal) (?:goes through|closes|happens)"
-                           r"|\b(?:he|we)(?:['’]ll| will) (?:get|make) (?:it|this|everything) (?:handled|taken care of|go away|right)", re.I),
+                           r"|\b(?:he|we)(?:['’]ll| will) (?:get|make) (?:it|this|everything) (?:handled|taken care of|go away|right)"
+                           r"|\b(?:has|have|there['’]?s) a fix\b|\bstop (?:that|the) bleeding\b"
+                           r"|\b(?:he|we|the advisor)(?:['’]ll| will| can)? (?:get|have) (?:the|that|your) (?:date|sale) (?:pushed|moved|postponed)"
+                           r"|\b(?:he|we|the advisor)(?:['’]ll| will| can)? line up (?:a|the) (?:cash )?buyer", re.I),
      "it promises an outcome. Offer options, never an outcome."),
 )
 
@@ -904,13 +907,16 @@ def fact_check(line, days=None, lane="", eq="", convo=""):
     _stmt = " ".join(x for x in re.split(r"(?<=[.!?])\s+", s) if not x.rstrip().endswith("?"))
     if (not known or str(lane or "").lower() == "filing") and re.search(
             r"\b(?:before (?:the|that|your) (?:sale|auction)(?: date)?|(?:the|that|your) (?:sale|auction)(?: date)? (?:is|comes|was|gets?) "
-            r"(?:set|scheduled|coming|next|in|on|this|still|soon|close)|(?:sale|auction) date (?:is|comes)|still comes in)\b", _stmt, re.I) \
+            r"(?:set|scheduled|coming|next|in|on|this|still|soon|close)|(?:sale|auction) date (?:is|comes)|still comes in"
+            r"|(?:the|that|your) (?:sale|auction) (?:will|is going to|still) (?:happen|go|come)|(?:after|when|once) (?:the|that|your) (?:sale|auction)"
+            r"|a (?:week|month|few days) (?:out|before|away))\b", _stmt, re.I) \
             and not re.search(r"\b(?:sale|auction|date)\b", said):
         return "sale_date", ("it mentions a sale date or an auction, but no sale date is known for this call and the "
                              "homeowner has not mentioned one. Talk about the filing and the options instead.")
     if str(eq or "").lower() != "verified" and re.search(
             r"\b(?:your|the|that|all that|plenty of|lot of|some) equity\b|\bmoney (?:in|left in) (?:it|the house|the place|your house)\b"
-            r"|\bmoney in your pocket\b|\b(?:money|cash) out of (?:it|the house|the place|your house)\b", s, re.I) \
+            r"|\bmoney in your pocket\b|\b(?:money|cash) out of (?:it|the house|the place|your house)\b"
+            r"|\bwalk away with (?:money|cash|something|a check)\b", s, re.I) \
             and not re.search(r"not interested in saving your property, or the equity you['’]ve got in it", s, re.I):
         return "equity", ("it says or implies they have equity, which nobody has verified. Say 'whatever you've got in the "
                           "place' or 'if there's equity in it, he'll tell you'.")
@@ -954,7 +960,17 @@ def repair_time(line, convo="", lang=""):
             swapped = True               # one ask replaces every invented-time sentence
     if not swapped:
         return s
-    ask = _ASK_ES if str(lang or "").lower().startswith("es") else _ASK_EN
+    es = str(lang or "").lower().startswith("es")
+    ask = _ASK_ES if es else _ASK_EN
+    # THEY ALREADY PICKED THE DAY: re-offering "today or tomorrow" undoes it. Ask only for the hour.
+    low = str(convo or "").lower()
+    i_tom = max(low.rfind("tomorrow"), low.rfind("mañana"))
+    i_tod = max(low.rfind("today"), low.rfind("tonight"), low.rfind("after work"), low.rfind("this afternoon"),
+                low.rfind("this evening"), low.rfind("hoy"))
+    if i_tom >= 0 and i_tom > i_tod:
+        ask = "¿A qué hora mañana le queda mejor?" if es else "What time tomorrow works best for you?"
+    elif i_tod >= 0:
+        ask = "¿A qué hora hoy le queda mejor?" if es else "What time today works best for you?"
     out = [x for x in out if not x.rstrip().endswith("?")] + [ask]
     return " ".join(out)
 
@@ -1596,9 +1612,14 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
     # STILL READING (11-19). The last words are the caller reading the line on his screen: the homeowner has not
     # answered yet, so a new line now would answer the coach's own words. Keep what is on screen.
-    if rows and rows[-1].startswith("CALLER") and shown and _read_back(last_said, [shown]):
-        st["why"] = "wait"
-        return done({})
+    _recent = [x for x in (prior[-3:] + [shown]) if x]
+    if rows and rows[-1].startswith("CALLER") and _recent:
+        _tail = last_said
+        if len(_words(_tail)) <= 3 and len(rows) >= 2 and rows[-2].startswith("CALLER"):
+            _tail = rows[-2].split(": ", 1)[1]            # "Right?" tacked onto the line he just read
+        if _read_back(_tail, _recent):
+            st["why"] = "wait"
+            return done({})
     if _AI_META.search(last_said):
         st["why"] = "meta"
         return done({})                # the callers are talking about the script: keep what is on screen

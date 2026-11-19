@@ -111,7 +111,9 @@ question, natural spoken English (or Spanish), nothing that reads like writing.
 
 ALLOWED BY THE PLAYBOOK (never a fail on their own): "whatever you've got in the place", "what you've put into it", \
 "if there's equity in it, he'll tell you", the fixed line "So you're not interested in saving your property, or the equity \
-you've got in it?", "ask the court for more time" named as one of the options, "later today or first thing tomorrow", and \
+you've got in it?", "ask the court for more time" named as one of the options, "later today or first thing tomorrow", the \
+caller's own lawyer reframe ("this is a money problem, not a legal problem; nobody's accusing you of a crime; a lawyer can \
+push the date but interest and fees keep adding") when the homeowner raised a lawyer, and \
 the general figures in the playbook's numbers section said in words. Every lead is a homeowner with a foreclosure filing \
 or tax-sale case on the home, so "the filing" or "the case" is grounded even with no lead facts; a SALE DATE is not, \
 unless the lead facts or the homeowner give one.
