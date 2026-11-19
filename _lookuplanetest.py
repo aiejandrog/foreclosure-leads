@@ -121,7 +121,7 @@ if sync_playwright:
           o.n = lkRows().map(r => r.c);
           BLANE = '__lk'; render();
           const app = document.getElementById('app').innerHTML;
-          o.wp = /whitepages\\.com\\/address\\//.test(app);
+          o.wp = /whitepages\\.com\\/reverse-address#/.test(app);
           o.inputs = document.querySelectorAll('input.lknum').length;
           document.querySelector('input.lknum').value = '(305) 555-0199';
           document.querySelector('button.lkadd').click();

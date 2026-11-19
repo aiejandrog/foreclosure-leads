@@ -7109,6 +7109,15 @@ function wpCopyBtn(r){
 }
 /* One listener for every Copy address button, so a repaint never leaves one unwired. */
 if(typeof document !== 'undefined') document.addEventListener('click', function(ev){
+  var lk = ev.target && ev.target.closest ? ev.target.closest('a[href^="https://www.whitepages.com/reverse-address#"]') : null;
+  if(lk){
+    /* the link still opens; the address rides to the clipboard on the same tap */
+    var qa = ''; try{ qa = decodeURIComponent(String(lk.getAttribute('href')).split('#')[1] || ''); }catch(e){}
+    if(qa && navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(qa).then(function(){ toast('Address copied: paste it in the Whitepages search bar.'); }, function(){});
+    }
+    return;
+  }
   var b = ev.target && ev.target.closest ? ev.target.closest('button.wpcopy') : null;
   if(!b) return;
   ev.preventDefault(); ev.stopPropagation();
@@ -9057,11 +9066,14 @@ function fileLinks(r){
      more long strings per lead. The /property/{id} deep-link is deliberately NOT here: the id is
      per-lead, so it would be exactly the per-row string this band exists to avoid. */
   var wpSlug = function(s){ return String(s || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().replace(/\s+/g, '-'); };
-  var wpStreet = wpStreetFmt;
   var ap = String(r.a || '').split(',');
   var wpCity = ap.length >= 2 ? wpSlug(ap[1]) : '';
   if(ap[0] && wpCity)
-    L.push(['Whitepages addr', 'https://www.whitepages.com/address/' + wpSlug(wpStreet(ap[0])) + '/' + wpCity + '-FL']);
+    /* REVERSE-ADDRESS SEARCH, not /address/<slug> (2026-11-18, live test). A Whitepages house page
+       is /address/<slug>/<City>-FL/<opaque id>; without the id the slug falls back to the city's
+       property list. So the link opens the reverse-address search, and tapping it copies the
+       search-bar spelling (wpSearchAddr, carried after the #) for one paste. */
+    L.push(['Whitepages addr', 'https://www.whitepages.com/reverse-address#' + encodeURIComponent(wpSearchAddr(r))]);
   if(nm && wpSlug(nm))
     L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(nm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);

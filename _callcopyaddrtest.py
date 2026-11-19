@@ -100,6 +100,11 @@ with sync_playwright() as p:
       o.listCopied = copied;
       o.focusKept = LKFOCUS;
       copied = null;
+      const wl = Array.from(document.querySelectorAll('.lkcard[data-lkc="' + cNo + '"] .flinks a')).find(x => /reverse-address#/.test(x.href));
+      o.linkThere = !!wl;
+      if (wl) { wl.addEventListener('click', e => e.preventDefault()); wl.click(); await new Promise(r => setTimeout(r, 50)); }
+      o.linkCopied = copied;
+      copied = null;
       _openCase(cPh);
       const cb = document.querySelector('.pastecall button.wpcopy');
       o.cardBtn = !!cb;
@@ -111,10 +116,12 @@ with sync_playwright() as p:
 
 rec('Find a number card has Copy address', out['listBtn'], out)
 rec('...tapping it copies the Whitepages spelling', out['listCopied'] == '5800 Margate Blvd Apt 111, Margate, FL 33063', out)
+rec('Find a number card: the Whitepages addr link is the reverse-address search', out['linkThere'], out)
+rec('...tapping the link copies the search-bar spelling too', out['linkCopied'] == '5800 Margate Blvd Apt 111, Margate, FL 33063', out)
 rec('lead card paste box has Copy address', out['cardBtn'], out)
 rec('...tapping it copies the Whitepages spelling', out['cardCopied'] == '2929 NW 123rd Ter Apt B105, Miami, FL 33167', out)
-rec('Whitepages /address/ link unchanged by the refactor',
-    out['wpLink'] == 'https://www.whitepages.com/address/2929-NW-123rd-Ter-Apt-B105/MIAMI-FL', out)
+rec('Whitepages addr link opens the reverse-address search carrying the copy string',
+    out['wpLink'] == 'https://www.whitepages.com/reverse-address#' + '2929 NW 123rd Ter Apt B105, Miami, FL 33167'.replace(' ', '%20').replace(',', '%2C'), out)
 rec('no script error', not errs, errs)
 print('\n%d failure(s)' % len(FAILS) if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)

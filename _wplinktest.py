@@ -193,7 +193,7 @@ rec('worker without an address retains free-search fallback',
 rec('worker with no lookup evidence has no fabricated link', worker['empty'] == '', worker['empty'])
 
 # --------------------------------------- 5. Call Mode HIS FILE carries the SAME Whitepages shapes
-FILE_JS = extract(CM_SRC, 'fileLinks')
+FILE_JS = extract(CM_SRC, 'wpStreetFmt') + '\n' + extract(CM_SRC, 'wpSearchAddr') + '\n' + extract(CM_SRC, 'fileLinks')
 cm = node(FILE_JS
           + '\nconst r = {fo:"0131190150010", ct:"MI", a:"842 NW 9TH ST, MIAMI, FL 33136",'
             ' o:"ROBERT A JOHNSON", z:"33136", c:"2099-000000-CA-01"};\n'
@@ -202,11 +202,16 @@ cm_map = {lab: url for lab, url in cm}
 rec('Call Mode HIS FILE now carries a Whitepages reverse-address link',
     'Whitepages addr' in cm_map, ' / '.join(cm_map))
 rec('Call Mode HIS FILE now carries a Whitepages name link', 'Whitepages' in cm_map)
-# ONE URL SHAPE, not a third vocabulary: the phone's address link must equal the board's for the
-# same lead. If someone edits one builder and not the other, this is what says so.
-rec('Call Mode / board parity: identical reverse-address URL for the same lead',
-    cm_map.get('Whitepages addr') == out['addr'],
-    '%s vs %s' % (cm_map.get('Whitepages addr'), out['addr']))
+# 2026-11-18: the phone's address link opens Whitepages' reverse-address SEARCH and carries the
+# search-bar spelling after '#' (a slug URL without Whitepages' opaque id lands on the city list, live
+# test). Same street spelling as the board's slug, so the two builders still cannot drift apart.
+_cm_addr = cm_map.get('Whitepages addr') or ''
+_board_street = out['addr'].split('/address/')[1].split('/')[0].replace('-', ' ')
+from urllib.parse import unquote as _unq
+rec('Call Mode address link opens the reverse-address search with the same street spelling as the board',
+    _cm_addr.startswith('https://www.whitepages.com/reverse-address#')
+    and _unq(_cm_addr.split('#', 1)[1]).startswith(_board_street + ', '),
+    '%s vs %s' % (_cm_addr, out['addr']))
 rec('Call Mode / board parity: identical name URL for the same owner',
     cm_map.get('Whitepages') == out['name'],
     '%s vs %s' % (cm_map.get('Whitepages'), out['name']))

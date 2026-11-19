@@ -344,7 +344,8 @@ _pg = call_mode._PAGE
 _a = _pg.index('function fileLinks(')
 _js = os.path.join(_T, 'wplinks.js')
 _b = _pg.index('\n}\n', _a) + 3
-open(_js, 'w', encoding='utf-8').write(_pg[_a:_b] + """
+_h1 = _pg.index('function wpStreetFmt('); _h2 = _pg.index('function wpCopyBtn(')
+open(_js, 'w', encoding='utf-8').write(_pg[_h1:_h2] + _pg[_a:_b] + """
 var streets = ['2929 NW 123 TER', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '5000 US HIGHWAY 1'];
 console.log(JSON.stringify(streets.map(function(s){ var L = fileLinks({a: s + ', MIAMI, FL 33101', o: 'X Y', ct: 'MI', fo: ''});
   return (L.filter(function(x){ return x[0] === 'Whitepages addr'; })[0] || ['', ''])[1]; })));
@@ -352,9 +353,10 @@ console.log(JSON.stringify(streets.map(function(s){ var L = fileLinks({a: s + ',
 _p2 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js], capture_output=True, text=True, timeout=60)
 _got = json.loads(_p2.stdout or 'null') if _p2.returncode == 0 else None
 import wp_web as _W
-_want = ['https://www.whitepages.com/address/%s/MIAMI-FL' % '-'.join(_W._wp_street(x).split())
+from urllib.parse import quote as _q
+_want = ['https://www.whitepages.com/reverse-address#' + _q(_W._wp_street(x) + ', Miami, FL 33101', safe="-_.!~*'()")
          for x in ('2929 NW 123 TER', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '5000 US HIGHWAY 1')]
-rec('card Whitepages address link spells streets like wp_web (the house, not the city list)',
+rec('card Whitepages address link opens the reverse-address search with wp_web street spelling',
     _got == _want, (_got, _want, _p2.stderr[-300:]))
 
 # The Whitepages search-box stem, same rule as wp_web._search_stem.
