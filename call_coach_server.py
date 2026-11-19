@@ -881,6 +881,10 @@ def fact_check(line, days=None, lane="", eq="", convo=""):
     """('rule', 'reason') when `line` states a fact this call never gave the coach, else ('', '')."""
     s = str(line or "")
     said = str(convo or "").lower()
+    # Deepgram writes times as digits ("3 pm", "3:30"): read them as the hour words the rule compares.
+    _HW = "zero one two three four five six seven eight nine ten eleven twelve".split()
+    said = re.sub(r"\b(1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?=a\.?m|p\.?m|o['’]?clock|\b)",
+                  lambda m: " " + _HW[int(m.group(1))] + " ", said)
     for name, rx, why in FACT_RULES:
         if rx.search(s):
             return name, why
