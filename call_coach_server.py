@@ -931,6 +931,34 @@ def one_question(line):
 _TIME_ASK = re.compile(r"later today|first thing tomorrow|today or tomorrow|what time|tomorrow morning", re.I)
 
 
+_ASK_EN = "Would later today or first thing tomorrow work better?"
+_ASK_ES = "¿Le queda mejor hoy más tarde o mañana a primera hora?"
+
+
+def repair_time(line, convo="", lang=""):
+    """REPAIR, NOT DROP (11-19, replay grader: a quarter of the lines came back blank because the model kept
+    proposing a clock time or the advisor's availability, twice). A sentence that names a time nobody said, or
+    claims the advisor is free, is swapped for the standing ask when it is the ask, and cut when it is a
+    statement. The rest of the line stays. Returns the line unchanged when there is nothing to repair."""
+    s = str(line or "").strip()
+    if not s:
+        return s
+    parts = [x for x in re.split(r"(?<=[.!?])\s+", s) if x]
+    avail = FACT_RULES[0][1]
+    out, swapped = [], False
+    for x in parts:
+        bad = bool(avail.search(x)) or fact_check(x, 0, "", "verified", convo)[0] == "time"
+        if not bad:
+            out.append(x)
+        elif not swapped:
+            swapped = True               # one ask replaces every invented-time sentence
+    if not swapped:
+        return s
+    ask = _ASK_ES if str(lang or "").lower().startswith("es") else _ASK_EN
+    out = [x for x in out if not x.rstrip().endswith("?")] + [ask]
+    return " ".join(out)
+
+
 def sale_in_words(days):
     """How far off the court sale is, in words (the line may not carry a digit). '' when unknown."""
     try:
@@ -1593,6 +1621,13 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
                    "not given in these instructions, leave it out.")
         if r2 is not None:
             res = r2
+    # An invented clock time or advisor availability is repaired in code first (repair_time), so it never
+    # costs a re-ask or blanks the box.
+    if res and res.get("line"):
+        _fixed = repair_time(res["line"], _convo, lang)
+        if _fixed != res["line"]:
+            res["line"] = _fixed
+            st["repaired"] = 1
     # NEVER SAY. A line that breaks the playbook's never-say list is asked once more with the reason, and
     # dropped if the second one breaks it too. How-we-get-paid words have their own re-ask below, with the facts.
     if res and res.get("line"):
@@ -1607,6 +1642,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
                 _never_log(rule, "dropped")
                 st["why"] = "never:" + rule
                 return done({})
+    if res and res.get("line"):
+        _fixed = repair_time(res["line"], _convo, lang)
+        if _fixed != res["line"]:
+            res["line"] = _fixed
+            st["repaired"] = 1
     # ONE QUESTION (11-19). The time-before-the-advisor rule is in the prompt only: a re-ask here cost a model call.
     if res and res.get("line"):
         res["line"] = one_question(res["line"])

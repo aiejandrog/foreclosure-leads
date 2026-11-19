@@ -85,5 +85,12 @@ print(('ok   ' if (_r == {} and not _calls) else 'FAIL ') + 'caller still readin
 if not (_r == {} and not _calls):
     FAILS.append('still reading')
 
+rec('an invented time in the ask is swapped for the standing ask, not dropped',
+    S.repair_time("I hear you. How does ten tomorrow sound?") == "I hear you. Would later today or first thing tomorrow work better?")
+rec('an availability claim is swapped too',
+    S.repair_time("Got it. He's got ten tomorrow morning open, does that work?") == "Got it. Would later today or first thing tomorrow work better?")
+rec('a time the homeowner gave is left alone',
+    S.repair_time("Perfect, three o'clock it is. Save my number.", "call me at 3 pm") == "Perfect, three o'clock it is. Save my number.")
+rec('a clean line is left alone', S.repair_time("Makes sense. Later today or first thing tomorrow?") == "Makes sense. Later today or first thing tomorrow?")
 print('\n%d failure(s)' % len(FAILS) if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)
