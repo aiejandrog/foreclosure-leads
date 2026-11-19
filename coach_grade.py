@@ -116,7 +116,7 @@ Empty list when everything passes.
 Reply with ONE JSON object and nothing else, no code fence:
 {"grounded": {"pass": true, "why": "..."}, "never_say": {"pass": true, "why": "..."}, "speaker": {"pass": true, "why": "..."}, \
 "on_step": {"pass": true, "why": "..."}, "sayable": {"pass": true, "why": "..."}, "score": 7, "failure_classes": []}
-Each "why" is one short sentence.
+Each "why" is one short sentence of at most twenty words; do not quote the transcript at length.
 
 PLAYBOOK (the caller's own sales system: the facts, the moves, and the Never say list):
 """
@@ -249,7 +249,8 @@ def _rows(lines, given):
 
 def judge_user(fire, cand):
     lane = fire.get("lane") or ""
-    facts = ["Lane: " + (lane or "unknown")]
+    facts = ["Lane: " + (lane or "unknown (no lead was open: no lane rules apply, so never use wrong_lane; a claim about "
+                                 "THIS homeowner's case, sale or debt that the transcript does not support is invented_fact)")]
     if lane in S.AI_LANES:
         facts.append("Lane rules: " + S.AI_LANES[lane])
     when = S.sale_in_words(fire.get("days")) if lane != "filing" else ""
@@ -271,7 +272,7 @@ def judge_system():
     return JUDGE_SYSTEM + (S.playbook_text() or "(no playbook file found: grade on the rules above)")
 
 
-def venice_chat(model, system, user, key, max_tokens=900, timeout=JUDGE_TIMEOUT):
+def venice_chat(model, system, user, key, max_tokens=1600, timeout=JUDGE_TIMEOUT):
     """One chat completion. (text, usage dict). Raises on HTTP / network errors."""
     body = {"model": model, "max_tokens": max_tokens, "temperature": 0, "stream": False,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
