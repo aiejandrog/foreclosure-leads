@@ -18,15 +18,23 @@
 > machine: the desktop stays disarmed and never gets an `engine.id`. Two armed machines is the
 > failure this file's neighbours document.
 >
-> **Still in force, because he was not asked about them and did not lift them:** rule 3
-> (`DEALFLOW_FOLLOWUPS_ON`), rule 4 ($0 paid calls, spend caps unchanged), rule 5 (vendor keys),
-> and the merge and branch rules 7 to 9. Rule 6 is back to its ordinary meaning: a merge is
+> **Still in force, because he was not asked about them and did not lift them:** rule 4 ($0
+> paid calls, spend caps unchanged), rule 5 (vendor keys), and the merge and branch rules 7 to 9.
+> Rule 3 (`DEALFLOW_FOLLOWUPS_ON`) was LIFTED on 2026-11-18 — see the amendment note below. Rule 6 is back to its ordinary meaning: a merge is
 > visible after the next publish, and publishes run again.
 >
 > Also changed on 2026-11-13 by his decision: the paid Whitepages API is retired, and the
 > first-email gates (bounce pause, verified-only, the 10-a-day unverified cap) are removed. The
 > opt-out ledger, its freshness and same-day sync check, the bankruptcy stay gate, `mail_guard`
 > and the daily caps still refuse sends.
+>
+> **Rule 3 LIFTED 2026-11-18** — `DEALFLOW_FOLLOWUPS_ON` may be set against a real `DEALFLOW_DIR`
+> (task, shell, launcher or process running `mail_followups.py`). It stays unset in unit tests,
+> fixtures and preview builds. Lifting the rule does not turn follow-ups on by itself: the variable
+> still has to be set in the process that runs the batch. Every other send gate — opt-out ledger and
+> its freshness and same-day sync check, bankruptcy stay gate, `mail_guard`, daily caps — still
+> refuses. Rules 4 to 9 are untouched. An agent may no longer cite rule 3 as a reason to decline or
+> defer a follow-up; if a follow-up is blocked, name the real gate.
 
 Every agent, team and Claude session on this repo reads this file before it starts, after CLAUDE.md
 and before PATTERNS.md. Where this file is stricter than an older brief, this file wins. It stands
@@ -47,8 +55,10 @@ allowed to contact a homeowner, spend, or change the live site.
    `cadence-daily.bat`, `cadence-run.bat`), `send_server.py` on its real port, `cadence.py`,
    `outreach_email.py`, `reply_send.py --send`, `publish_site.py`, `quick_publish.py`,
    `access_codes.py`, `warmup.py`.
-3. **Never set `DEALFLOW_FOLLOWUPS_ON`**, on any machine, in any shell, task or test that touches a
-   real `DEALFLOW_DIR`.
+3. ~~**Never set `DEALFLOW_FOLLOWUPS_ON`**~~ — **LIFTED 2026-11-18.** Permitted against a real
+   `DEALFLOW_DIR` in the process that runs `mail_followups.py`. Still forbidden in unit tests,
+   fixtures and preview builds. Every other send gate still refuses. Full text:
+   `docs/agent-teams/OPERATING-RULES-AMENDMENT-2026-11-18.md`.
 4. **$0.** No Whitepages, Tracerfy, Twilio, PACER, live CourtListener (`bk_lookup.py`), clerk API,
    2Captcha, Deepgram, or any paid or rate-limited call. Do not change a spend cap.
 5. **Vendor keys are re-issued by the vendor and entered by Alex by hand, masked, on the machine.**
