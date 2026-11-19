@@ -1,58 +1,52 @@
 {
  "alerts": [
   {
-   "at": "2026-11-18T08:08:58-05:00",
+   "at": "2026-11-18T21:10:38-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "Trailing 7-day lower bound 18.3% (raw 27.7%, 18 of 65) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-18T08:08:58-05:00",
+   "at": "2026-11-18T21:10:38-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-18T08:08:58-05:00",
+   "at": "2026-11-18T21:10:38-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-17 21:09): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
+   "text": "Laptop readiness (checked 11-18 21:10): on battery; send server port 8823 is not listening; 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies); 1 DEALFLOW task(s) degraded (DEALFLOW Refresh, last result 7)."
   },
   {
-   "at": "2026-11-18T08:08:58-05:00",
-   "key": "paid-reads-cap",
-   "severity": "fail",
-   "text": "Paid-reads monthly cap is $0.00, so paid reads are off."
-  },
-  {
-   "at": "2026-11-18T08:08:58-05:00",
+   "at": "2026-11-18T21:10:38-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-18T08:08:58-05:00",
+ "published_at": "2026-11-18T21:10:38-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
+   "errors": 0,
    "filings": 3253,
-   "holds": 811,
+   "holds": 823,
    "last_http_status": 0,
-   "leads_checked": 27,
-   "match_s": 3,
-   "needing_search": 3643,
+   "leads_checked": 35,
+   "match_s": 2,
+   "needing_search": 3619,
    "provider": "courtlistener",
-   "pull_age_h": 0.96,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "searched_this_run": 27,
+   "reason": "time_budget",
+   "requests_used": 98,
+   "searched_this_run": 35,
    "starved_runs": 0,
    "truncated": 0
   },
@@ -96,7 +90,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 11.34016
+   "usd": 10.68771
   },
   "clerk_bk": {
    "readable": false
@@ -118,7 +112,7 @@
    "caps": [],
    "date": "2026-11-18",
    "eligible": 30,
-   "judged": false,
+   "judged": true,
    "paused": false,
    "readable": true,
    "scheduled": false,
@@ -133,7 +127,7 @@
      "run_end": 1,
      "send_answer": 49,
      "task_open": 1,
-     "worker_loaded": 1
+     "worker_loaded": 11
     },
     "no_email": {
      "none": 6
@@ -145,7 +139,7 @@
      "followups_off": 13,
      "merge_fields": 14
     },
-    "rows": 61,
+    "rows": 71,
     "skipped": {}
    }
   },
@@ -163,13 +157,13 @@
    "state": "finished"
   },
   "paid_reads": {
-   "cap": 0.0,
+   "cap": 11.34,
    "month": "2026-11",
    "readable": true,
-   "spent": 0.0
+   "spent": 1.1805
   },
   "readiness": {
-   "at": "2026-11-17T21:09:45-05:00",
+   "at": "2026-11-18T21:10:38-05:00",
    "battery_present": true,
    "degraded": 1,
    "degraded_codes": [
@@ -190,9 +184,9 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": true,
-   "pct": 79,
-   "port_open": true,
+   "on_ac": false,
+   "pct": 63,
+   "port_open": false,
    "power_ok": true,
    "present_check": true,
    "tasks_ok": true
