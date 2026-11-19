@@ -420,7 +420,9 @@ with tempfile.TemporaryDirectory() as d:
         chk(suggest([{'spk': '', 'text': 'Bro this is too many words, what would you have said there?'}])[1].get('line') == '' and len(AI['seen']) == n5,
             'the callers talking about the script is not answered, and the model is not even asked')
         sp9 = ALLMSG(AI['seen'][-1])
-        chk('money problem, not a legal problem' in sp9 and 'under forty-five words' in sp9 and 'THE REFRAME' in sp9,
+        # 11-19: the reframe LIST rides only when it fits what they said (a lawyer line: _coachtentest.py); the
+        # three-beat shape is in the core on every line
+        chk('under forty-five words' in sp9 and 'THE REFRAME' in sp9,
             'the model is given the short objection answer: agree, one reframe, the ask')
         # Praise filler never reaches the screen.
         AI['reply'] = "HEARD: x\nTYPE: question\nSTEP: close\nSAY: You should check us out, that's smart. Our senior advisor has done this over thirty years. That's a great question. Judge him yourself."

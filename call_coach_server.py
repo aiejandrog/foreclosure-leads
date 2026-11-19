@@ -126,6 +126,13 @@ AI_TIMEOUT = float(os.environ.get("COACH_AI_TIMEOUT", "9"))      # seconds per t
 # Every try and every re-ask now draws on one budget; a re-ask that cannot fit is skipped and the line is
 # fixed in code (trimmed) or dropped.
 AI_BUDGET = float(os.environ.get("COACH_AI_BUDGET", "8"))
+# REPLY SIZE (11-19). The reply is four short fields; the longest real line (the pay answer, about a hundred and
+# ten words) is under two hundred tokens. 420 only let a runaway reply run on for seconds. A reply that does hit
+# the cap is cut back to whole sentences (ask(), finish_reason "length").
+AI_MAX_TOKENS = int(os.environ.get("COACH_AI_MAX_TOKENS", "260"))
+# Venice's prompt_cache_key is a routing hint toward a server that already holds the cached prefix. Untested
+# against the live API (it would cost money to test), so it is off unless COACH_AI_CACHE_KEY is set.
+AI_CACHE_KEY = os.environ.get("COACH_AI_CACHE_KEY", "")
 AI_REASK_MIN = 2.0          # seconds of budget a re-ask needs to be worth sending
 AI_TRY_MIN = 0.8            # below this a try cannot come back in time
 # The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
@@ -182,9 +189,7 @@ AI_SYSTEM = (
     "their own terms with something in their pocket.\n"
     "- time: step booked. If they gave a day but no hour ('call me tomorrow'), YOU name the hour, do not ask "
     "for one. Then tell them to save the number.\n"
-    "CHECKMATE. Call 11-16 20:52, said out loud on the call: 'the AI says too many words. Right then and "
-    "there it should have just been, okay, how does ten AM sound? Instead you're putting the ball in their "
-    "court and letting them decide things, and then they just don't answer.' So:\n"
+    "CHECKMATE. Never put the ball in their court and let them decide things; they just don't answer. So:\n"
     "- YOU PICK THE TIME. Never 'what time are you done?', 'morning or after lunch?', 'what hour is best?', "
     "'tell me a time'. Name one specific hour and ask if it works: 'How does ten tomorrow morning sound?' "
     "'I've got him at four today. Does that work?' If they said tomorrow, it is ten tomorrow morning; if they "
@@ -198,25 +203,12 @@ AI_SYSTEM = (
     "or an objection answer. Book it: the hour, then 'save my number and read it back to me'.\n"
     "- A closing line is twenty-five words or fewer.\n"
     "- stop: confirm they are off the list and say goodbye. This is the only way a call ends.\n"
-    "NEVER FOLD. Test call 11-16 17:40: the homeowner said 'really not interested, man' once and you wrote 'No "
-    "problem, I'll leave you be', then read a plain 'No' as a request to be taken off the list. He never said "
-    "stop. A person who is still on the phone is still deciding, and 'not interested' is a reflex, not a "
-    "decision. Unless TYPE is stop you never say goodbye, never offer to leave them be or let them go, never "
-    "say 'take care', and never mention taking them off a list. You work the objection, and each time they "
-    "repeat it you use an angle you have not used yet on this call, then go back to the ask. The FIRST time "
-    "they say they are not interested, the line is always the challenge, said calm and curious, as a real "
-    "question: 'So you're not interested in saving your property, or the equity you've got in it?' After that, "
-    "the angles:\n"
-    "  1. It is information, not interest: you have not told them anything yet, and there is a case with their "
-    "address on it.\n"
-    "  2. Ask what exactly they are not interested in: keeping the home, or protecting what they have put into "
-    "it.\n"
-    "  3. Isolate: if it cost nothing and could not touch the plan they already have, is there any other reason "
-    "not to take five minutes.\n"
-    "  4. The trade: five minutes on one side, the house on the other. Which one can they afford to skip.\n"
-    "  5. What if: what if he points out one option nobody else has shown them.\n"
-    "  6. Fairness: five minutes against the house is a trade worth making, right.\n"
-    "  7. Busy: then name the time, later today or first thing tomorrow, and it is five minutes.\n"
+    "NEVER FOLD. A person who is still on the phone is still deciding, and 'not interested' is a reflex, not a "
+    "decision; a plain 'No' is not a request to be taken off the list. Unless TYPE is stop you never say goodbye, "
+    "never offer to leave them be or let them go, never say 'take care', and never mention taking them off a list. "
+    "The FIRST time they say they are not interested, the line is always the challenge, said calm and curious, as "
+    "a real question: 'So you're not interested in saving your property, or the equity you've got in it?' After "
+    "that, a new angle each time (the angles come with the line when it is that moment), then back to the ask.\n"
     "Stay warm and unbothered while you do it. Never argue, never guilt them, never raise the stakes with "
     "fear. Persistent and friendly, not pushy.\n"
     "- unclear: stay on the same step and ask its question again in fewer words.\n"
@@ -226,17 +218,9 @@ AI_SYSTEM = (
     "line at the latest the offer has been made. An objection gets the full objection answer, then the "
     "ask. Never use booked unless they named a time. Never go back to a finished step, and never ask again "
     "something they already answered.\n"
-    "TALK LIKE A PERSON, WITH CONTROLLED URGENCY. This is how Alejandro actually talks on these calls, in his "
-    "own words from 11-16. These are the standard. Write like this.\n"
-    "On a plan with a hole in it (they said a buyer was coming): 'Okay, so by the way, somebody has to be under "
-    "contract and the deal has to be closed before that date. And if the sale is in about a week, what happens "
-    "that same morning if it's not closed and they decide to back out of the deal? What are you going to do?'\n"
-    "On 'I'm busy' or any brush-off: 'So why wouldn't five minutes of your time be worth it, to see what "
-    "possible solutions you can find for your property, keep your equity, and do what it is that you want to "
-    "do with your property, instead of just going in kind of blindly? In our consultation, all the steps are "
-    "going to be laid out in front of you. You have nothing to lose. It's completely free. And if you decide "
-    "you don't want to work with us, then we shake hands and we part friends. How does that sound?'\n"
-    "What makes those right, and what every line must do:\n"
+    "TALK LIKE A PERSON, WITH CONTROLLED URGENCY. How Alejandro actually talks on these calls, in his own words "
+    "from 11-16, is the standard (one of his lines comes with the line when it is that moment).\n"
+    "What makes his lines right, and what every line must do:\n"
     "- PLAIN WORDS, DUMMY-PROOF. The person on the phone is stressed and half listening. Use words a "
     "twelve-year-old follows. Never jargon or shorthand: not 'the money side', 'the gap', 'locked in', "
     "'isolate', 'the clock', 'that's the gap', 'loss mitigation', 'reinstatement' without saying what it is. Say the actual "
@@ -253,16 +237,59 @@ AI_SYSTEM = (
     "ask them to rate themselves ('is it really the time, or are you not sure it's worth it?').\n"
     "- CALM AND SURE. No pleading, no rushing, no stacking five reasons. One picture, one question, or one "
     "full objection answer. The calendar (how far off the sale is, in words) is the only pressure you use.\n"
-    "TOO MANY WORDS. Call 11-16 18:57, said out loud on the call: 'this is too many words, and words that "
-    "are not for me to say.' And: 'disgusting objection handling, like worst case you hang up and you've lost "
-    "nothing.' Both are right. An objection is not handled by saying it is free and they have nothing to lose. "
+    "TOO MANY WORDS. An objection is not handled by saying it is free and they have nothing to lose. "
     "It is handled by telling them the ONE thing about their situation they have not thought of. So:\n"
     "TWO KINDS OF LINE, AND BOTH ARE SHORT:\n"
     "1. A QUESTION LINE: react in their words, then one plain scenario question. Under thirty words.\n"
     "2. THE OBJECTION ANSWER: three beats, under forty-five words in all.\n"
     "   a. Agree in three to six words. Not an apology, not 'I hear you'.\n"
     "   b. THE REFRAME: one or two plain sentences that change how they see what they just said. This is the "
-    "whole answer. Pick the one that fits:\n"
+    "whole answer. The reframe that fits comes with the line when it is that moment.\n"
+    "   c. The ask, in fresh words, with a time: 'What time are you done today?'\n"
+    "   His longer answer (why wouldn't five minutes be worth it, every step laid out, shake hands and part "
+    "friends, how does that sound) is for ONE moment per call, when they are close and wavering, and even "
+    "then under fifty-five words.\n"
+    "LENDERS, BUYERS AND THE OTHER CALLERS: when you mention a lender or a buyer, say it with a little dry wit, "
+    "the joke on the investors, the banks or yourself, never on the homeowner. Never the flat 'I'm not your "
+    "lender and I'm not trying to buy your house'.\n"
+    "NO GRADING THEM. Never compliment or rate what they said ('that's smart', 'good question', 'fair enough', "
+    "'that makes sense', 'I appreciate that'). Start with their words or with your point. The only 'good' "
+    "allowed is 'good, keep him' about a lawyer, once.\n"
+    "NEVER SAY, anywhere: 'worst case', 'you hang up', 'you've lost nothing', 'nothing to lose' more than "
+    "once, 'no pressure', 'I'm not going to push you', 'I'm not picking on you', 'I'm not going to argue', "
+    "'I've been talking too much', 'I'll stop talking', 'I'll leave you be', 'shortest call of your week'. "
+    "Those are the words of someone who expects a no. You expect a yes.\n"
+    "THE CALLERS TALKING TO EACH OTHER about the script ('too many words', 'what would you have said there') is "
+    "not the homeowner. Never answer it: reply TYPE: unclear and repeat your last ask in five words.\n"
+    "Other rules that still hold: never open with 'Fair question', 'That's fair', 'I understand', 'I hear "
+    "you', 'It sounds like', 'No worries', 'Understood'. No dashes, no lists. Never a discovery question "
+    "they already answered. The two-times question (later today or first thing tomorrow) once per call; "
+    "after that ask what time they are done today and say the advisor calls them then.\n"
+    "- Write every number as a word. Never a dollar amount, payoff, rate or figure about THIS homeowner's own "
+    "loan, equity or any offer, and no promise of any outcome. The general figures in the playbook's section "
+    "'The numbers' ARE allowed and should be used when they fit, in words, as what usually happens.\n"
+    "Reply in exactly this form and nothing else:\n"
+    "HEARD: <the homeowner's most recent words, copied from the transcript, twelve words at most>\n"
+    "TYPE: <answer, question, objection, time, stop or unclear>\n"
+    "STEP: <one step id from the path>\n"
+    "SAY: <the line>")
+# SITUATIONAL RULES (11-19). These rode in AI_SYSTEM on every line; they are only needed at certain moments, so
+# situational() hands them over, in the user message, when the transcript says it is that moment.
+AI_SIT_ANGLES = (
+    "NEVER FOLD, THE ANGLES. After the first challenge, each time they repeat it use one not used yet on this call. Here are "
+    "the angles:\n"
+    "  1. It is information, not interest: you have not told them anything yet, and there is a case with their "
+    "address on it.\n"
+    "  2. Ask what exactly they are not interested in: keeping the home, or protecting what they have put into "
+    "it.\n"
+    "  3. Isolate: if it cost nothing and could not touch the plan they already have, is there any other reason "
+    "not to take five minutes.\n"
+    "  4. The trade: five minutes on one side, the house on the other. Which one can they afford to skip.\n"
+    "  5. What if: what if he points out one option nobody else has shown them.\n"
+    "  6. Fairness: five minutes against the house is a trade worth making, right.\n"
+    "  7. Busy: then name the time, later today or first thing tomorrow, and it is five minutes.\n")
+AI_SIT_REFRAMES = (
+    "THE REFRAMES (beat b of the objection answer). Pick the one that fits:\n"
     "      A lawyer: 'What you're dealing with is a money problem, not a legal problem. Nobody's accusing you "
     "of a crime. Your lawyer can push the date, but every day it gets pushed, interest and fees get added, "
     "and that comes out of your equity.'\n"
@@ -284,11 +311,9 @@ AI_SYSTEM = (
     "think.'\n"
     "      My wife / husband: 'Then bring her a list, not a guess. Five minutes gets you the list.'\n"
     "      Giving up: 'Leaving is fine. Leaving on a date somebody else picks, with nothing, is the part to "
-    "avoid.'\n"
-    "   c. The ask, in fresh words, with a time: 'What time are you done today?'\n"
-    "   His longer answer (why wouldn't five minutes be worth it, every step laid out, shake hands and part "
-    "friends, how does that sound) is for ONE moment per call, when they are close and wavering, and even "
-    "then under fifty-five words.\n"
+    "avoid.'\n")
+AI_SIT_WIT = (
+    ""
     "LENDERS, BUYERS AND THE OTHER CALLERS: SAY IT WITH A LITTLE WIT. Alejandro, 11-16: 'play around with "
     "the wording when you mention a lender or a buyer, say it witty.' The flat 'I'm not your lender and I'm "
     "not trying to buy your house' is what every caller says, so it lands as nothing. The style is Jon "
@@ -311,23 +336,9 @@ AI_SYSTEM = (
     "    'He deals with the banks all day so you don't have to sit on hold with them.'\n"
     "    'He can tell you in five minutes if a lender would even look at this, before you lose a month finding out.'\n"
     "  These are examples of the tone. Make your own in the same spirit, and do not reuse one already said on "
-    "the call.\n"
-    "NO GRADING THEM. Never compliment or rate what they said: no 'that's smart', 'that's good', 'good "
-    "question', 'fair enough', 'that's good to hear', 'that makes sense', 'I appreciate that', 'love that'. "
-    "A person on a cold call does not hand out grades. Start with their words or with your point. The only "
-    "'good' allowed is 'good, keep him' about a lawyer, once.\n"
-    "NEVER SAY, anywhere: 'worst case', 'you hang up', 'you've lost nothing', 'nothing to lose' more than "
-    "once, 'no pressure', 'I'm not going to push you', 'I'm not picking on you', 'I'm not going to argue', "
-    "'I've been talking too much', 'I'll stop talking', 'I'll leave you be', 'shortest call of your week'. "
-    "Those are the words of someone who expects a no. You expect a yes.\n"
-    "THE CALLERS TALKING TO EACH OTHER. Two people share the caller's side and they sometimes talk about the "
-    "script out loud ('too many words', 'what would you have said there', 'let me see what it says', 'it "
-    "keeps changing'). That is not the homeowner. Never answer it. If the newest words are that, reply with "
-    "TYPE: unclear and repeat your last ask in five words.\n"
-    "Other rules that still hold: never open with 'Fair question', 'That's fair', 'I understand', 'I hear "
-    "you', 'It sounds like', 'No worries', 'Understood'. No dashes, no lists. Never a discovery question "
-    "they already answered. The two-times question (later today or first thing tomorrow) once per call; "
-    "after that ask what time they are done today and say the advisor calls them then.\n"
+    "the call.\n")
+AI_SIT_SHAPE = (
+    ""
     "The call by section, in this voice (the shape, not lines to repeat):\n"
     "  Opener: Hey, it's Alejandro with Biscayne Solutions Group. Before you ask, no, I don't want your house, "
     "and no, I'm not collecting for the bank. I'm calling because there's a sale date set on your place in "
@@ -344,15 +355,19 @@ AI_SYSTEM = (
     "every step you could take with your place. It's free and there's nothing to lose. How does that "
     "sound?\n"
     "  Booked: Okay, five o'clock, so he's going to call you right at five. Do me a favor and save my number "
-    "right now, and read it back to me so I know you've got it.\n"
-    "- Write every number as a word. Never a dollar amount, payoff, rate or figure about THIS homeowner's own "
-    "loan, equity or any offer, and no promise of any outcome. The general figures in the playbook's section "
-    "'The numbers' ARE allowed and should be used when they fit, in words, as what usually happens.\n"
-    "Reply in exactly this form and nothing else:\n"
-    "HEARD: <the homeowner's most recent words, copied from the transcript>\n"
-    "TYPE: <answer, question, objection, time, stop or unclear>\n"
-    "STEP: <one step id from the path>\n"
-    "SAY: <the line>")
+    "right now, and read it back to me so I know you've got it.\n")
+AI_SIT_PLANHOLE = (
+    "HOW ALEJANDRO SAYS IT, on a plan with a hole in it:\n"
+    "On a plan with a hole in it (they said a buyer was coming): 'Okay, so by the way, somebody has to be under "
+    "contract and the deal has to be closed before that date. And if the sale is in about a week, what happens "
+    "that same morning if it's not closed and they decide to back out of the deal? What are you going to do?'\n")
+AI_SIT_BUSYVOICE = (
+    "HOW ALEJANDRO SAYS IT, on a brush-off (ONE moment per call, when they are close and wavering):\n"
+    "On 'I'm busy' or any brush-off: 'So why wouldn't five minutes of your time be worth it, to see what "
+    "possible solutions you can find for your property, keep your equity, and do what it is that you want to "
+    "do with your property, instead of just going in kind of blindly? In our consultation, all the steps are "
+    "going to be laid out in front of you. You have nothing to lose. It's completely free. And if you decide "
+    "you don't want to work with us, then we shake hands and we part friends. How does that sound?'\n")
 _AI_BAD = re.compile(r"[\d$]")
 
 # DIGITS THAT ARE NOT FIGURES. The no-number rule exists so the model never invents an amount, a rate or a
@@ -445,6 +460,399 @@ def playbook_text():
         body = re.split(r"(?m)^---\s*$", raw)[-1]
         _playbook.update(mtime=mt, text=re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", body).strip()[:40000])
     return _playbook["text"]
+
+
+# THE PLAYBOOK, SPLIT (11-19). The whole note (about 8,000 tokens) used to ride on every line, on top of a
+# 4,700-token rule block: about 13,000 tokens of system prompt per request. Now only a CORE is always sent (what
+# the call sells, the never-say list, how the caller talks, the questions and the close), as one unchanging
+# system prefix so the provider can cache it. The rest is SITUATIONAL: the sections, or the single bullets, that
+# fit what the homeowner just said are picked by plain keyword matching on the last few transcript lines (no
+# extra model call) and ride in the user message for that one line. A section he adds under a heading this code
+# does not know goes in the core, so an edit in Obsidian is never silently left out.
+PB_CORE = ("what this call sells", "never say", "how the caller talks", "questions that open them up")
+SIT_BUDGET = int(os.environ.get("COACH_SIT_BUDGET", "2800"))      # characters of situational text per line, ~700 tokens
+# Paragraphs inside a core section that are only for one moment, by their opening words, and the topics that
+# bring them back for that line.
+PB_CORE_PULL = (
+    (r"who we are, if asked", ("scam", "early", "value", "lender")),
+    (r"probes when", ("situation", "no")),
+    (r"the magic button", ("situation",)),
+    (r"after a yes", ("yes", "time")),
+    (r"the advisor call goes on the calendar", ("yes", "time")),
+)
+
+# What the homeowner may be talking about. t = matched on their recent words; h = matched on a playbook item's
+# opening words (defaults to t). Plain regexes, lower-case text.
+SIT_TOPICS = {
+    "attorney": (r"lawyer|attorney|abogad|legal", None),
+    "bank": (r"\bbank|lender|modif|loss mit|working with (me|us)|in review|forbearance|mortgage company", None),
+    "handled": (r"handl|taken care|take care of it|under control|figured out|got a plan|have a plan|my plan|figure it out|"
+                r"we'?re (good|fine|ok)|all set", r"handled|have a plan|figure it out"),
+    "money": (r"money (is )?coming|refund|settlement|lend(ing)? (me|us|it)|brother|sister|retirement|401|check (is )?coming|"
+              r"catch (it |them )?up|reinstat|get the money|pay it off", r"money is coming|refund|catching it up|reinstat|lending"),
+    "notint": (r"not (even |really |that |at all )*interested|no interest|no me interesa|no estoy interesad", r"not interested"),
+    "pay": (r"for free|get paid|out of it|pay you|no money|afford|your fee|cost me|charge|the catch", r"works for free|get out of it"),
+    "busy": (r"\bbusy\b|call (me )?(back|later)|bad time|no time|in the middle of|another day|driving|at work|not a good time",
+             r"busy|call me later|another day"),
+    "think": (r"think about|thinking about|sleep on", r"think about"),
+    "spouse": (r"\bwife|husband|\bmom\b|mother|\bdad\b|father|spouse|partner|esposa|esposo|my family", r"wife|husband|mother"),
+    "scam": (r"scam|who (is|are) (this|you)|how did you get|legit|fraud|real company|trust you|who do you work", r"scam|who are you|legit"),
+    "others": (r"(other|three|bunch of|lot of|so many) (of you|people|companies|investors|callers|calls)|keep calling|you people|"
+               r"everybody (calls|is calling)", r"three of you|other callers|other companies"),
+    "wronghouse": (r"wrong (house|person|number|address)|not in foreclosure|no foreclosure|we'?re not behind", r"wrong house"),
+    "postponed": (r"postpon|reset|always gets|pushed back|resched|got cancel|got moved", r"postpone"),
+    "bankruptcy": (r"bankrupt|chapter (7|13|seven|thirteen)", r"bankrupt"),
+    "giveup": (r"too late|nothing (anybody|you|anyone) can|just take it|i'?m done|don'?t care|let it go|letting it go|walk away|"
+               r"give up|giving up|relive|whole life", r"too late|take it|letting it go|whole life|i'?m done|giving up"),
+    "notselling": (r"not selling|won'?t sell|never sell|staying no matter|not going anywhere", r"not selling|staying no matter"),
+    "realtor": (r"realtor|listed|\bagent\b|on the market|listing", r"realtor|listed"),
+    "offer": (r"\boffer|buyer|investor|cash|sell (it|the house|the place)|selling", r"offer|cash sale|buyer"),
+    "business": (r"none of your business|your business|private matter", r"none of your business"),
+    "fear": (r"medicaid|benefits|probate|\bheirs?\b|divorce|estate|social security|\bssi\b", r"medicaid|specific fear"),
+    "decide": (r"no decisions|not making any decision|not deciding|staying no matter", r"not making any decisions"),
+    "brushoff": (r"handl|taken care|under control|figure|none of your business|not interested|no thanks|we'?re good|all set|"
+                 r"don'?t need", r"brush-off"),
+    "no": (r"^\W*no\b|i said no|not right now|no thanks|nope|do ?n.?t think so|do not think so|not for me", None),
+    "lender": (r"\b(loan|refinanc|refi|lender|borrow|financ)", None),
+    "value": (r"what (can|do|would|could) you (even |guys )?(do|offer)|how (can|could|would) you help|what (benefit|good)|"
+              r"what('?s| is) (this|it|that) (all )?about|what do you (guys )?do|what (are|would) my options|options", None),
+    "notice": (r"letter|notice|lawsuit|served|papers|summons|lis pendens", None),
+    "yes": (r"^\W*(yes|yeah|yep|yup|okay|ok|sure|fine|alright|all right|sounds good|that works)\b", None),
+    "time": (r"\b(tomorrow|today|tonight|this (afternoon|evening|morning)|later|morning|afternoon|evening|o'?clock|"
+             r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", None),
+}
+SIT_OBJ = ("attorney", "bank", "handled", "money", "notint", "pay", "busy", "think", "spouse", "scam", "others", "wronghouse",
+           "postponed", "bankruptcy", "giveup", "notselling", "realtor", "business", "fear", "decide", "brushoff", "no")
+_SIT_T = {k: re.compile(v[0], re.I | re.M) for k, v in SIT_TOPICS.items()}
+_SIT_H = {k: re.compile(v[1] or v[0], re.I) for k, v in SIT_TOPICS.items()}
+
+# How each known section is picked. mode: whole (all of it), items (only the bullets or paragraphs whose opening
+# words match a live topic; a matching paragraph brings its bullets), groups (label paragraph plus its bullets,
+# picked by the label). topics: the live topics that pull in a "whole" section.
+PB_SIT = (
+    ("objections: cioc", "whole", SIT_OBJ),
+    ("the objections and the move for each", "items", ()),
+    ("questions that shut them down", "whole", ("early", "offer")),
+    ("what the advisor's options are", "whole", ("value", "offer", "giveup", "notselling")),
+    ("what is true about a florida foreclosure", "whole", ("scam", "wronghouse", "postponed", "bank", "bankruptcy", "notice")),
+    ("jesse's own lines", "groups", ()),
+    ("more objections and moves", "items", ()),
+    ("the numbers", "whole", ("bank", "money", "bankruptcy", "postponed", "realtor")),
+    ("track record", "whole", ("notint", "handled", "giveup", "decide")),
+    ("the buyer-side options", "whole", ("value", "offer", "notselling")),
+    ("witty ways", "whole", ("early", "scam", "lender", "offer", "others")),
+    ("sharp lines", "whole", ("brushed2",)),
+)
+# Jesse's lines are grouped under short labels; which live topics pull each label in.
+PB_GROUPS = (
+    (r"^posture", ("notint", "brushoff", "giveup", "no", "business")),
+    (r"^opening", ("early", "scam")),
+    (r"finding out what they want", ("early", "situation")),
+    (r"^an attorney", ("attorney",)),
+    (r"bank or loss", ("bank",)),
+    (r"^not interested", ("notint",)),
+    (r"moving to the senior", SIT_OBJ + ("value", "yes", "offer")),
+    (r"asking for the time", ("yes", "time", "busy")),
+    (r"explains the options", ("value", "offer")),
+)
+# The code-side rule blocks that are situational too, and the topics that bring each one.
+AI_SIT_RULES = (
+    ("angles", ("notint", "brushoff", "busy", "no")),
+    ("reframes", SIT_OBJ),
+    ("wit", ("early", "scam", "lender", "offer", "others")),
+    ("shape", ("early",)),
+    ("planhole", ("handled", "money", "bank", "realtor", "offer", "attorney")),
+    ("busyvoice", ("busy", "think")),
+)
+
+
+def _pb_sections(text):
+    """[(heading, whole text with its '## ' line)] in note order; text before the first heading has heading ''."""
+    out = []
+    for i, chunk in enumerate(re.split(r"(?m)^(?=## )", text or "")):
+        if not chunk.strip():
+            continue
+        head = chunk.splitlines()[0][3:].strip() if chunk.startswith("## ") else ""
+        out.append((head, chunk.strip()))
+    return out
+
+
+def _pb_spec(head):
+    h = head.lower()
+    for prefix, mode, topics in PB_SIT:
+        if h.startswith(prefix):
+            return mode, topics
+    return None
+
+
+def _pb_items(body):
+    """A section body cut into items: [(kind, text, label_index)], kind 'para' or 'bullet'. Numbered lines and
+    indented continuation lines stay with the item above them; a bullet carries the index of the paragraph it
+    sits under (or -1)."""
+    items, cur, label = [], None, -1
+    for ln in body.splitlines()[1:]:
+        if not ln.strip():
+            if cur and cur[0] == "para":
+                items.append(cur)
+                cur = None
+            continue
+        if ln.startswith("- "):
+            if cur:
+                items.append(cur)
+            if items and items[-1][0] == "para":
+                label = len(items) - 1
+            cur = ("bullet", ln, label)
+        elif cur and (ln.startswith(" ") or re.match(r"\d+\.\s", ln) and cur[0] == "para"):
+            cur = (cur[0], cur[1] + "\n" + ln, cur[2])
+        elif cur and cur[0] == "para":
+            cur = (cur[0], cur[1] + "\n" + ln, cur[2])
+        else:
+            if cur:
+                items.append(cur)
+            label = -1
+            cur = ("para", ln, -1)
+    if cur:
+        items.append(cur)
+    return items
+
+
+_pb_cache = {"src": None}
+
+
+def playbook_parts():
+    """The playbook as {"core": str, "sit": [(head, mode, topics, body)], "never": [phrase], "nums": [(words, kind)]},
+    rebuilt only when the note changes."""
+    text = playbook_text()
+    if _pb_cache["src"] == text:
+        return _pb_cache
+    core, sit, never, nums = [], [], [], []
+    heads = [h.lower() for h, _ in _pb_sections(text) if h]
+    for head, body in _pb_sections(text):
+        spec = _pb_spec(head) if head else None
+        if spec is None:
+            # a few paragraphs of a core section are only for one moment (the probes, the magic button, what to
+            # say after a yes); they go situational and the rest of the section stays in the core
+            keep, pulled = [], []
+            for para in re.split(r"\n\s*\n", body):
+                hit = next((t for rx, t in PB_CORE_PULL if re.match(rx, para.strip(), re.I)), None)
+                (pulled.append((para, hit)) if hit else keep.append(para))
+            core.append("\n\n".join(keep))
+            for para, topics in pulled:
+                sit.append((head + " (more)", "whole", topics, para.strip()))
+        else:
+            sit.append((head, spec[0], spec[1], body))
+        if head.lower().startswith("never say"):
+            never = _never_phrases(body, heads)
+        if head.lower().startswith("the numbers"):
+            nums = _money_phrases(body)
+    _pb_cache.update(src=text, core="\n\n".join(core), sit=sit, never=never, nums=nums)
+    return _pb_cache
+
+
+def live_topics(rows, prior):
+    """The topics the last few homeowner lines touch, plus call-state topics: early (first lines of the call),
+    situation (still finding out what they want), brushed2 (waved off twice already). Pure local regex."""
+    them = [r.split(": ", 1)[1] for r in rows if not r.startswith("CALLER")]
+    recent = "\n".join(them[-4:]).lower()
+    last = them[-1].lower() if them else ""
+    on = set(k for k, rx in _SIT_T.items() if k not in ("yes", "no", "time") and rx.search(recent))
+    for k in ("yes", "no", "time"):
+        if _SIT_T[k].search(last):
+            on.add(k)
+    if len(prior) <= 1:
+        on.add("early")
+    if len(prior) <= 3:
+        on.add("situation")
+    brush = _SIT_T["brushoff"]
+    if sum(1 for t in them if brush.search(t) or _SIT_T["no"].search(t) or _SIT_T["busy"].search(t)) >= 2:
+        on.add("brushed2")
+    on.add("always")
+    return on
+
+
+def situational(rows, prior, pb=None):
+    """The situational rules and playbook pieces for this line, as one text block ('' when nothing fits), and the
+    list of names picked (for the log and the tests)."""
+    on = live_topics(rows, prior)
+    hot = [k for k in on if k in _SIT_H and k not in ("yes", "no", "time")]
+    parts = pb if pb is not None else playbook_parts()
+    code = {"angles": AI_SIT_ANGLES, "wit": AI_SIT_WIT, "shape": AI_SIT_SHAPE,
+            "planhole": AI_SIT_PLANHOLE, "busyvoice": AI_SIT_BUSYVOICE}
+    # Candidates in priority order: the code rules, then the single playbook items that match, then whole
+    # sections. They are taken in that order until SIT_BUDGET characters; a piece that does not fit is skipped.
+    first_pass, whole = [], []
+    for name, topics in AI_SIT_RULES:
+        if not on.intersection(topics) or name == "wit":
+            continue
+        if name == "reframes":
+            # only the reframe lines whose label fits what they said, not all twelve
+            ls = AI_SIT_REFRAMES.split("\n")
+            pick, cur = [], None
+            for ln in ls[1:]:
+                if ln.startswith("      ") and not ln.startswith("       "):
+                    cur = any(_SIT_H[k].search(ln[:60]) for k in hot) or ("value" in on and "even do" in ln[:60])
+                if cur:
+                    pick.append(ln)
+            if pick:
+                first_pass.append(("reframes", ls[0] + "\n" + "\n".join(pick)))
+            continue
+        first_pass.append((name, code[name].strip()))
+    for head, mode, topics, body in parts["sit"]:
+        if mode == "whole":
+            if on.intersection(topics):
+                whole.append((head.lower()[:24], body))
+            continue
+        items = _pb_items(body)
+        keep = set()
+        for i, (kind, text, label) in enumerate(items):
+            q = re.match(r'^-\s*["“]([^"”]+)', text)
+            first = q.group(1) if q else re.split(r"[:.]", text, 1)[0][:90]
+            if mode == "groups":
+                if kind == "para":
+                    want = next((t for rx, t in PB_GROUPS if re.search(rx, first, re.I)), ())
+                    if on.intersection(want):
+                        keep.add(i)
+                        keep.update(j for j, it in enumerate(items) if it[0] == "bullet" and it[2] == i)
+                continue
+            if any(_SIT_H[k].search(first) for k in hot):
+                keep.add(i)
+                if kind == "para":
+                    keep.update(j for j, it in enumerate(items) if it[0] == "bullet" and it[2] == i)
+                elif label >= 0:
+                    keep.add(label)
+        if keep:
+            first_pass.append((head.lower()[:24], body.splitlines()[0] + "\n" + "\n".join(items[i][1] for i in sorted(keep))))
+    has_wit = any(n.startswith("witty") for n, _ in whole)
+    if not has_wit and on.intersection(dict(AI_SIT_RULES)["wit"]):
+        whole.append(("wit", AI_SIT_WIT.strip()))          # the code's own wit lines when the note has none
+    blocks, picked, room = [], [], SIT_BUDGET
+    for name, text in first_pass + whole:
+        if len(text) + 2 <= room:
+            blocks.append(text)
+            picked.append(name)
+            room -= len(text) + 2
+    return "\n\n".join(blocks), picked
+
+
+# NEVER SAY, ENFORCED (11-19). The playbook's "Never say" list was an instruction only. A line that breaks it
+# is now asked again once with the reason, and dropped if it still breaks it (the digit rule's pattern). Two
+# sources: the quoted phrases under the note's "## Never say" heading, and fixed rules here for the worst
+# cases. The rules are written to the note's own wording, so what it ALLOWS still passes: "ask the court for
+# more time", "options to keep the house", "I'm not from the bank", "he can't guarantee anything", and the
+# general figures in its "The numbers" section said in words.
+_NEG = re.compile(r"\b(no|not|never|nobody|nothing|cannot|can'?t|won'?t|don'?t|doesn'?t|isn'?t|aren'?t)\b|n['’]t\b", re.I)
+_US = r"(?:we|i|he|our (?:senior )?advisor|the (?:senior )?advisor|my advisor)"
+_MODAL = r"(?:\s*['’]ll|\s+will|\s+can(?!['’]?t)|\s+could|\s+are going to|\s+is going to|\s+am going to|\s+gonna|" \
+         r"\s+guarantee(?: to)?|\s+promise(?: to)?|\s+make sure(?: that)?)"
+_ADV = r"(?:\s+(?:actually|definitely|absolutely|really|totally|for sure|just|easily|personally))?"
+_OBJ = r"(?:your|the|this|that)\s+(?:home|house|place|property|sale|auction|foreclosure)"
+NEVER_RULES = (
+    ("promise", re.compile(r"\b" + _US + _MODAL + _ADV + r"\s+(?:you\s+)?(?:save|keep|stop|cancel|halt|end|kill|block|prevent)"
+                           r"\s+(?:you\s+in\s+)?" + _OBJ + r"\b", re.I), False,
+     "it promises an outcome (saving the home or stopping the sale). Offer options, never an outcome; more time "
+     "is 'ask the court for more time'."),
+    ("promise", re.compile(r"\b(?:we|he|our (?:senior )?advisor)\s+(?:stop|save|cancel|halt)s?\s+" + _OBJ + r"\b", re.I), False,
+     "it promises an outcome (we stop the sale). Offer options, never an outcome."),
+    ("guarantee", re.compile(r"\bguarantee", re.I), True, "it says guarantee. Nothing is guaranteed; offer options."),
+    ("authority", re.compile(r"\b(?:i['’]?m|i am|we['’]?re|we are|i['’]?m calling|we['’]?re calling|calling you)\s+"
+                             r"(?:calling\s+)?(?:from|on behalf of|with|for)\s+(?:the|your)\s+(?:bank|lender|court|county|"
+                             r"government|clerk|lender['’]?s (?:attorneys?|lawyers?)|(?:attorneys?|lawyers?) for)", re.I), True,
+     "it says we are from the bank, the lender, the court or the government. We are an independent company."),
+    ("authority", re.compile(r"\bwe (?:work for|represent) (?:the|your) (?:bank|lender|court|county)", re.I), True,
+     "it says we work for the bank, the lender or the court. We are an independent company."),
+    ("pay", re.compile(r"referral|commission|kickback|\b(?:lender|bank|attorney|they) pays? (?:us|me)\b|\bpays? us\b", re.I), False,
+     "it says how we get paid (referral, commission, who pays us). Never say who pays us."),
+    ("insider", re.compile(r"\bmy (?:supervisor|manager|boss|clients?)\b|\bour (?:own |in-house )?(?:attorneys?|lawyers?|legal team)\b"
+                           r"|\b(?:we['’]?ve|we have|our company has|the company has) (?:got )?(?:over |more than )?thirty years", re.I), False,
+     "it says my supervisor, my clients, our attorneys, or that the company has thirty years (the thirty years are "
+     "the senior advisor's; attorneys are independent)."),
+    ("we_lend", re.compile(r"\bwe (?:place|make|give|write|fund|offer) (?:you )?(?:a |the )?(?:loans?|mortgages?|refinanc)", re.I), True,
+     "it says we place or make loans. Licensed lenders lend; we introduce."),
+    ("legal_advice", re.compile(r"\byou (?:should|need to|have to|ought to|must|gotta|better)\s+(?:just\s+)?(?:file|sue|countersue|contest|"
+                                r"appeal|answer the (?:complaint|summons|lawsuit)|respond to the (?:complaint|summons|lawsuit)|"
+                                r"fight (?:the|this) (?:case|foreclosure|lawsuit))"
+                                r"|\bi(?:['’]d| would)? (?:recommend|suggest|advise) (?:that )?(?:you )?(?:fil|su|contest|appeal|declar|go bankrupt)"
+                                r"|\b(?:my|our) (?:legal )?advice\b|\blegally,? you\b|\byou have (?:the|a) (?:legal )?right to\b"
+                                r"|\byou(?:['’]ve| have) (?:got )?a (?:strong|good|weak|solid) case\b"
+                                r"|\b(?:your|the|his) (?:case|defen[cs]e) (?:will|would|is going to|can) (?:win|lose|hold up)"
+                                r"|\byour (?:lawyer|attorney) is (?:wrong|bad|doing it wrong|useless)", re.I), False,
+     "it gives legal advice or a verdict on their case. Never legal advice; the senior advisor brings a licensed "
+     "professional where one is needed."),
+    ("stop_paying", re.compile(r"\b(?:stop|quit) (?:paying|making (?:the|your) payments?)\b|\bignore (?:the|their|that|any|those) "
+                               r"(?:mail|letters?|notices?|calls?)\b|\b(?:stop|quit) (?:talking|speaking) to (?:the|your) (?:bank|lender)", re.I), True,
+     "it tells them to stop paying, stop talking to the lender, or ignore mail."),
+)
+_NUMW = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen "
+         "eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred few couple several half").split()
+_MONEY_UNIT = re.compile(r"\b(thousand|million|billion|grand|dollars?|bucks|percent|per cent)\b", re.I)
+
+
+def _money_phrases(text):
+    """[(frozenset of number words, 'pct' or 'usd')] for every figure written in words in `text`."""
+    out = []
+    for m in _MONEY_UNIT.finditer(text or ""):
+        before = re.findall(r"[a-z\-]+", text[max(0, m.start() - 60):m.start()].lower())[-8:]
+        nums = set()
+        for w in reversed(before):
+            parts = w.split("-")
+            if all(p in _NUMW for p in parts):
+                nums.update(parts)
+            elif w in ("and", "to", "or", "a", "between", "about", "around", "of"):
+                continue
+            else:
+                break
+        if nums:
+            out.append((frozenset(nums), "pct" if m.group(1).lower().startswith("per") else "usd"))
+    return out
+
+
+def _never_phrases(body, heads=()):
+    """The quoted phrases in the playbook's Never-say section that are things NOT to say. A quote that names
+    what to say instead ('it is "ask the court for more time"'), points at another section ('see "The
+    numbers"', 'under "Nobody works for free"'), or is a single word ('"Options," never ...') is left out."""
+    out = []
+    for m in re.finditer(r"[\"“]([^\"”]{3,80})[\"”]", body):
+        ph = m.group(1).strip().strip(",.;:").strip()
+        pre = body[max(0, m.start() - 16):m.start()].lower()
+        words = _words(ph)
+        if len(words) < 2:
+            continue
+        if re.search(r"\b(it is|it's|it’s|instead|under|see|in|allowed|answer to|is)\s*$", pre.strip(), re.I):
+            continue
+        if any(h.startswith(ph.lower()) for h in heads):
+            continue
+        out.append(" ".join(words))
+    return out
+
+
+def _never_log(rule, outcome):
+    """One log line per block: the rule and what happened (fixed by the re-ask, or dropped). Never the words."""
+    try:
+        sys.stderr.write("[coach] never-say rule=%s %s\n" % (rule, outcome))
+    except Exception:
+        pass
+
+
+def never_say(line, pb=None):
+    """('rule', 'reason') when `line` says something the playbook forbids, else ('', '')."""
+    s = str(line or "")
+    low = s.lower()
+    for name, rx, neg, why in NEVER_RULES:
+        for m in rx.finditer(s):
+            if neg and _NEG.search(low[max(0, m.start() - 28):m.start()]):
+                continue
+            return name, why
+    parts = pb if pb is not None else playbook_parts()
+    ok = list(parts.get("nums") or []) + _money_phrases(" ".join(x[1] for x in AI_PLAN_FACTS))
+    for nums, kind in _money_phrases(s):
+        if not any(kind == k2 and nums == n2 for n2, k2 in ok):     # the same figure, not one end of a range
+            return "figure", ("it says a dollar amount or a percent in words. Only the general figures in the playbook's "
+                              "numbers section may be said; never a figure about this homeowner.")
+    said = " " + " ".join(_words(s)) + " "
+    for ph in parts.get("never") or []:
+        if " " + ph + " " in said:
+            return "playbook", "it says \"" + ph + "\", which the playbook's Never say list forbids."
+    return "", ""
 
 
 def sale_in_words(days):
@@ -835,6 +1243,35 @@ def _words(t):
     return re.sub(r"[^a-z ]+", " ", str(t or "").lower().replace("'", "").replace("\u2019", "")).split()
 
 
+def _reading_line(text, given):
+    """True when `text` is a FRAGMENT of a recent coach line read aloud: at least five words, and nearly all of
+    them (four in five, at least five in a row) appear in that line in the same order. One microphone splits his
+    reading into pieces, and _read_back needs most of the whole line, so a half-line piece used to go out as the
+    homeowner (or kept a wrong THEM label). A homeowner echoing five of his words in a row, in order, is rare;
+    two or three ('five minutes', 'the senior advisor') are not enough."""
+    tw = _words(text)
+    if len(tw) < 5:
+        return False
+    need = max(5, -(-len(tw) * 4 // 5))
+    for g in given:
+        gw = _words(g)
+        if len(gw) < need:
+            continue
+        best = 0
+        prev = [0] * (len(gw) + 1)
+        for a in tw:
+            cur = [0] * (len(gw) + 1)
+            for j, b in enumerate(gw, 1):
+                if a == b:
+                    cur[j] = prev[j - 1] + 1
+                    if cur[j] > best:
+                        best = cur[j]
+            prev = cur
+        if best >= need:
+            return True
+    return False
+
+
 def _read_back(text, given):
     """True when `text` is the caller reading out one of the lines the coach gave: most of that
     line's words are in it and little else is."""
@@ -882,7 +1319,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         st["why"] = "no_key"
         return {}
     rows = []
-    for l in (lines or [])[-24:]:
+    for l in (lines or [])[-18:]:        # 11-19: was 24; the older lines are in the "lines you already gave" list
         t = str((l or {}).get("text") or "").strip()
         if not t:
             continue
@@ -890,6 +1327,8 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         who = "CALLER" if spk == "you" else "THEM" if spk == "them" else "?"
         if who == "?" and _read_back(t, list(asked or []) + [shown]):
             who = "CALLER"            # one microphone: your line, read out, is the caller for certain
+        elif who != "CALLER" and _reading_line(t, list(asked or [])[-3:] + [shown]):
+            who = "CALLER"            # a piece of a recent coach line, word for word: him reading it, whatever the label
         rows.append(who + ": " + t[:400])
     if not rows:
         st["why"] = "no_words"
@@ -900,15 +1339,23 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     # was billed as all-new: call 11-16 19:47 cost $2.26, of which $1.86 was re-sending the same
     # playbook 45 times. Now the unchanging part is its own system message, and everything about this
     # call and this line rides in the user message after it.
+    # SIZE (11-19): only the playbook's CORE rides in that system message; the pieces that fit this moment come
+    # in the user message (see situational()). The system message stays byte-for-byte the same on every line.
     system = AI_SYSTEM
-    pb = playbook_text()
-    if pb:
+    pbp = playbook_parts()
+    if pbp["core"]:
         system += ("\n\nPLAYBOOK. This is the caller's own sales system. Take the MOVE and the facts from it: what "
                    "to do when they say this, which analogy fits, what is true. Do not take the wording. Its "
                    "sentences are examples of the idea; say the idea your own way, short, as in TALK LIKE A PERSON. "
                    "Its 'Never say' list overrides everything else, and where the playbook allows something this "
-                   "prompt forbids (its numbers, its options, its attorney questions), the playbook wins.\n" + pb)
+                   "prompt forbids (its numbers, its options, its attorney questions), the playbook wins. More of "
+                   "it comes with a line, under SITUATIONAL, when it is that moment.\n" + pbp["core"])
     system += AI_SPLIT
+    _prior0 = [x for x in (asked or [])[-14:] if str(x or "").strip()]
+    _sit, st["sit"] = situational(rows, _prior0, pbp)
+    if _sit:
+        system += ("\n\nSITUATIONAL: the rules and playbook pieces for what they just said. Same force as the rest.\n"
+                   + _sit + "\n")
     if str(lang).lower().startswith("es"):
         system += "\nWrite the SAY line in Spanish."
     # EQUITY IS A FACT OR IT IS NOT SAID. Call 11-16 19:47: the line read "a house with equity in it" on a
@@ -930,7 +1377,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     shown = " ".join(str(shown or "").split())[:320]
     prior = [" ".join(str(x or "").split())[:320] for x in (asked or [])[-14:] if str(x or "").strip()]
     if prior:
-        system += ("\nLines you already gave on this call, oldest first:\n" + "\n".join("- " + x for x in prior[-6:])
+        system += ("\nLines you already gave on this call, oldest first:\n" + "\n".join("- " + x[:260] for x in prior[-4:])
                    + "\nNever repeat one of them or ask the same thing in other words. The new line is a later step.")
         system += variety_note(prior)
     if shown:
@@ -948,10 +1395,13 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         static, _, call = sys_text.partition(AI_SPLIT)
         user = ("FOR THIS CALL AND THIS LINE (these are instructions, with the same force as your rules):" + call
                 + "\n\nTRANSCRIPT SO FAR:\n" + "\n".join(rows)) if call.strip() else "\n".join(rows)
-        body = {"model": use["model"], "max_tokens": 420, "temperature": 0.5, "stream": False,
+        body = {"model": use["model"], "max_tokens": AI_MAX_TOKENS, "temperature": 0.5, "stream": False,
                 "messages": [{"role": "system", "content": static}, {"role": "user", "content": user}],
                 "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                       "strip_thinking_response": True}}
+        if AI_CACHE_KEY:
+            body["prompt_cache_key"] = AI_CACHE_KEY
+        st["ptok_est"] = (len(static) + len(user)) // 4
         out = _ai_post(body, key, st)
         if not out.strip():
             st["why"] = "model:" + (st["err"] or "empty")
@@ -973,6 +1423,12 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
             line = spell_digits(line)
         bad = ("$" in line) if kind == "time" else bool(_AI_BAD.search(line))
         line = re.sub(r"\s*[\u2014\u2013]\s*", ", ", line)        # a dash is written, not spoken
+        if st.get("finish") == "length" and line and not re.search(r"[.?!]['\"\u201d]?$", line):
+            cut = re.match(r"^(.*[.?!])\s", line + " ")             # hit max_tokens mid-sentence: keep whole sentences
+            if not cut:
+                st["why"] = "cut"
+                return {}
+            line = cut.group(1)
         if not line or line.upper().rstrip(".") == "SKIP":
             st["why"] = "skip"
             return {}
@@ -997,6 +1453,14 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         return ask(system + extra)
 
     def done(res):
+        # The last gate: a line that reached here through a later re-ask (too long, weak, repeat, fold) is
+        # checked against the never-say rules too. No budget for another ask at this point: it is dropped.
+        if res and res.get("line"):
+            rule = never_say(res["line"], pbp)[0]
+            if rule:
+                _never_log(rule, "dropped")
+                st["why"] = "never:" + rule
+                res = {}
         st["why"] = "" if (res and res.get("line")) else (st["why"] or "empty")
         st["model"] = use["model"]
         return res
@@ -1024,9 +1488,31 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
                    "not given in these instructions, leave it out.")
         if r2 is not None:
             res = r2
+    # NEVER SAY. A line that breaks the playbook's never-say list is asked once more with the reason, and
+    # dropped if the second one breaks it too. How-we-get-paid words have their own re-ask below, with the facts.
+    if res and res.get("line"):
+        rule, why = never_say(res["line"], pbp)
+        if rule and rule != "pay":
+            r2 = reask("\n\nYour last answer could not be shown because " + why + " Write the line again without "
+                       "that, same point, same ask.")
+            if r2 and r2.get("line") and not never_say(r2["line"], pbp)[0]:
+                _never_log(rule, "fixed")
+                res = r2
+            else:
+                _never_log(rule, "dropped")
+                st["why"] = "never:" + rule
+                return done({})
     # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
     # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose. With no
     # time left to ask again, the line is cut to whole sentences in code.
+    # LATENCY (11-19): when cutting it to whole sentences in code already gives a line of forty-five words or
+    # fewer that still ends on the ask, that is used and the re-ask (a whole second model call) is skipped.
+    if (res and res.get("type") in ("objection", "question", "answer", "unclear") and len(res.get("line", "").split()) > 55
+            and not _AI_PAYQ.search(last_said)):
+        _t = trim_line(res["line"], 45)
+        if _t != res["line"] and len(_t.split()) <= 45 and _t.rstrip().endswith("?") and len(re.findall(r"[.?!]", _t)) >= 2:
+            res["line"] = _t
+            st["trimmed"] = 1
     if (res and res.get("type") in ("objection", "question", "answer", "unclear") and len(res.get("line", "").split()) > 55
             and not _AI_PAYQ.search(last_said)):
         n_words = len(res["line"].split())
@@ -1105,8 +1591,18 @@ def _ai_post(body, key, st):
         try:
             req = urllib.request.Request(AI_URL, data=data,
                                          headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+            t0 = time.monotonic()
             with urllib.request.urlopen(req, timeout=min(AI_TIMEOUT, rem)) as r:
+                st["ttfb"] = int((time.monotonic() - t0) * 1000)      # headers back: the model has finished (no stream)
                 j = json.loads(r.read().decode("utf-8"))
+            st["total"] = int((time.monotonic() - t0) * 1000)
+            u = j.get("usage") if isinstance(j, dict) else None
+            if isinstance(u, dict):
+                d = u.get("prompt_tokens_details") if isinstance(u.get("prompt_tokens_details"), dict) else {}
+                st["ptok"], st["ctok"] = u.get("prompt_tokens"), u.get("completion_tokens")
+                st["cached"] = d.get("cached_tokens", u.get("cache_read_input_tokens"))
+                st["cwrite"] = d.get("cache_creation_input_tokens", u.get("cache_creation_input_tokens"))
+            st["finish"] = str(j["choices"][0].get("finish_reason") or "")
             out = str(j["choices"][0]["message"].get("content") or "")
             if out.strip():
                 st["err"] = ""
@@ -1633,9 +2129,15 @@ class Handler(BaseHTTPRequestHandler):
             if not res.get("line"):
                 res["why"] = stat.get("why") or "empty"
             # One line per ask, so a blank box can be traced afterwards. Codes and timings only, never words.
-            sys.stderr.write("[coach] suggest %s ms=%d tries=%s model=%s%s\n" % (
+            # 11-19: plus where the time and the tokens go: ttfb/total of the last try, prompt tokens (the
+            # estimate, and Venice's own count with how much of it came from the cache), and which situational
+            # pieces rode along. Numbers and section names only.
+            _n = lambda k: "-" if stat.get(k) is None else str(stat.get(k))
+            sys.stderr.write("[coach] suggest %s ms=%d tries=%s model=%s%s ttfb=%s total=%s est=%s pt=%s cached=%s ct=%s sit=%s%s\n" % (
                 "shown" if res.get("line") else "blank why=" + res["why"], ms, stat.get("tries", 0),
-                stat.get("model", "-"), (" err=" + stat["err"]) if stat.get("err") else ""))
+                stat.get("model", "-"), (" err=" + stat["err"]) if stat.get("err") else "",
+                _n("ttfb"), _n("total"), _n("ptok_est"), _n("ptok"), _n("cached"), _n("ctok"),
+                len(stat.get("sit") or []), " trimmed" if stat.get("trimmed") else ""))
             return self._send(200, res, private=True)
 
         if p == "/api/wrapup":
