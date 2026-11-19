@@ -89,6 +89,8 @@ function ownerLabel(r){ return r.o || ''; }
 function optPhones(){ return {}; }
 function head(){ return ''; }
 function render(){}
+function _sideEnter(){}                                  /* screenRegistry's way in and out (2026-11-19) */
+function _sideBack(){ SCREEN = 'lead'; render(); }
 var QVIEW = 'untouched', lane = 'all', _NOTESBAD = false, _CBDUE = Object.create(null);
 var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};
 var HISTCOV = {ledgers_ok:true, why:'', capped:false, total:10, shipped:10};

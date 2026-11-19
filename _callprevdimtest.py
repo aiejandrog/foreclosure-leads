@@ -72,7 +72,7 @@ def node(js):
 
 # ---------------------------------------------------------------- (a) Previous lead dims
 NAV = ''.join(grab_fn(n) for n in ('_qvRestore', '_navPush', '_navSeek', '_navHasBack', 'navBack', '_navRow'))
-NAVJS = 'var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, _lkReturn = function(){};\n' + NAV + r"""
+NAVJS = 'var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, _MOVE = 0, _lkReturn = function(){};\n' + NAV + r"""
 var SCREEN = 'lead', lane = 'soon', QVIEW = 'untouched', i = 0, cur = null, toasts = [];
 var ALL = [{c:'A'}, {c:'B'}, {c:'C'}], GONE = {};
 function pool(){ return ALL.filter(function(r){ return !GONE[r.c]; }); }
@@ -130,7 +130,9 @@ rec('the 6 hour pending hold is unchanged', SRC.count('var PENDING_HOLD_H = 6;')
 # and a pool() that depends on lane and QVIEW.
 OO = ''.join(grab_fn(n) for n in ('_qvRestore', '_navPush', '_navSeek', '_navHasBack', 'navBack', '_navRow',
                                   '_openCase', 'render'))
-OOJS = 'var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, BLANE = null;\nfunction _lkReturn(){}\n' + OO + r"""
+# 2026-11-19: render() and _openCase() read the open-call / one-card-per-person state
+OOJS = ('var _NAVB=[], _NAVF=[], _NAVP = null, _QVBACK = null, LKFROM = null, BLANE = null;\n'
+        'var _MOVE = 0, _PAINT = null, _PKPIN = null;\nfunction _callOpen(){ return false; }\nfunction _lkReturn(){}\n') + OO + r"""
 var SCREEN = 'lead', lane = 'soon', QVIEW = 'untouched', i = 0, cur = null, phIdx = 0, toasts = [], _WORKED = [];
 var ROWS = [{c:'A', v:'untouched', ln:'soon', p:['x']}, {c:'B', v:'untouched', ln:'soon', p:['x']},
             {c:'C', v:'untouched', ln:'soon', p:['x']}, {c:'R', v:'retries', ln:'soon', p:['x']},
@@ -278,6 +280,7 @@ function $(id){ return document.getElementById(id); }
 function head(){ return '<div id="hd"></div>'; }
 var SCREEN = 'lead', RENDERS = 0, COPIED = 0, ROUTES = 0;
 function render(){ RENDERS++; }
+function _sideEnter(){} function _sideBack(){ SCREEN = 'lead'; render(); }   /* 2026-11-19: the side screens' way in and out */
 function screenRoutes(){ ROUTES++; SCREEN = 'routes'; }
 function _copyOut(){ COPIED++; }
 var NOW = Date.now(), DAYMS = 86400000;

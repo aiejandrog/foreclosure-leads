@@ -4546,6 +4546,10 @@ body.shopen .pill{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
 .sheet .grip{height:46px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
 .sheet .grip i{display:block;width:42px;height:4px;border-radius:99px;background:#3a5286}
 .sheet .peek{padding:0 16px 12px;font-size:14px;line-height:1.4}
+/* Three lines, never more: a long opener or a long step name ends in an ellipsis instead of wrapping
+   the bar taller over the card (2026-11-19). */
+.sheet .peek .pk1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet .peek .pk1+.pk1{margin-top:2px}
 .sheet .body{display:none;padding:0 16px 18px;max-height:58vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sheet.open .body{display:block}
 /* SHORT VIEWPORTS — phone held sideways, or portrait with the keyboard up. At 375px tall a 58vh body
@@ -4932,6 +4936,25 @@ var _NOTNAME = ['UNKNOWN','OWNER','TENANT','OCCUPANT','ESTATE','TRUST','TRUSTEE'
                 'SEARCH','VIA','THE','LLC','INC','CORP','COMPANY','PROPERTIES','HOLDINGS'];
 function firstName(r){
   if(!r) return '';
+  /* ENTITY, PRONOUN, FRAGMENT (2026-11-19). "WE BUY HOMES LLC" was greeted "Hi, We?". The company
+     flag (C) comes from the pipeline's `co` and is on no dial row and no Find a number row that day
+     (0 of 4,590), so the owner string itself has to be read: an LLC, trust, estate, bank,
+     association, church, government body or anything carrying a digit has no first name, and the
+     anonymous opener asks for the owner instead. The second list is words that are never a first
+     name: pronouns, articles, joining words, titles and surname particles ("Hi, De?").
+     Both live INSIDE this function on purpose: a dozen test harnesses lift firstName out on its own
+     (with _NOTNAME), and a helper beside it would be missing in every one of them. */
+  var _ent = function(v, digits){
+    var s = String(v || '').toUpperCase().replace(/[.,]/g, ' ').replace(/[^A-Z0-9&' -]/g, ' ').replace(/\s+/g, ' ').trim();
+    if(!s) return false;
+    if(digits && /\d/.test(s)) return true;
+    return /\b(LLC|L L C|INC|INCORPORATED|CORP|CORPORATION|COMPANY|LTD|LIMITED|LLP|LLLP|PLLC|TRUST|TRUSTEE|TRUSTEES|REVOCABLE|IRREVOCABLE|ESTATE|EST|HEIRS|DEVISEES|BENEFICIARIES|BANK|BANCORP|ASSOCIATION|ASSOC|ASSN|CONDOMINIUM|CONDO|HOMEOWNERS|HOA|PROPERTIES|PROPERTY|HOLDINGS|INVESTMENTS|INVESTMENT|INVESTORS|GROUP|PARTNERS|PARTNERSHIP|FUND|FUNDING|CAPITAL|REALTY|ENTERPRISES|VENTURES|MORTGAGE|SERVICING|LENDING|FINANCIAL|FINANCE|CREDIT UNION|FEDERAL|NATIONAL|FOUNDATION|MINISTRIES|MINISTRY|SERVICES|SOLUTIONS|MANAGEMENT|DEVELOPMENT|DEVELOPERS|CONSTRUCTION|BUILDERS|HOMES|HOUSES|APARTMENTS|VILLAS|TOWNHOMES|COMMUNITY|CLUB|SOCIETY|AUTHORITY|COUNTY|UNITED STATES|SECRETARY|DEPARTMENT|FSB|(?:CITY|STATE|TOWN|VILLAGE|CHURCH) OF)\b/.test(s)
+        || /\b(CO|LP|NA|PA|PC|TR|TRS)$/.test(s) || /[A-Z]BANK\b/.test(s);
+  };
+  var _frag = ' A AN THE WE US OUR OURS I ME MY MINE YOU YOUR YOURS HE HIM HIS SHE HER HERS IT ITS THEY THEM THEIR THEIRS '
+            + 'THIS THAT THESE THOSE WHO ALL ANY NONE NO NOT AND OR OF FOR TO AT IN ON BY AS IS FROM WITH '
+            + 'MR MRS MS MISS DR SR JR II III IV AKA FKA NKA DBA ETAL ET AL ETUX ETVIR UNK NA '
+            + 'DE DEL DELA LA LAS LOS EL LE DA DI DOS DU VAN VON DER DEN ST SAN SANTA MC MAC NW NE SW SE ';
   /* BALLOON rows: the owner IS a company (flag C) but `on` carries the Sunbiz officer / decision-
      maker, and that human is who answers. Greet them; the company rule below is for owners we
      could not put a person behind. */
@@ -4942,6 +4965,7 @@ function firstName(r){
   if(has(r,'C')) return '';                 // company / trust owner
   if(r.po) return '';                       // roll owner changed — the card says do not use this name
   if(r.wo && r.wo.length) return '';        // Whitepages names a different owner: verify before naming anyone
+  if(_ent(String(r.o || '').split(';')[0], false) || _ent(r.on, true)) return '';   // an entity has no first name
   /* Prefer `on` (owner_clean), which the pipeline has ALREADY flipped from the county roll's
      "LAST,FIRST" to "First Last". Reading r.o directly took the token before the comma — the
      surname — on 32% of leads. Fall back to r.o only when `on` is absent, and strip anything before
@@ -4954,7 +4978,8 @@ function firstName(r){
   var raw = src.replace(/[^A-Za-z '-]/g,' ').trim();
   if(!raw) return '';
   var tok = raw.split(/\s+/)[0].toUpperCase();
-  if(tok.length < 2 || _NOTNAME.indexOf(tok) >= 0) return '';
+  if(tok.length < 2 || _NOTNAME.indexOf(tok) >= 0 || _frag.indexOf(' ' + tok + ' ') >= 0) return '';
+  if(!/[AEIOUY]/.test(tok)) return '';      // "Hi, Llc?" / "Hi, Mtg?": no vowel, not a name
   return tok.charAt(0) + tok.slice(1).toLowerCase();
 }
 
@@ -5159,7 +5184,18 @@ function funnelOf(r){
 
 /* THE WHOLE BOOK, dial queue first. Not de-duplicated here: coverage_rows is handed the crew-wide
    dial list and excludes every case already in it, so the two sets are disjoint by construction. */
-function allLeads(){ return ROWS.concat(COV); }
+/* ONE ROW PER CASE (2026-11-19). "Disjoint by construction" holds at build time only. A Find a number
+   lead that gets a number (typed here, pasted, saved on the board, or a teammate's sync) is pushed
+   into ROWS by promoteLookups / lkSave / the paste save, and its coverage row stays in COV. Both
+   copies were counted, so "Board lanes" read one lead high per saved number (the board said 4,198,
+   this page 4,220: 22 saved numbers) and the lead sat in a board-lane list twice, once as TRACE and
+   once as dialable. The dial row is the live one; its coverage twin is dropped from the book here. */
+function allLeads(){
+  if(!COV || !COV.length) return ROWS.slice();
+  var inq = {}, k;
+  for(k = 0; k < ROWS.length; k++) inq[ROWS[k].c] = 1;
+  return ROWS.concat(COV.filter(function(r){ return !(r && inq[r.c]); }));
+}
 
 /* MEMOISED, because head() runs it on EVERY paint and the whole book is now 2,297 leads, not the
    dial queue's 400. Measured at 6.6 ms a call on desktop node over a realistic 2,297-lead mix —
@@ -6031,7 +6067,7 @@ function teamRecheck(){
     /* pool() has already dropped this lead (it is suppressed now), so position i holds its
        successor — render() paints them. When it was the LAST lead, render()'s own bounds
        handling shows the done screen. */
-    render();
+    _MOVE = 1; render();
   };
   _rcTimer=setInterval(function(){ left--; var el=$('rcn');
     if(el) el.textContent=String(left);
@@ -6138,7 +6174,6 @@ function viewBar(){
         ? ' <b>Partial:</b> '+HISTCOV.shipped+' of '+HISTCOV.total+' qualifying leads are loaded on the crew pages.' : '')
     + '</div>';
   o += histBanner(_histWhy());
-  o += wfBar();
   if(QVIEW === 'callbacks') o += cbNote();
   return o;
 }
@@ -6154,6 +6189,29 @@ function viewEmptyHtml(){
   if(QVIEW === 'replies') return '<b>No open replies.</b><div class="sub">Switch view above.</div>' + part;
   if(QVIEW === 'retries') return '<b>Nobody reached out to is due for this seat.</b><div class="sub">Switch view above.</div>' + part;
   return '<b>Nothing with unknown history.</b><div class="sub">Switch view above.</div>' + part;
+}
+/* ONE CARD PER PERSON (2026-11-19). Rows are one per CASE, and an owner with two cases was two cards
+   in the same list: the same human served twice, with two sale dates (5 owners in the 400-row queue
+   measured that day). Suppression was already person-wide (r.pcs), so the second card only went
+   away AFTER the first call. Now the list keeps one case per person key (r.pk).
+   Which case: the one opened on purpose (_PKPIN), else the most-contacted state so a person reached
+   on one case is never shown as untouched on the other (callback, reply, reached out, history
+   unknown, untouched), else build rank order. Runs AFTER every gate, the seat split and the claim
+   filter, so it can only REMOVE a row those already allowed: it never brings one back.
+   _DUPN is said out loud in head(), same rule as every other count that shrinks the list. */
+var _PKPIN = null, _DUPN = 0;
+var _VWPRI = {callbacks:0, replies:1, retries:2, history_unknown:3, untouched:4};
+function _onePerPerson(rows, vw){
+  var best = {}, dup = 0;
+  rows.forEach(function(r){
+    var k = r.pk; if(!k) return;
+    var p = _VWPRI[vw(r)], sc = (r.c === _PKPIN) ? -1 : (p == null ? 9 : p), b = best[k];
+    if(!b){ best[k] = {c:r.c, sc:sc}; return; }
+    dup++;
+    if(sc < b.sc){ b.c = r.c; b.sc = sc; }
+  });
+  if(!dup) return {rows:rows, dup:0};
+  return {rows:rows.filter(function(r){ return !r.pk || best[r.pk].c === r.c; }), dup:dup};
 }
 function pool(){
   /* Rebuilt here rather than in render() so EVERY caller gets a fresh index — advance() and
@@ -6187,15 +6245,33 @@ function pool(){
      bare ROWS.filter(pred) with NO suppression, so "Emailed / replied · 40" could sit above a lane
      holding three. Every row is evaluated per lane because the soft tier is lane-dependent by
      design; hard and cool short-circuit before any per-lane work. */
+  /* THE NUMBER ON THE BUTTON IS THE LIST BEHIND IT (2026-11-19). `net` stopped at suppression, but
+     the list goes on through the seat split, the claim filter, one card per person and the queue
+     view. So "Has equity · 48" sat above an empty list whenever those 48 were all in Reached out
+     (the default view is Untouched) or on the other seat. `n` walks the same steps the list below
+     walks, in the same order; head() prints `n`. raw / net keep their meaning for the dim rule and
+     for the tests that read them. The view and the seat/claim verdicts do not depend on the lane,
+     so each is worked out once per row per pass. */
+  var _vwc = {}, _mnc = {};
+  var _vw1 = function(r){ return _vwc[r.c] || (_vwc[r.c] = _viewOf(r)); };
+  var _seatOn = !!(_seat() && !SEAT_ALL);
+  var _mine = function(r){
+    var m = _mnc[r.c];
+    if(m == null) m = _mnc[r.c] = ((_seatOn && !_seatMine(r)) ? 1 : (_clmOwner(r.c) ? 2 : 0));
+    return m; };
   _LANEN = {};
   LANES.forEach(function(L){
-    var raw = 0, net = 0;
+    var raw = 0, net = 0, mine = [];
     ROWS.forEach(function(r){
       if(!L.pred(r)) return;
       raw++;
-      if(!supReason(r, L.k).k) net++;
+      if(supReason(r, L.k).k) return;
+      net++;
+      if(!_mine(r)) mine.push(r);
     });
-    _LANEN[L.k] = {raw:raw, net:net};
+    var shown = 0;
+    _onePerPerson(mine, _vw1).rows.forEach(function(r){ if(!QVIEW || _vw1(r) === QVIEW) shown++; });
+    _LANEN[L.k] = {raw:raw, net:net, n:shown};
   });
   /* SEAT FILTER LAST, so _SUPN keeps meaning "suppressed for a compliance reason" and does not
      silently absorb "belongs to the other caller" — two very different facts that must never
@@ -6209,13 +6285,16 @@ function pool(){
        was actively working — the exact double-dial this feature exists to prevent, reachable by
        tapping the one control that sounds harmless. Nothing writes a claim unless a seat is set,
        so on a genuinely solo crew this costs nothing. */
-    if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
-    if(_clmOwner(r.c)){ _CLMN++; return false; }
+    var _m = _mine(r);
+    if(_m === 1){ _SEATN++; return false; }
+    if(_m === 2){ _CLMN++; return false; }
     return true; });
+  /* one card per person, after every gate and before the view counts (see _onePerPerson) */
+  var _op = _onePerPerson(keep, _vw1); keep = _op.rows; _DUPN = _op.dup;
   /* QUEUE VIEW, after every gate. Counts first (so the empty state can say what is waiting), then
      the narrowing. A view can only REMOVE rows the gates already allowed. */
   _VIEWN = {untouched:0, callbacks:0, replies:0, retries:0, history_unknown:0};
-  var _vw = keep.map(function(r){ var v = _viewOf(r); _VIEWN[v]++; return v; });
+  var _vw = keep.map(function(r){ var v = _vw1(r); _VIEWN[v]++; return v; });
   if(QVIEW) keep = keep.filter(function(r, ix){ return _vw[ix] === QVIEW; });
   if(QVIEW === 'callbacks'){                           // due instant, overdue first; no fresh-first reorder
     keep.sort(function(a, b){ return (Date.parse(_CBDUE[a.c].due_utc) - Date.parse(_CBDUE[b.c].due_utc)) || (a.c < b.c ? -1 : 1); });
@@ -6730,6 +6809,7 @@ function screenTeamKey(){
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
   var _wl = lane, _rest = _qvRestore();
+  _MOVE = 1;                        /* a deliberate move: render() may leave the lead it is on */
   try{ vmClose(); }catch(e){}   /* never leave the full-screen voicemail over the next screen */   // _rest: he was on a one-off; view, lane and card are back
   /* a lead opened from Find a number goes back to that list once its call is done (2026-11-09) */
   if(LKFROM && workedC === LKFROM){ _NAVF.length = 0; return _lkReturn(); }
@@ -6858,7 +6938,7 @@ function navBack(){
   if(k<0){ toast('No earlier lead in this lane'); return; }
   if(from) _NAVF.push({c:from, l:lane});
   if(cur) delete cur._rcStay;
-  SCREEN='lead'; i=k; render();
+  _MOVE = 1; SCREEN='lead'; i=k; render();
 }
 function navNext(){
   _qvRestore();
@@ -6866,7 +6946,7 @@ function navNext(){
   if(k<0) return advance(from, null);   // no redo trail: exactly the old Skip
   _navPush(from);
   if(cur) delete cur._rcStay;
-  SCREEN='lead'; i=k; render();
+  _MOVE = 1; SCREEN='lead'; i=k; render();
 }
 function _navRow(){
   _NAVP = null;   // never a pool from an earlier paint
@@ -6886,6 +6966,37 @@ function _navRow(){
    to merge yet) and everything after it "went faulty": his own first push guaranteed every later
    return had a change to merge. The data must land; the REPAINT must wait. */
 var SCREEN='lead';
+/* THE CALL STILL UP (2026-11-19). Tapping dial writes a 'pending' dial row, and a pending row takes
+   the lead out of pool() (PENDING_HOLD_H). Every side screen's Back was `SCREEN='lead'; render()`,
+   and render() re-picks cur = pool()[i]: so opening the call log, Who texted me, call stats, routes or
+   a record in the middle of a call came back on the NEXT lead, with the script at step 1 and the
+   outcome screen gone. Two rules, both about the card already on screen and neither about who may
+   be called (pool() and every gate in it are untouched):
+     - Back from a side screen opened over the outcome screen returns to that outcome screen;
+     - a repaint that nobody asked to move (same slot, lane and view as the last paint, no Next /
+       Back / open-this-lead) keeps the lead whose call is still open instead of swapping it.
+   "Open" is the same test _ocResume uses: the last dial row is this caller's pending / redial row,
+   from today, under OC_RESUME_MS old, and the lead is not hard-suppressed. A deliberate move sets
+   _MOVE, which render() spends once. screenLead() still runs its own do-not-contact and teammate
+   checks on the lead it keeps. */
+var _MOVE = 0, _PAINT = null, _SIDEUP = null;
+function _callOpen(r){
+  try{
+    if(!r || hardSuppressed(r)) return false;
+    var dl = (notes[r.c] || {}).dials || [], x = dl[dl.length - 1];
+    return !!(x && (x.oc === 'pending' || x.oc === 'redial') && x.d === today() && (x.by || '') === (caller() || '')
+              && (Date.now() - (+x.tsu || 0)) < OC_RESUME_MS);
+  }catch(e){ return false; }
+}
+function _sideEnter(){
+  if(SCREEN === 'outcome' && cur) _SIDEUP = cur.c;
+  else if(SCREEN === 'lead' || SCREEN === 'after') _SIDEUP = null;
+}
+function _sideBack(){
+  var up = _SIDEUP; _SIDEUP = null;
+  if(up && cur && cur.c === up && _callOpen(cur)){ screenOutcome(); try{ window.scrollTo(0, 0); }catch(e){} return; }
+  SCREEN = 'lead'; render();
+}
 /* Last afterCall args, so a language toggle can repaint that panel in place (it is built from
    closure args, not from `cur` alone the way the other screens are). */
 var _lastAfter=null;
@@ -6911,6 +7022,11 @@ function render(){
     return;
   }
   var P=pool();
+  var _mv = _MOVE; _MOVE = 0;
+  if(!_mv && cur && _PAINT && _PAINT.i === i && _PAINT.l === lane && _PAINT.v === QVIEW && _callOpen(cur)
+     && !P.some(function(x){ return x.c === cur.c; })){
+    _clmTake(cur.c); wfResume(); screenLead(); return;      // see THE CALL STILL UP
+  }
   /* An emptied lane and a never-populated lane are NOT the same event, and until now they printed the
      same words. Work every lead and the pool drains to zero, so a finished session was reporting
      "Nothing in this lane" — indistinguishable from a broken build or the wrong lane. Same rule as
@@ -6940,6 +7056,7 @@ function render(){
   var pc=cur&&cur.c, pp=phIdx;
   cur=P[i]; phIdx=(cur&&cur.c===pc&&pp<cur.p.length)?pp:0;
   _posSave(P, i);
+  _PAINT = {i:i, l:lane, v:QVIEW};
   /* NEVER LAND ON A DEAD NUMBER. A lead can carry a number marked bad here or on the laptop's
      worker card; without this the card offers it as the one to dial. pool() has already dropped
      leads whose numbers are ALL bad, so this normally finds one — the second call is belt and
@@ -6968,10 +7085,11 @@ function head(){
      all suppressed shows a dimmed 0, because hiding it would be exactly the silent cap the line
      below forbids. */
   var laneBtns = [laneDef('all'), laneDef('eq')].concat(LANES.filter(function(L){ return L.k !== 'all' && L.k !== 'eq'; })).map(function(L){
-    var C = _LANEN[L.k] || {raw:0, net:0};
+    var C = _LANEN[L.k] || {raw:0, net:0}, _cn = C.n || 0;
     if(!C.raw && L.hide0) return '';
-    return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !C.net?' dim':'')+'">'
-         + L.lbl + (C.raw ? ' &middot; '+C.net : '')+'</button>';
+    /* C.n: what the list holds if he taps this lane now (same seat, same view, one card per person) */
+    return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !_cn?' dim':'')+'">'
+         + L.lbl + (C.raw ? ' &middot; '+_cn : '')+'</button>';
   }).join('');
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
@@ -6984,7 +7102,11 @@ function head(){
     : '';
   var _lkN = lkRows().length;
   var _lkBtn = _lkN ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
-  return DFNAV + _qh + '<div class="top"><div class="lane">'+laneBtns+_lkBtn+'</div>'
+  /* THE CLOCK SITS ON TOP (2026-11-19). It was the last thing in viewBar(), under the lane and view
+     buttons, which put Pause / +30 min / End work about 415-490px down the first screen. The script
+     bar is fixed to the bottom, so on a short screen (375x553, an iPhone SE with Safari's bars up) it
+     covered those buttons until he scrolled. Up here they are clear of it on every phone. */
+  return DFNAV + _qh + '<div class="top">'+wfBar()+'<div class="lane">'+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
@@ -6998,6 +7120,7 @@ function head(){
           ? ('<b>'+_FRESHN+'</b> never contacted &middot; replies and Morning Worker hand-offs first, then fresh, then retries')
           : '<b>No fresh leads left in this lane</b> &mdash; every lead here was already called, emailed or texted. '
             +'New ones arrive with the next board rebuild.')+'</div>'):'')
+    +(_DUPN?('<div class="supn">'+_DUPN+' more case'+(_DUPN===1?'':'s')+' folded in &mdash; <b>same owner, more than one case</b>, one card per person</div>'):'')
     +(_SUPT?('<div class="supn">'+_SUPT+' more hidden &mdash; <b>we already reached them another way</b> '
           +'(email, text, letter or door) within '+COOL_DEFAULT_H+'h</div>'):'')
     /* SEAT CHIP. Always rendered, even solo, because "am I splitting the list right now" is a
@@ -8779,6 +8902,7 @@ function cheer(o){
    the same data the queue reads to decide what to skip, so the log and the skipping can never
    disagree. Reachable from the hidden-count line in the top bar. */
 function screenRegistry(){
+  _sideEnter();
   SCREEN='reg';
   var rows = [];
   Object.keys(notes || {}).forEach(function(c){
@@ -8828,7 +8952,7 @@ function screenRegistry(){
     +   '<div class="reglist">' + list + '</div>'
     +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
-  $('regback').onclick = function(){ SCREEN='lead'; render(); };
+  $('regback').onclick = _sideBack;
   /* A row opens that case's read-only record (2026-11-13, F-site-03). Nothing is dialled, written or
      re-queued from there, and its Back returns here. */
   Array.prototype.forEach.call(document.querySelectorAll('[data-regc]'), function(b){
@@ -8842,6 +8966,7 @@ function screenRegistry(){
    bar ("call stats"). Touches nothing in the queue. */
 var _csDays = 1;
 function screenCallStats(){
+  _sideEnter();
   SCREEN = 'cstats';
   var me = caller(), rows = callStatsRows(notes, me, _csDays);
   var csv = callStatsCsv(rows);
@@ -8881,7 +9006,7 @@ function screenCallStats(){
     + '<button class="ghost" id="cswin" style="margin-top:8px">' + (_csDays===1 ? 'Show last 14 days' : 'Show today only') + '</button>'
     + '<button class="ghost" id="csback" style="margin-top:8px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
-  $('csback').onclick = function(){ SCREEN='lead'; render(); };
+  $('csback').onclick = _sideBack;
   $('cswin').onclick = function(){ _csDays = (_csDays===1 ? 14 : 1); screenCallStats(); };
   if($('cswk')) $('cswk').onclick = function(){ _copyOut(weekText(weekStats(notes, Date.now())), 'Week copied: paste it into Claude or another AI'); };
   $('cscopy').onclick = function(){
@@ -8940,6 +9065,7 @@ function contactHistory(caseId){
   return out.slice(0, 6);
 }
 function screenLookup(prefill){
+  _sideEnter();
   SCREEN = 'lookup';
   try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
   $('app').innerHTML = '<div class="card">'
@@ -8951,7 +9077,7 @@ function screenLookup(prefill){
     + '<div id="lkout" style="margin-top:14px"></div>'
     + '<button id="lkback" class="ghost" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
-  $('lkback').onclick = function(){ SCREEN='lead'; render(); };
+  $('lkback').onclick = _sideBack;
   var run = function(){
     var q = $('lkq').value, hits = phLookup(q), box = $('lkout');
     if(digitsOf(q).length < 4){ box.innerHTML = ''; return; }
@@ -10058,6 +10184,11 @@ function screenOutcome(){
      longer steals taps. afterCall still hides it — there the call is genuinely over. */
   document.getElementById('sheet').classList.remove('hid');
   var r=cur, d=r.p[phIdx];
+  /* THE SCRIPT IS FOR THIS CALL (2026-11-19). Nothing here painted the sheet: it kept whatever lead
+     screenLead() last filled it for. After a reload start() paints the first lead in the queue and
+     then _ocResume() reopens this screen for the lead on the phone, so the script under the outcome
+     buttons carried the NEXT owner's name and street, at step 1. */
+  try{ if(_SHEETC !== r.c) renderSheet(r); }catch(e){ logErr(e, 'oc-sheet'); }
   // Captured BEFORE any outcome is written — see advance(). Once logOutcome runs, pool() may no
   // longer contain either this lead or the same neighbours, so there is nothing left to read it from.
   var nextC = (function(){ var P=pool(); for(var k=0;k<P.length;k++) if(P[k].c===r.c) return (P[k+1]||{}).c; return null; })();
@@ -11087,6 +11218,7 @@ function _mailRowHtml(it, sect){
   return h + '</div>';
 }
 function screenRoutes(){
+  _sideEnter();
   SCREEN = 'routes';
   try{ routeAdvance(); }catch(e){}
   var dc = doorClock();
@@ -11185,10 +11317,11 @@ function screenRoutes(){
       + '<div class="regsub">The first prints the hand-write letters. The second prints letterhead sheets and writes the Lob queue file for '
       + 'outreach_mail.py --queue (needs the re-issued Lob key). Both re-check opt-outs, stays and diligence first.</div></div>';
   };
-  $('rtback').onclick = function(){ SCREEN = 'lead'; render(); };
+  $('rtback').onclick = _sideBack;
 }
 var _RECBACK = 'lead', _RECC = null;
 function screenRecord(c, back){
+  _sideEnter();
   SCREEN = 'record'; _RECC = c; _RECBACK = back || _RECBACK || 'lead';
   var byC = _rowsByC(), r = byC[c] || null, n = notes[c] || {}, a = nextAct(r, n);
   var T = recTimeline(c, r, false), H = recHolds(r, n);
@@ -11204,7 +11337,7 @@ function screenRecord(c, back){
     + '<button class="ghost" id="recback" style="margin-top:8px">&larr; Back</button>'
     + '</div><div class="sheetpad"></div>';
   $('recai').onclick = function(){ _copyOut(prospectPrompt(c), 'Copied: paste it into Claude or another AI'); };
-  $('recback').onclick = function(){ if(_RECBACK === 'routes') screenRoutes(); else if(_RECBACK === 'reg') screenRegistry(); else { SCREEN = 'lead'; render(); } };
+  $('recback').onclick = function(){ if(_RECBACK === 'routes') screenRoutes(); else if(_RECBACK === 'reg') screenRegistry(); else _sideBack(); };
 }
 function _afterMail(r){
   if(!MAIL_OK) return '';
@@ -11901,6 +12034,7 @@ function logOutcome(r,o,digits){
   touched = true;
   saveNotes();
   queueSync();
+  try{ _gPosDrop(r.c); }catch(_e){}   /* the script goes back to the greeting for the next call to them */
   return fresh;
 }
 /* Write-back rides the board's existing Supabase team sync.
@@ -12067,6 +12201,7 @@ function wire(){
 /* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
    number on the Find-a-number list). */
 function _openCase(c){
+  _PKPIN = c; _MOVE = 1;   /* opened on purpose: this case holds its owner's one card, and render() may leave the lead it is on */
   if(LKFROM && c !== LKFROM) LKFROM = null;   /* a different lead opened on purpose: no way back to the list */
   var lane0 = lane;
   for(var q=0;q<LANES.length;q++){
@@ -12433,7 +12568,37 @@ document.addEventListener('click', function(ev){
    overlay. It lives outside #app so advancing a lead never destroys it mid-sentence. */
 var SCRIPT=__SCRIPT__, ciocIdx=-1, objIdx=-1;
 var SCRIPT_ALL=SCRIPT;   /* the full payload; renderSheet shadows SCRIPT per lane (homeowner vs SCRIPT_ALL.bal) */
-function sheetToggle(){ $('sheet').classList.toggle('open'); }
+function sheetToggle(){
+  $('sheet').classList.toggle('open');
+  /* the bar's label depends on open / closed ("tap to start" over an open script read as stuck) */
+  try{ if(_PEEKA) $('peek').innerHTML = _peekHtml(_PEEKA[0], _PEEKA[1], _PEEKA[2]); }catch(e){}
+}
+/* THE SCRIPT BAR (2026-11-19). It said "TAP TO START THE CALL" for the whole call: at step 9, and
+   with the script open above it. Now it says where the call is. Not started: the opener and the
+   start cue, as before. Started: the step number and its name, the same count the guided header
+   shows. Open: how to close it. */
+var _PEEKA = null;
+function _peekHtml(pk, guided, S){
+  var open = false; try{ open = $('sheet').classList.contains('open'); }catch(e){}
+  var l1 = '<b>' + esc(pk) + '</b>', l2;
+  if(!guided){
+    l2 = '<span class="mut">&hellip; ' + (open ? 'tap here to close the script' : 'tap for the full script') + '</span>';
+  } else {
+    var st = String(_g.step || 'greet'), nm = '';
+    if(st === 'greet' && !_g.stack.length){
+      l2 = open ? '<b style="color:var(--gold)">&#9654; GUIDED CALL</b><span class="mut"> &middot; tap here to close</span>'
+                : '<b style="color:var(--gold)">&#9654; TAP TO START THE CALL</b><span class="mut"> &middot; guided, one line at a time</span>';
+    } else {
+      if(st.indexOf('obj:') === 0) nm = 'THEY PUSHED BACK';
+      else if(st.indexOf('end:') === 0) nm = 'CALL OVER, LOG IT';
+      else { var sd = _gStep(S, st); nm = String((sd && (sd.k || sd.id)) || st); }
+      l1 = '<b style="color:var(--gold)">&#9654; STEP ' + (_g.stack.length + 1) + '</b> &middot; <b>' + esc(nm) + '</b>';
+      l2 = '<span class="mut">' + (open ? 'tap here to close the script' : 'tap to pick the call back up here') + '</span>';
+    }
+  }
+  return '<div class="pk1">' + l1 + '</div><div class="pk1">' + l2 + '</div>'
+       + '<div class="pk1 mut">Close with: <b>That&rsquo;s fair, right?</b></div>';
+}
 /* --sheeth = the COLLAPSED sheet's height (grip + peek + border + safe-area), 0 while it is hidden.
    Body padding, the Who-texted-me button and the new-list pill all stand on it, so nothing fixed
    lands on the opener line at any width or zoom. body.shopen hides the button over an open sheet. */
@@ -12559,14 +12724,48 @@ function say(en, es, r){
 var _g = {on:true, step:'greet', stack:[], ret:null, kase:null};
 try{ if(localStorage.getItem('fcGuided')==='0') _g.on=false; }catch(e){}
 function _gSave(){ try{ localStorage.setItem('fcGuided', _g.on?'1':'0'); }catch(e){} }
+/* WHERE HE IS IN THE SCRIPT, PER LEAD, FOR TODAY (2026-11-19). _g lived in memory only and was reset
+   whenever the sheet was painted for a different lead, so the walk went back to step 1 on a reload
+   (iOS drops the tab during the call) and whenever the card behind the sheet changed and came back.
+   Kept on this phone only, keyed by case, dropped at midnight and when the call is logged (the next
+   call opens at the greeting). Nothing here is synced and nothing reads it but the sheet. */
+var _GPK = 'fcGuidedPos';
+function _gPosAll(){
+  try{ var s = JSON.parse(localStorage.getItem(_GPK) || 'null');
+    if(s && s.d === today() && s.m && typeof s.m === 'object') return s; }catch(e){}
+  return {d:today(), m:{}};
+}
+function _gPosSave(){
+  try{
+    if(!_g.kase) return;
+    var s = _gPosAll();
+    if(_g.step === 'greet' && !_g.stack.length) delete s.m[_g.kase];
+    else s.m[_g.kase] = {s:String(_g.step), k:_g.stack.slice(-60), r:_g.ret || null, t:Date.now()};
+    var ks = Object.keys(s.m);
+    if(ks.length > 40){
+      ks.sort(function(a, b){ return (s.m[a].t || 0) - (s.m[b].t || 0); });
+      ks.slice(0, ks.length - 40).forEach(function(k){ delete s.m[k]; });
+    }
+    localStorage.setItem(_GPK, JSON.stringify(s));
+  }catch(e){}
+}
+function _gPosLoad(c){
+  var p = _gPosAll().m[c];
+  if(!p || typeof p.s !== 'string' || !Array.isArray(p.k)) return null;
+  return {step:p.s, stack:p.k.filter(function(x){ return typeof x === 'string'; }), ret:(typeof p.r === 'string' ? p.r : null)};
+}
+/* The call on this lead was logged: the next call to them starts at the greeting. */
+function _gPosDrop(c){
+  try{ var s = _gPosAll(); if(s.m[c]){ delete s.m[c]; localStorage.setItem(_GPK, JSON.stringify(s)); } }catch(e){}
+  if(_g.kase === c){ _g.step = 'greet'; _g.stack = []; _g.ret = null; }
+}
 function secondName(r){
   /* (p1b) the co-owner on the card. r.o is "OWNER1; OWNER2"; the county roll may be "LAST,FIRST". */
   try{
     var parts=String((r&&r.o)||'').split(';'); if(parts.length<2) return '';
     var s=parts[1]; if(s.indexOf(',')>=0) s=s.split(',').slice(1).join(' ');
-    var tok=s.replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/)[0]||'';
-    if(tok.length<2 || _NOTNAME.indexOf(tok.toUpperCase())>=0) return '';
-    return tok.charAt(0).toUpperCase()+tok.slice(1).toLowerCase();
+    /* one reader for both names: the co-owner is checked for an entity, a pronoun or a fragment too */
+    return firstName({o:parts[1], on:s});
   }catch(e){ return ''; }
 }
 function _gStep(S,id){ for(var k=0;k<S.flow.length;k++){ if(S.flow[k].id===id) return S.flow[k]; } return null; }
@@ -12576,6 +12775,11 @@ function _gTone(t){ return t ? '<div class="mut" style="font-size:12px;margin-to
 function _gListen(t){
   return '<div style="margin:10px 0 4px;padding:8px 10px;border:1px dashed var(--gold);border-radius:8px;color:var(--gold);font-weight:800;font-size:12px;letter-spacing:.06em">&#9679; LISTEN'
        + (t ? ' &mdash; <span style="font-weight:400;letter-spacing:0;color:#e7c98a">'+esc(t)+'</span>' : '') + '</div>';
+}
+/* The sheet is now for lead c: pick up where he left that lead today, else the greeting. */
+function _gKase(c){
+  var sv = _gPosLoad(c);
+  _g.kase = c; _g.step = sv ? sv.step : 'greet'; _g.stack = sv ? sv.stack : []; _g.ret = sv ? sv.ret : null;
 }
 function renderGuided(r, S, named, warm){
   var b='', st=_g.step, es=(lang()==='es');
@@ -12650,6 +12854,7 @@ function _gGo(to){
     if(to.indexOf('obj:')===0) _g.ret=(here&&here.ret)||_g.step;
     _g.step=to;
   }
+  _gPosSave();
   renderSheet(_sheetLead());
 }
 function _gWire(){
@@ -12658,7 +12863,9 @@ function _gWire(){
   wireLang($('sbody'));
 }
 
+var _SHEETC = null;   /* the case the sheet was last painted for (screenOutcome repaints it when that is not its lead) */
 function renderSheet(r){
+  _SHEETC = (r && r.c) || null;
   /* BALLOON rows read the investor script (SCRIPT_ALL.bal, from the vault Refi Lane note). Shadowing
      the global with a local of the same name keeps every SCRIPT.* line below untouched — one switch,
      not fourteen edits, and the homeowner script cannot leak onto an investor call. */
@@ -12676,18 +12883,16 @@ function renderSheet(r){
   var _guidedOn = !!(SCRIPT.flow && SCRIPT.flow.length && _g.on);
   // First sentence, before any [cue]; keep its own ? or ! ("Hi, Karl? Can you hear me?").
   var _pk = op.split('[')[0].trim().split('. ')[0]; if(!/[.?!]$/.test(_pk)) _pk += '.';
-  $('peek').innerHTML = '<b>'+esc(_pk)+'</b> '
-    + (_guidedOn
-        ? '<span class="mut">&hellip;</span> <b style="color:var(--gold)">&#9654; TAP TO START THE CALL</b>'
-          + '<span class="mut"> &middot; guided, one line at a time</span>'
-        : '<span class="mut">&hellip; tap for the full script</span>')
-    + '<div class="mut" style="margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b></div>';
+  /* the lead under the sheet first: the bar's label reads the step this lead is on */
+  if(SCRIPT.flow && SCRIPT.flow.length && r && r.c!==_g.kase){ _gKase(r.c); }
+  _PEEKA = [_pk, _guidedOn, SCRIPT];
+  $('peek').innerHTML = _peekHtml(_pk, _guidedOn, SCRIPT);
 
   var b = '';
   // GUIDED / FULL toggle + the guided renderer. Homeowner lane only (the balloon dict has no `flow`).
   // Reset to the opener whenever the LEAD changes — never mid-call.
   if(SCRIPT.flow && SCRIPT.flow.length){
-    if(r && r.c!==_g.kase){ _g.kase=r.c; _g.step='greet'; _g.stack=[]; _g.ret=null; }
+    if(r && r.c!==_g.kase){ _gKase(r.c); }
     // GUIDED is the main view: a gold header + a small "view full script" escape hatch. In FULL mode
     // the way back is one big gold button — the full sheet is the secondary view now, not a peer.
     if(_g.on){
