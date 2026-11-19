@@ -101,8 +101,8 @@ for keep in ('You could walk away with $50,000.', 'It jumps 30 to 50 percent.', 
              'Maybe 5 grand.', 'A 2.5 rate.', 'Since 2019 it grew.', 'Ten at 4 pm works.'):
     chk(cs._AI_BAD.search(sd(keep)) is not None, 'a real figure still has its digits, so it is still dropped: %s' % keep, sd(keep))
 
-r, st, f = run([form('It takes 5 minutes with him. How does ten tomorrow morning sound?', 'objection', 'close')])
-chk(r.get('line') == 'It takes five minutes with him. How does ten tomorrow morning sound?' and len(f.calls) == 1,
+r, st, f = run([form('It takes 5 minutes with him. Later today or first thing tomorrow?', 'objection', 'close')])
+chk(r.get('line') == 'It takes five minutes with him. Later today or first thing tomorrow?' and len(f.calls) == 1,
     'a line with "5 minutes" is shown in words, with no second request: %s' % r.get('line'))
 
 r, st, f = run([form('A modification can raise it 30 to 50 percent. What then?'), form('A modification can raise the payment a lot. What then?')])

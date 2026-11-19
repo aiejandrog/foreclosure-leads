@@ -46,11 +46,19 @@ CASES = [
     ("You'll keep the house, don't worry.", 12, "fc", "", "", "promise"),
     ("Options to keep the house are what he lays out.", 12, "fc", "", "", ""),
     ("He'll get this handled for you.", 12, "fc", "", "", "promise"),
+    ("He's got ten tomorrow morning open.", 12, "fc", "", "", "availability"),
+    ("I've got him free later today.", 12, "fc", "", "", "availability"),
+    ("He's got more than thirty years doing this, and he's free of charge.", 12, "fc", "", "", ""),
+    ("He calls you ten tomorrow.", 12, "fc", "", "", "time"),
+    ("There's a way out with money in your pocket.", 12, "fc", "", "", "equity"),
 ]
 for line, d, lane, eq, conv, want in CASES:
     got = S.fact_check(line, d, lane, eq, conv)[0]
     rec('%-14s %s' % (want or 'allowed', line[:70]), got == want, got)
 
+rec('two questions keep the statement and the last question',
+    S.one_question("Got it. What's the plan? And how much of it is in writing?") == "Got it. And how much of it is in writing?")
+rec('one question is left alone', S.one_question("That makes sense. Later today or first thing tomorrow?") == "That makes sense. Later today or first thing tomorrow?")
 pb = S.playbook_text() or ''
 quoted = [q for q in re.findall(r'"([^"]{12,300})"', pb)]
 hits = [(q, S.fact_check(q, 12, 'fc', 'verified', q)) for q in quoted]
@@ -62,3 +70,19 @@ rec('ai_line checks every line with never_say AND fact_check', 'return r if r[0]
     and src.count('check(res["line"])') >= 2)
 print('\n%d failure(s)' % len(FAILS) if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)
+
+# STILL READING: the caller is reading the line on his screen, so no model call and the screen stays.
+_calls = []
+_orig = S._ai_post
+S._ai_post = lambda *a, **k: _calls.append(1) or (_ for _ in ()).throw(RuntimeError('model called'))
+_shown = "Makes sense. Would later today or first thing tomorrow work better for the five minutes with our senior advisor?"
+try:
+    _r = S.ai_line([{'spk': 'them', 'text': 'I guess so.'},
+                    {'spk': 'me', 'text': 'Makes sense would later today or first thing tomorrow work better for the five minutes with our senior advisor'}],
+                   shown=_shown, asked=[_shown], stat={})
+except Exception as _e:
+    _r = {'err': str(_e)}
+S._ai_post = _orig
+print(('ok   ' if (_r == {} and not _calls) else 'FAIL ') + 'caller still reading the coach line: nothing new, no model call')
+if not (_r == {} and not _calls):
+    sys.exit(1)

@@ -860,10 +860,13 @@ def never_say(line, pb=None):
 # verified, what did the homeowner actually say. A hit is asked again once with the reason, then dropped.
 _HOURW = r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon)"
 _TIME_RX = re.compile(r"\b(?:at\s+" + _HOURW + r"(?:\s+(?:o['’]?clock|thirty|fifteen|forty[- ]five))?"
-                      r"|" + _HOURW + r"\s+o['’]?clock|" + _HOURW + r"\s+(?:thirty|fifteen|forty[- ]five)\b)", re.I)
+                      r"|" + _HOURW + r"\s+o['’]?clock|" + _HOURW + r"\s+(?:thirty|fifteen|forty[- ]five)\b"
+                      r"|" + _HOURW + r"\s+(?:tomorrow|today|tonight|in the (?:morning|afternoon|evening)|this (?:morning|afternoon|evening)|a\.?m\b|p\.?m\b))", re.I)
 FACT_RULES = (
     ("availability", re.compile(r"\b(?:he|the advisor|our (?:senior )?advisor)(?:['’]s| is| has)(?: got)?\s+(?:an?\s+)?"
-                                r"(?:open(?:ing)?|free|available|a slot|a spot|time)\b", re.I),
+                                r"(?:open(?:ing)?|free(?! of)|available|a slot|a spot|time)\b"
+                                r"|\b(?:i['’]ve|i have|we['’]ve|we have) got him (?:free|open|available)\b"
+                                r"|\bhe(?:['’]s| has) got [a-z' ]{0,30}\b(?:open|available|free(?! of))\b(?! of charge)", re.I),
      "it claims the senior advisor's availability, which you do not know. Offer 'later today or first thing tomorrow' "
      "and let them pick."),
     ("advisor_acts", re.compile(r"\b(?:he|the advisor|our (?:senior )?advisor)(?:['’]ll| will| can| is going to| gonna)?\s+"
@@ -906,11 +909,26 @@ def fact_check(line, days=None, lane="", eq="", convo=""):
         return "sale_date", ("it mentions a sale date or an auction, but no sale date is known for this call and the "
                              "homeowner has not mentioned one. Talk about the filing and the options instead.")
     if str(eq or "").lower() != "verified" and re.search(
-            r"\b(?:your|the|that|all that|plenty of|lot of|some) equity\b|\bmoney (?:in|left in) (?:it|the house|the place|your house)\b", s, re.I) \
+            r"\b(?:your|the|that|all that|plenty of|lot of|some) equity\b|\bmoney (?:in|left in) (?:it|the house|the place|your house)\b"
+            r"|\bmoney in your pocket\b|\b(?:money|cash) out of (?:it|the house|the place|your house)\b", s, re.I) \
             and not re.search(r"not interested in saving your property, or the equity you['’]ve got in it", s, re.I):
         return "equity", ("it says or implies they have equity, which nobody has verified. Say 'whatever you've got in the "
                           "place' or 'if there's equity in it, he'll tell you'.")
     return "", ""
+
+
+def one_question(line):
+    """A line with two or more questions keeps its statements and its LAST question (the ask). 11-19: the
+    judge's 'unnatural' class was mostly two or three questions stacked in one line."""
+    parts = [x for x in re.split(r"(?<=[.!?])\s+", str(line or "").strip()) if x]
+    qs = [i for i, x in enumerate(parts) if x.rstrip().endswith("?")]
+    if len(qs) < 2:
+        return line
+    keep = [x for i, x in enumerate(parts) if i not in qs[:-1]]
+    return " ".join(keep)
+
+
+_TIME_ASK = re.compile(r"later today|first thing tomorrow|today or tomorrow|what time|tomorrow morning", re.I)
 
 
 def sale_in_words(days):
@@ -1366,6 +1384,19 @@ AI_LANES = {
 }
 
 
+AI_ROUND3 = (
+    "\n\nONE QUESTION. A line has at most one question, and it is the last sentence. Under forty words."
+    "\n\nAFTER A TIME IS AGREED, never ask for the time or repeat it again. The next lines, in order: save my number "
+    "and read it back; who else should be on the call; have the latest letters from the lender or the court nearby; "
+    "then the goodbye."
+    "\n\nA bare 'okay' or 'yes' that is not about a time is NOT a booking: say what the five minutes with the senior "
+    "advisor is, then offer the two times. Never ask for a time before the advisor and the five minutes were said on "
+    "this call."
+    "\n\nNO FACTS OF YOUR OWN about the law, the courts, lenders, associations or what anyone else on their case is "
+    "doing. If it is not in the playbook or in what they said, ask a question instead of stating it."
+)
+
+
 def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", stat=None):
     """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
     to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
@@ -1399,7 +1430,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     # call and this line rides in the user message after it.
     # SIZE (11-19): only the playbook's CORE rides in that system message; the pieces that fit this moment come
     # in the user message (see situational()). The system message stays byte-for-byte the same on every line.
-    system = AI_SYSTEM
+    system = AI_SYSTEM + AI_ROUND3
     pbp = playbook_parts()
     if pbp["core"]:
         system += ("\n\nPLAYBOOK. This is the caller's own sales system. Take the MOVE and the facts from it: what "
@@ -1535,6 +1566,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         return r if r[0] else fact_check(line, days, lane, eq, _convo)
 
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
+    # STILL READING (11-19). The last words are the caller reading the line on his screen: the homeowner has not
+    # answered yet, so a new line now would answer the coach's own words. Keep what is on screen.
+    if rows and rows[-1].startswith("CALLER") and shown and _read_back(last_said, [shown]):
+        st["why"] = "wait"
+        return done({})
     if _AI_META.search(last_said):
         st["why"] = "meta"
         return done({})                # the callers are talking about the script: keep what is on screen
@@ -1571,6 +1607,9 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
                 _never_log(rule, "dropped")
                 st["why"] = "never:" + rule
                 return done({})
+    # ONE QUESTION (11-19). The time-before-the-advisor rule is in the prompt only: a re-ask here cost a model call.
+    if res and res.get("line"):
+        res["line"] = one_question(res["line"])
     # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
     # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose. With no
     # time left to ask again, the line is cut to whole sentences in code.
@@ -1592,6 +1631,12 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
             res = short
         if len(res["line"].split()) > 55:
             res["line"] = trim_line(res["line"], 45)
+    # OVER FORTY-FIVE, UNDER FIFTY-SIX (11-19): cut to whole sentences in code when that keeps the ask. No model call.
+    if (res and res.get("line") and 45 < len(res["line"].split()) <= 55 and not _AI_PAYQ.search(last_said)):
+        _t = trim_line(res["line"], 40)
+        if _t != res["line"] and len(_t.split()) >= 8 and (_t.rstrip().endswith("?") or not res["line"].rstrip().endswith("?")):
+            res["line"] = _t
+            st["trimmed"] = 1
     if res and _AI_WEAK.search(res.get("line", "")) and res.get("type") != "stop":
         res = reask("\n\nYour last answer used the words of someone who expects a no (worst case, hang up, "
                     "lost nothing, no pressure, not going to push, talking too much). Never. Give the short objection "

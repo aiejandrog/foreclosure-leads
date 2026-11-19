@@ -85,7 +85,7 @@ T = lambda t, spk='': {'spk': spk, 'text': t}
 
 # ------------------------------------------------------------------ 1. the never-say filter
 HITS = [
-    ('We will save your home, I promise. How does ten tomorrow sound?', 'promise'),
+    ('We will save your home, I promise. Later today or first thing tomorrow?', 'promise'),
     ("He'll stop the sale for you.", 'promise'),
     ('Our advisor can definitely keep you in your house.', 'promise'),
     ('We stop the sale, that is what we do.', 'promise'),
@@ -200,8 +200,8 @@ else:
     print('skip the real-playbook size check (note not on this machine)')
 
 # ------------------------------------------------------------------ 4. re-ask behaviour
-m = Model(reply('We will save your home. How does ten tomorrow sound?', 'objection', 'close'),
-          reply('He lays out the options. How does ten tomorrow sound?', 'objection', 'close'))
+m = Model(reply('We will save your home. Later today or first thing tomorrow?', 'objection', 'close'),
+          reply('He lays out the options. Later today or first thing tomorrow?', 'objection', 'close'))
 res, st, log = run([T('I have it handled.')], m)
 chk(res.get('line', '').startswith('He lays out the options') and len(m.bodies) == 2,
     'a never-say line is asked once more, and the clean one is shown', res)
@@ -224,10 +224,10 @@ chk(res == {} and st.get('why', '').startswith('never:'), 'a never-say line that
 trimmable = ('Okay, so the bank is looking at it. And by the way, the bank and the court are two different offices. '
              'They do not talk to each other, and the sale does not wait for the bank to finish its review of your file. '
              'If the date gets here first, the house is sold, and nobody at the bank will have called you about it. '
-             'How does ten tomorrow morning sound?')
+             'Later today or first thing tomorrow?')
 m = Model(reply(trimmable, 'objection', 'problem'))
 res, st, log = run([T('The bank is working with me.')], m)
-chk(len(m.bodies) == 1 and res.get('line', '').endswith('How does ten tomorrow morning sound?')
+chk(len(m.bodies) == 1 and res.get('line', '').endswith('Later today or first thing tomorrow?')
     and len(res['line'].split()) <= 45 and st.get('trimmed'),
     'a long line that trims cleanly to whole sentences is cut in code, no second model call', res.get('line'))
 
@@ -266,7 +266,7 @@ chk(res.get('line') and st.get('ptok') == 4800 and st.get('cached') == 3900 and 
 chk('prompt_cache_key' not in json.dumps(Model().bodies) and not cs.AI_CACHE_KEY, 'prompt_cache_key is off unless set')
 
 # ------------------------------------------------------------------ 6. speaker: a read-aloud fragment is the caller
-coach = 'Okay, so the bank looking at it and the court selling it are two different offices. How does ten tomorrow sound?'
+coach = 'Okay, so the bank looking at it and the court selling it are two different offices. Later today or first thing tomorrow?'
 chk(cs._reading_line('the court selling it are two different offices', [coach]), 'a piece of the coach line, read aloud, is the caller')
 chk(not cs._reading_line('two different offices? what do you mean', [coach]), 'a homeowner echoing a few of its words is not')
 chk(not cs._reading_line('ten tomorrow sounds fine', [coach]), 'a short answer that shares words is not')
