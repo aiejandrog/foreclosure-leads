@@ -4,12 +4,13 @@ Alex: "I need a better system for logging the phone calls I am dialing on the re
 Whitepages but that should be marked down on the call mode." And: "we still mark it as one dial right?"
 
 LEGAL REVIEW: calling relatives is not cleared by the attorney. With DEALFLOW_RELATIVE_DIAL unset the
-page never dials a number tagged relative; it records a call placed on the phone. Checks:
+initial call button records a call placed on the phone. The outcome screen allows an explicit redial
+of that current number, as requested by Alejandro on 2026-11-19. Checks:
 - the switch bakes false by default and true only for DEALFLOW_RELATIVE_DIAL=1
 - the bridge /notes merge unions notes.wpr by number, relative wins over not sure
 - picking Relative shows the attorney warning and a "log a call" label
 - a relative number goes to notes.wpr only (not wpm, not notes.phone), the card's button does not dial
-  (href '#'), there is no redial, and the call is ONE dial row tagged rel 'r' with its outcome
+  (href '#'), the outcome screen offers redial, and the call is ONE dial row tagged rel 'r' with its outcome
 - a relative call does not set "Contacted", is never texted, and the strip counts it as a subset
 - the board merge unions wpr; another lead resets the choice to Owner
 - with the switch on, the same number gets a real tel: link
@@ -120,6 +121,8 @@ JS = """async ([rows, cov, A, B]) => {
   o.wpm = (notes[A].wpm||[]).indexOf('3055550190');
   o.phone = notes[A].phone || '';
   o.redial = !!document.getElementById('redial');
+  o.redialHref = document.getElementById('redial').getAttribute('href');
+  o.redialBeforeOutcomes = !!(document.getElementById('redial').compareDocumentPosition(document.querySelector('[data-fast]')) & Node.DOCUMENT_POSITION_FOLLOWING);
   const dl = notes[A].dials || [];
   o.pending = dl.length - d0 + '|' + (dl.slice(-1)[0]||{}).oc + '|' + (dl.slice(-1)[0]||{}).rel;
   document.querySelector('.oc button[data-oc="talked"]').click();
@@ -181,6 +184,20 @@ with sync_playwright() as p:
     pg2.goto('file://' + page(True))
     pg2.wait_for_timeout(300)
     on = pg2.evaluate(JS_ON, [rows, cov, A['case']])
+    redial = pg2.evaluate("""() => {
+      screenOutcome();
+      const number = cur.p[phIdx], c = cur.c;
+      const a = document.getElementById('redial');
+      a.addEventListener('click', e => e.preventDefault());
+      const before = (notes[c].dials || []).length;
+      a.click();
+      const first = (notes[c].dials || []).slice(-1)[0];
+      const counted = notes[c].dials.length - before;
+      notes[c].optout = true;
+      a.click();
+      return {counted, ph4:first.ph4, expected:number.slice(-4), rel:first.rel,
+              blocked:notes[c].dials.length === before + 1, screen:SCREEN};
+    }""")
     b.close()
 
 rec('page runs without a script error', not errs, errs)
@@ -192,7 +209,13 @@ rec('picking Relative shows the attorney warning and says it will not dial',
 rec('go button says log, not call', out['goLabel'].startswith('Save & log a call to'), out['goLabel'])
 rec('saved to notes.wpr as relative', out['wpr'] == '[["3055550190","r"]]', out['wpr'])
 rec('not saved as an owner number (wpm) or the phone box', out['wpm'] == -1 and out['phone'] != '3055550190', (out['wpm'], out['phone']))
-rec('outcome screen opens, no redial link', out['screen'] == 'outcome' and not out['redial'], (out['screen'], out['redial']))
+rec('outcome screen offers redial for the current number above the outcomes',
+    out['screen'] == 'outcome' and out['redial'] and out['redialHref'] == 'tel:+13055550190'
+    and out['redialBeforeOutcomes'], (out['screen'], out['redialHref'], out['redialBeforeOutcomes']))
+rec('redial counts one attempt on the current number and keeps the relative tag and screen',
+    redial['counted'] == 1 and redial['ph4'] == redial['expected'] and redial['rel'] == 'r'
+    and redial['screen'] == 'outcome', redial)
+rec('an opt-out arriving before redial prevents another attempt', redial['blocked'], redial)
 rec('the call is one pending dial row tagged rel r', out['pending'] == '1|pending|r', out['pending'])
 rec('the outcome replaces it: still one dial, tagged', out['logged'] == '1|talked|r', out['logged'])
 rec('the touch is tagged rel r', out['touch'] == 'r', out['touch'])

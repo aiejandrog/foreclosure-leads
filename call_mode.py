@@ -4669,7 +4669,7 @@ var TEXTPERSON=__TEXTPERSON__;
    can freshen it. A failed poll keeps the bake: the phone often cannot see the laptop. */
 var TEXTHOLD=__TEXTHOLD__;
 /* Relatives switch, baked from DEALFLOW_RELATIVE_DIAL (see _relative_dial_on). false = a number tagged
-   relative is log-only: no tel: link, no redial, the call he placed on his phone is recorded. */
+   relative's initial call is log-only. The outcome screen offers an explicit redial of the current number. */
 var RELDIAL=__RELDIAL__;
 var TEXTHOLDBAKE=TEXTHOLD;
 var TEXTHOLDLIVE=false;
@@ -7746,9 +7746,10 @@ function applyPasted(){
    see it. Both are call only, never texted from Call Mode. A tag on a number the lead already had (a
    traced number that turned out to be the sister's) is recorded the same way and wins over its source.
    LEGAL REVIEW: calling relatives is not cleared by the attorney. With RELDIAL false (the default) a
-   relative number is log-only: no tel: link, no redial; the button records a call he already placed so
+   relative number's initial button records a call he already placed so
    it still counts as one dial with an outcome. A visible warning shows whenever Relative is picked and
-   on the card of a relative number. Not checked against the do-not-call registry, same as any paste. */
+   on the card of a relative number. The outcome screen's current-number Redial link is available
+   at Alejandro's direction (2026-11-19). Not checked against the do-not-call registry, same as any paste. */
 var PASTEKIND = 'o', PASTEKIND_C = null;
 function wprList(c){
   var out = [], seen = {};
@@ -10349,6 +10350,7 @@ function screenOutcome(){
     + '</div>';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    +'<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
     + fast
     /* BACK TO THE NUMBERS (2026-11-02, Alex: "from when you click on a number ... i want to be able to
        go back in case i wanted to press on another number"). Returns to this lead's card, same number
@@ -10363,12 +10365,6 @@ function screenOutcome(){
     +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
       : '<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>')
     + refBlock
-    /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
-       hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
-       the proven path (the main dial button), and returning from the dialer lands right back on
-       this screen because the SCREEN guard defers any sync repaint. */
-    + (relLogOnly(r, phIdx) ? '<div class="nc" style="margin-top:8px">Relative: dial it on your phone. Call Mode only logs it.</div>'
-        : '<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>')
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'</div><div class="sheetpad"></div>';
@@ -10412,7 +10408,9 @@ function screenOutcome(){
       }
     };
   });
-  if($('redial')) $('redial').addEventListener('click', function(){
+  if($('redial')) $('redial').addEventListener('click', function(ev){
+    var check = pasteCheck(r, d);
+    if(check.why){ ev.preventDefault(); toast(check.why, {bad:true}); return; }
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
     var _rr = {d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial', by:caller()};
