@@ -2917,6 +2917,16 @@ const SENDER_DEFAULTS = Object.assign({llc:'__ENTITY_LLC__', web:'', partner:''}
 const _SENDER_PH = Object.assign({}, SENDER_DEFAULTS);   // a saved value equal to a default is "unset"
 let SENDER_RETIRED = __SENDER_RETIRED__;                  // sealed: old defaults to heal off devices
 let sender = Object.assign({}, SENDER_DEFAULTS);
+/* WHICH GMAIL ACCOUNT A COMPOSE LINK OPENS IN (2026-11-18, Alejandro: "it keeps sending off the
+   personal"). A mail.google.com ?view=cm link with no account named opens in Chrome's FIRST signed-in
+   Google account, which on his machines is the personal Gmail, so every Email button and every
+   worker composer fallback left from the personal address no matter what gmail.key held (the bridge,
+   cadence and outreach_email already log in with bsg_gmail.key). authuser pins the compose window to
+   the company login, the sender email sealed in the payload. Empty when no sender email is set. */
+function _gAuth(){
+  var e = String((sender && sender.email) || '').trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(e) ? '&authuser=' + encodeURIComponent(e) : '';
+}
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
 // blanks clobber the defaults, so a real generated email went out showing [YOUR NAME]/[YOUR COMPANY]/
@@ -13327,7 +13337,7 @@ function _cardMail(r){
     var to = LE.to || _mailableList(r)[0] || '';
     return {
       to: to, bcc: LE.bcc || '', subj: LE.subj || '', body: LE.body || '',
-      gurl: 'https://mail.google.com/mail/?view=cm&fs=1'
+      gurl: 'https://mail.google.com/mail/?view=cm&fs=1' + _gAuth()
           + '&to=' + encodeURIComponent(to)
           + '&su=' + encodeURIComponent(LE.subj || '')
           + '&body=' + encodeURIComponent(LE.body || '')
@@ -16864,7 +16874,7 @@ function genBalloonEmail(r, quiet){
                               stage:stage, at:Date.now(), lane:'balloon'}; } catch(e){}
   if(quiet) return D;
   // Manual path: open Gmail compose with the staged body — the same URL shape _cardMail bakes.
-  var gurl = 'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)
+  var gurl = 'https://mail.google.com/mail/?view=cm&fs=1'+_gAuth()+'&to='+encodeURIComponent(to)
            + '&su='+encodeURIComponent(D.en.subj)+'&body='+encodeURIComponent(D.en.body);
   try { window.open(gurl, '_blank', 'noopener'); } catch(e){}
   return D;
@@ -17193,7 +17203,7 @@ function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+e
 // Opens Gmail's own compose UI (web or the Gmail app, if it's the registered handler) with everything
 // pre-filled — vs. a plain mailto: link, which opens whatever the DEVICE'S default mail app is (Outlook,
 // nothing configured, etc.), not necessarily Gmail. Uses whichever Google account is already signed in.
-function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body),'_blank');}
+function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1${_gAuth()}&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body),'_blank');}
 function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;function ok(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);}function fb(){var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb);}else{fb();}}
 show('en');<\/script>
 </body></html>`;
@@ -17320,7 +17330,7 @@ function genPortfolioEmail(r, siblings, quiet){
               +   'document.getElementById("bodybox").textContent=D[l].body;'
               +   'document.getElementById("en").className=l==="en"?"on":"";'
               +   'document.getElementById("es").className=l==="es"?"on":"";}'
-              + 'function openGmail(){window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+encodeURIComponent(D[cur].subj)+"&body="+encodeURIComponent(D[cur].body),"_blank");}'
+              + 'function openGmail(){window.open("https://mail.google.com/mail/?view=cm&fs=1'+_gAuth()+'&to="+encodeURIComponent(to)+"&su="+encodeURIComponent(D[cur].subj)+"&body="+encodeURIComponent(D[cur].body),"_blank");}'
               + 'function openMail(){location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(D[cur].subj)+"&body="+encodeURIComponent(D[cur].body);}'
               + 'show("en");<\/script></body></html>';
   _openDoc(docHtml);
