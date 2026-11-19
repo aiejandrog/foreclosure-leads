@@ -7069,13 +7069,20 @@ function wpStreetFmt(street){
       if(/\d/.test(_lt) && SUF[_pt] && !ROUTE[_pt]){ unit = _lt.replace(/[^0-9A-Za-z\-]/g, ''); _rw.pop(); s = _rw.join(' '); }
     }
   }
-  var t = s.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  /* "12 1/2 SW 3 ST": the fraction stays one token ("/" kept), never "1st 2nd" (judge, 2026-11-18) */
+  var t = s.replace(/[^A-Za-z0-9 \/]/g, ' ').replace(/\s*\/\s*/g, '/').trim().split(/\s+/)
+           .filter(function(w){ return w && w !== '/'; });
   if(!unit && t.length >= 3 && /^\d+$/.test(t[t.length-1]) && SUF[t[t.length-2].toLowerCase()]
      && !ROUTE[t[t.length-2].toLowerCase()]) unit = t.pop();
+  /* A number after a building word is a label, not a street: "Bldg 3", "Lot 12", "Ph 2", never "3rd". */
+  var NOORD = {bldg:1, building:1, lot:1, ph:1, spc:1, space:1, trlr:1, rm:1, room:1, fl:1, floor:1, apt:1, unit:1, ste:1};
   var out = t.map(function(w, i){
     var lo = w.toLowerCase();
-    if(i > 0 && /^\d+$/.test(w)) return ROUTE[t[i-1].toLowerCase()] ? w : ord(w);
+    if(/\//.test(w)) return w;
+    if(i > 0 && /^\d+$/.test(w)) return (ROUTE[t[i-1].toLowerCase()] || NOORD[t[i-1].toLowerCase()]) ? w : ord(w);
     if(DIR[lo] || lo === 'us' || lo === 'sr' || lo === 'cr') return w.toUpperCase();
+    /* letters and digits mixed ("A1A", "B105") are codes: upper case; "5TH" stays an ordinal */
+    if(/\d/.test(w) && /[a-z]/i.test(w) && !/^\d+(st|nd|rd|th)$/i.test(w)) return w.toUpperCase();
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   });
   if(unit) out.push('Apt', unit.toUpperCase());
@@ -7090,8 +7097,11 @@ function wpSearchAddr(r){
   var a = String((r && r.a) || '').trim();
   if(!a) return '';
   var parts = a.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
-  var street = wpStreetFmt(parts[0] || '');
-  var zip = (a.match(/(\d{5})(?:-\d{4})?\s*$/) || [])[1] || String((r && r.z) || '');
+  var zip = (a.match(/(\d{5})(?:-?\d{4})?\s*$/) || [])[1] || String((r && r.z) || '');
+  /* no commas ("123 NW 5TH ST 33125"): the trailing ZIP (and FL) is not a unit */
+  var st0 = parts[0] || '';
+  if(parts.length === 1) st0 = st0.replace(/\s+(FL|FLA|FLORIDA)?\.?\s*\d{5}(-?\d{4})?\s*$/i, '');
+  var street = wpStreetFmt(st0);
   var city = '';
   for(var k = 1; k < parts.length && !city; k++){
     var c = parts[k].replace(/\b(FL|FLA|FLORIDA)\b\.?/ig, ' ').replace(/\d{5}(-\d{4})?/g, ' ')
