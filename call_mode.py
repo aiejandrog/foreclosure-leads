@@ -9149,7 +9149,12 @@ var COACH_OC = {appointment:'appt', callback:'callback', talked:'talked', not_in
 var _coachDone = null;
 function coachDonePick(d, origin, nowMs){
   if(origin !== COACH_ORIGIN || !d || d.src !== 'bsg-coach') return null;
-  var k = COACH_OC[String(d.outcome||'')];
+  /* 11-18: the coach now sends our own code (d.code, one of OUTCOMES); COACH_OC reads an older coach's
+     names. Either way it only lights a button: logging stays his tap, through every check. */
+  var k = '';
+  for(var j = 0; j < OUTCOMES.length; j++) if(OUTCOMES[j].k === d.code) k = d.code;
+  var _old = String(d.outcome||'');
+  k = k || (Object.prototype.hasOwnProperty.call(COACH_OC, _old) ? COACH_OC[_old] : '');
   var c = String(d['case']||'');
   if(!k || !c || c.length > 40 || /[<>"'&]/.test(c)) return null;
   var iso = /^\d{4}-\d{2}-\d{2}$/.test(String(d.iso||'')) ? String(d.iso) : '';
@@ -9175,7 +9180,9 @@ window.addEventListener('message', function(e){
   var d = coachDonePick(e.data, e.origin, Date.now());
   if(!d) return;
   _coachDone = d;
-  try{ if(SCREEN === 'outcome' && cur && cur.c === d.c) screenOutcome(); }catch(x){}
+  try{ if(SCREEN === 'outcome' && cur && cur.c === d.c){ screenOutcome();
+    /* Pre-selected, never submitted: bring the lit outcome into view so the one confirming tap is right there. */
+    var _cb = document.getElementById('coachdone'); if(_cb && _cb.scrollIntoView) _cb.scrollIntoView({block:'nearest'}); } }catch(x){}
 });
 document.addEventListener('click', function(e){
   var a = e.target && e.target.closest ? e.target.closest('a[href^="' + COACH_ORIGIN + '/"]') : null;

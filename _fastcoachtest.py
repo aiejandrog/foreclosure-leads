@@ -403,10 +403,11 @@ else:
             'picking the outcome waits for the wrap-up, and every AI line is told whether equity is verified')
         chk('AI_GAP=2500' in src and 'if(S.ai.busy||since<AI_GAP)' in src and src.count('S.ai.busy=false') >= 2,
             'one AI request at a time, and no more than one every 2.5 seconds')
-        chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[k].className='ai'" in src,
+        chk("fetch('/api/wrapup'" in src and 'wrapup:wrapOut(outcome)' in src and 'note:wo.note' in src and "btns[b].className='ai'" in src,
             'the call wrap-up is drafted on Stop, lit not picked, saved with the call and handed to Call Mode')
         chk("lane:(S.lead&&S.lead.lane)||''" in src and 'LANE_NAME' in src, 'the lead box names the lane and every AI line is told it')
-        chk("postMessage({src:'bsg-coach'" in src and 'handoff(outcome);' in src, 'ending a docked call hands the outcome and the time to Call Mode')
+        chk("return {src:'bsg-coach', v:2" in src and 'window.parent.postMessage(m, to)' in src and 'handoff(outcome);' in src,
+            'ending a docked call hands the outcome (a Call Mode code) and the time to Call Mode')
         chk(o['tone'] == {'n': 4, 'first': ['short and sure', True], 'hard': [True, 3, True, True], 'beat': True, 'split': [2, True, True, True, 3], 'ask': [True, 3, True], 'curious': [True, 3],
                           'svg': True, 'text': 'Keep him. How does six this evening sound?', 'drawn': True, 'marks': 2},
             'the tone graph: a statement lands down, the hard question is low slow and quiet then silence, the ask for the hour goes down then waits, a real question goes up, and the line text is unchanged', o['tone'])

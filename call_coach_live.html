@@ -328,13 +328,20 @@ code{color:var(--accent)}
       <div class="wf" id="wrapfacts"></div>
       <textarea id="wrapnote" rows="3" placeholder="Note for the log (edit freely)"></textarea>
     </div>
+    <!-- Call Mode's own outcome codes (call_mode.CALL_OUTCOMES), so the coach and Call Mode name a call
+         the same way. Docked, the pick only LIGHTS that button on Call Mode's outcome screen: the call
+         is logged once, by his tap there, through every Call Mode check. -->
     <div class="grid">
-      <button onclick="Coach.finish('talked')">Talked</button>
-      <button onclick="Coach.finish('appointment')">Appointment</button>
-      <button onclick="Coach.finish('callback')">Callback promised</button>
-      <button onclick="Coach.finish('not_interested')">Not interested</button>
-      <button onclick="Coach.finish('voicemail')">Voicemail / no answer</button>
-      <button onclick="Coach.finish('bad_number')">Bad number</button>
+      <button data-oc="talked" onclick="Coach.finish('talked')">Talked</button>
+      <button data-oc="appt" onclick="Coach.finish('appt')">Appointment set</button>
+      <button data-oc="callback" onclick="Coach.finish('callback')">Callback requested</button>
+      <button data-oc="notint" onclick="Coach.finish('notint')">Soft no (call back later)</button>
+      <button data-oc="voicemail" onclick="Coach.finish('voicemail')">Left voicemail</button>
+      <button data-oc="noanswer" onclick="Coach.finish('noanswer')">No answer</button>
+      <button data-oc="gate" onclick="Coach.finish('gate')">Not the owner</button>
+      <button data-oc="badnum" onclick="Coach.finish('badnum')">Bad number</button>
+      <button data-oc="wrong" onclick="Coach.finish('wrong')">Wrong number</button>
+      <button data-oc="dnc" onclick="Coach.finish('dnc')">Hard no (do not call)</button>
     </div>
     <div class="row" style="justify-content:center">
       <button onclick="Coach.finish('')">Skip &mdash; just save</button>
@@ -1880,7 +1887,13 @@ function stop(){
 /* AI WRAP-UP. The model reads the whole call and drafts the log entry: outcome, what they want, the
    pushback, the time agreed, a note. It only DRAFTS: its outcome is lit, not picked, and the note is
    yours to edit. What you tap and what is left in the box is what gets saved and handed to Call Mode. */
-var WRAP_BTN={talked:0, appointment:1, callback:2, not_interested:3, voicemail:4, bad_number:5};
+/* ONE VOCABULARY (11-18). The coach used its own outcome names (appointment, not_interested,
+   bad_number, "voicemail / no answer") while Call Mode logs CALL_OUTCOMES codes, so the two records of
+   one call disagreed. Every outcome here is now a Call Mode code. ocCode() still reads the old names,
+   from a coach server that has not been restarted since this change. */
+var OC_CODES=['noanswer','voicemail','callback','talked','appt','gate','badnum','notint','wrong','dnc'];
+var OC_OLD={appointment:'appt', not_interested:'notint', bad_number:'badnum'};
+function ocCode(x){ x=String(x||''); if(OC_OLD[x]) return OC_OLD[x]; return OC_CODES.indexOf(x)>=0?x:''; }
 function wrapAsk(){
   S.wrap=null; S.wrapPending=true;
   $('wraphead').textContent='AI wrap-up \u00b7 reading the call\u2026'; $('wrapfacts').textContent='';
@@ -1897,7 +1910,8 @@ function wrapAsk(){
     if(j.objection) bits.push('Pushback: '+j.objection);
     $('wrapfacts').textContent=bits.join('  \u00b7  ');
     if(!$('wrapnote').value) $('wrapnote').value=j.note||'';
-    var k=WRAP_BTN[j.outcome]; if(k!=null&&btns[k]) btns[k].className='ai';
+    var k=ocCode(j.outcome);
+    for(var b=0;b<btns.length;b++) if(k&&btns[b].getAttribute('data-oc')===k) btns[b].className='ai';
   }).catch(function(){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; });
 }
 function wrapOut(outcome){
@@ -1907,15 +1921,25 @@ function wrapOut(outcome){
 /* HAND THE RESULT TO CALL MODE. Docked inside Call Mode, the coach used to end with "log the outcome
    in Call Mode too", and a time booked here lived only in this page. Now the outcome picked here and
    the day and time that were heard go to the page that framed the coach, which puts them on its own
-   outcome and after-call screens. Only the case number, the outcome and the time are sent. */
+   outcome and after-call screens. Only the case number, the outcome and the time are sent.
+   It never logs: Call Mode lights the same outcome and he taps it there once (11-18), so the dial,
+   the cooldown and every do-not-call, opt-out and stay check run exactly as on a call with no coach.
+   `code` is the Call Mode code; `outcome` keeps the old name where there was one, for a Call Mode page
+   published before this change (it reads only `outcome`). */
+var OC_NEWNAME={appt:'appointment', notint:'not_interested', badnum:'bad_number'};
+function handoffMsg(outcome){
+  var code=ocCode(outcome); if(!code) return null;
+  var wo=wrapOut(code);
+  var w=S.fc.whenObj||(wo.when?fcWhen(norm(wo.when)):null), at=fcWhenAt(w, Date.now());
+  return {src:'bsg-coach', v:2, 'case':(S.lead&&S.lead['case'])||'', code:code, outcome:OC_NEWNAME[code]||code,
+    when:w?w.text:'', iso:at.iso, hm:at.hm, note:wo.note, want:wo.want, objection:wo.objection};
+}
 function handoff(outcome){
   try{
     if(!outcome||window.parent===window) return;
-    var wo=wrapOut(outcome);
-    var w=S.fc.whenObj||(wo.when?fcWhen(norm(wo.when)):null), at=fcWhenAt(w, Date.now());
+    var m=handoffMsg(outcome); if(!m) return;
     var to=(location.ancestorOrigins&&location.ancestorOrigins.length)?location.ancestorOrigins[0]:'*';
-    window.parent.postMessage({src:'bsg-coach', v:1, 'case':(S.lead&&S.lead['case'])||'', outcome:outcome,
-      when:w?w.text:'', iso:at.iso, hm:at.hm, note:wo.note, want:wo.want, objection:wo.objection}, to);
+    window.parent.postMessage(m, to);
   }catch(e){}
 }
 function finish(outcome){
@@ -2088,7 +2112,7 @@ if(window.addEventListener) window.addEventListener('message', function(ev){
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
 var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
-            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, leadMsg:function(d){ return fcLeadMsg(d); }, resetCall:function(){ resetCall(); return {lines:S.lines.length, ai:S.ai.line, hist:S.ai.hist.length, box:$('ailine').className, fires:S.fc.fires.length}; }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
+            echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, leadMsg:function(d){ return fcLeadMsg(d); }, ocCode:function(x){ return ocCode(x); }, handoffMsg:function(o){ return handoffMsg(o); }, resetCall:function(){ resetCall(); return {lines:S.lines.length, ai:S.ai.line, hist:S.ai.hist.length, box:$('ailine').className, fires:S.fc.fires.length}; }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
             card:function(){ return S.fc.card; }, fires:function(){ return S.fc.fires; }, stage:function(){ return S.stage; },
             state:function(){ return {cards:S.autoCards.length, fired:S.objFired, rf:S.rfFired,
