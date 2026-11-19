@@ -454,8 +454,8 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'My lawyer is on it.'}])
         chk('these four beats and nothing else, forty words at most' in ALLMSG(AI['seen'][-1]), 'the first lawyer answer is four short beats')
-        AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Fair enough. But the sale still comes in about a week."
-        chk(suggest2([{'spk': '', 'text': 'I am telling you no.'}]).get('line') == 'But the sale still comes in about a week.', '"Fair enough." is cut out of the line too')
+        AI['reply'] = "HEARD: x\nTYPE: objection\nSTEP: close\nSAY: Fair enough. But the filing does not wait on any of us."
+        chk(suggest2([{'spk': '', 'text': 'I am telling you no.'}]).get('line') == 'But the filing does not wait on any of us.', '"Fair enough." is cut out of the line too')
         chk(AI['seen'][-1]['body'].get('model') == 'claude-sonnet-5-5', 'the model asked is Sonnet: %s' % AI['seen'][-1]['body'].get('model'))
         AI['reply'] = work
         suggest([{'spk': '', 'text': 'I do not have any money.'}])

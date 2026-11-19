@@ -855,6 +855,60 @@ def never_say(line, pb=None):
     return "", ""
 
 
+# FACT CHECK (11-19, replay grader): the lines the judge failed most were facts the coach was never given.
+# never_say() knows only the playbook; these rules also need THIS call: is a sale date known, is equity
+# verified, what did the homeowner actually say. A hit is asked again once with the reason, then dropped.
+_HOURW = r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon)"
+_TIME_RX = re.compile(r"\b(?:at\s+" + _HOURW + r"(?:\s+(?:o['’]?clock|thirty|fifteen|forty[- ]five))?"
+                      r"|" + _HOURW + r"\s+o['’]?clock|" + _HOURW + r"\s+(?:thirty|fifteen|forty[- ]five)\b)", re.I)
+FACT_RULES = (
+    ("availability", re.compile(r"\b(?:he|the advisor|our (?:senior )?advisor)(?:['’]s| is| has)(?: got)?\s+(?:an?\s+)?"
+                                r"(?:open(?:ing)?|free|available|a slot|a spot|time)\b", re.I),
+     "it claims the senior advisor's availability, which you do not know. Offer 'later today or first thing tomorrow' "
+     "and let them pick."),
+    ("advisor_acts", re.compile(r"\b(?:he|the advisor|our (?:senior )?advisor)(?:['’]ll| will| can| is going to| gonna)?\s+"
+                                r"(?:ask|go to|petition|file (?:with|in)|talk to|call|get)\s+(?:the|your)\s+(?:court|judge|clerk)\b", re.I),
+     "it says the advisor himself goes to the court. He reviews the case and lays out the options; licensed "
+     "professionals carry them out."),
+    ("promise", re.compile(r"\bkeep (?:a|the) roof over|\byou(?:['’]ll| will)? (?:get to )?keep (?:the|your) (?:house|home|place)\b"
+                           r"|\bmake[s]? sure (?:the|your) (?:sale|closing|deal) (?:goes through|closes|happens)"
+                           r"|\b(?:he|we)(?:['’]ll| will) (?:get|make) (?:it|this|everything) (?:handled|taken care of|go away|right)", re.I),
+     "it promises an outcome. Offer options, never an outcome."),
+)
+
+
+def fact_check(line, days=None, lane="", eq="", convo=""):
+    """('rule', 'reason') when `line` states a fact this call never gave the coach, else ('', '')."""
+    s = str(line or "")
+    said = str(convo or "").lower()
+    for name, rx, why in FACT_RULES:
+        if rx.search(s):
+            return name, why
+    for m in _TIME_RX.finditer(s):
+        hour = re.search(_HOURW, m.group(0), re.I).group(0).lower()
+        if not re.search(r"\b" + hour + r"\b", said):
+            return "time", ("it names a clock time nobody on the call said. Offer 'later today or first thing tomorrow', "
+                            "or repeat the time they gave.")
+    try:
+        known = int(days) >= 0
+    except (TypeError, ValueError):
+        known = False
+    # Only a STATEMENT that a sale is set counts; asking about the sale date is how he finds out.
+    _stmt = " ".join(x for x in re.split(r"(?<=[.!?])\s+", s) if not x.rstrip().endswith("?"))
+    if (not known or str(lane or "").lower() == "filing") and re.search(
+            r"\b(?:before (?:the|that|your) (?:sale|auction)(?: date)?|(?:the|that|your) (?:sale|auction)(?: date)? (?:is|comes|was|gets?) "
+            r"(?:set|scheduled|coming|next|in|on|this|still|soon|close)|(?:sale|auction) date (?:is|comes)|still comes in)\b", _stmt, re.I) \
+            and not re.search(r"\b(?:sale|auction|date)\b", said):
+        return "sale_date", ("it mentions a sale date or an auction, but no sale date is known for this call and the "
+                             "homeowner has not mentioned one. Talk about the filing and the options instead.")
+    if str(eq or "").lower() != "verified" and re.search(
+            r"\b(?:your|the|that|all that|plenty of|lot of|some) equity\b|\bmoney (?:in|left in) (?:it|the house|the place|your house)\b", s, re.I) \
+            and not re.search(r"not interested in saving your property, or the equity you['’]ve got in it", s, re.I):
+        return "equity", ("it says or implies they have equity, which nobody has verified. Say 'whatever you've got in the "
+                          "place' or 'if there's equity in it, he'll tell you'.")
+    return "", ""
+
+
 def sale_in_words(days):
     """How far off the court sale is, in words (the line may not carry a digit). '' when unknown."""
     try:
@@ -1371,6 +1425,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     if lane in AI_LANES:
         system += "\n\nTHIS LEAD: " + AI_LANES[lane]
     when = sale_in_words(days) if lane != "filing" else ""
+    if not when:
+        system += ("\n\nNO SALE DATE IS KNOWN FOR THIS CALL. Never mention a sale date, an auction or 'that date' "
+                   "unless the homeowner says one first. Talk about the filing and the options.")
+    system += ("\n\nNEVER INVENT: the advisor's availability, a clock time nobody said, or what the advisor does at "
+               "the court. Offer 'later today or first thing tomorrow'.")
     if when:
         system += ("\n\nCourt calendar for this homeowner: the sale is set " + when + ". You may say that in those "
                    "words when it helps the line. Never say a date.")
@@ -1456,7 +1515,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         # The last gate: a line that reached here through a later re-ask (too long, weak, repeat, fold) is
         # checked against the never-say rules too. No budget for another ask at this point: it is dropped.
         if res and res.get("line"):
-            rule = never_say(res["line"], pbp)[0]
+            rule = check(res["line"])[0]
             if rule:
                 _never_log(rule, "dropped")
                 st["why"] = "never:" + rule
@@ -1464,6 +1523,12 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
         st["why"] = "" if (res and res.get("line")) else (st["why"] or "empty")
         st["model"] = use["model"]
         return res
+
+    _convo = " ".join(r.split(": ", 1)[-1] for r in rows if not r.startswith("CALLER"))
+
+    def check(line):
+        r = never_say(line, pbp)
+        return r if r[0] else fact_check(line, days, lane, eq, _convo)
 
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
     if _AI_META.search(last_said):
@@ -1491,11 +1556,11 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     # NEVER SAY. A line that breaks the playbook's never-say list is asked once more with the reason, and
     # dropped if the second one breaks it too. How-we-get-paid words have their own re-ask below, with the facts.
     if res and res.get("line"):
-        rule, why = never_say(res["line"], pbp)
+        rule, why = check(res["line"])
         if rule and rule != "pay":
             r2 = reask("\n\nYour last answer could not be shown because " + why + " Write the line again without "
                        "that, same point, same ask.")
-            if r2 and r2.get("line") and not never_say(r2["line"], pbp)[0]:
+            if r2 and r2.get("line") and not check(r2["line"])[0]:
                 _never_log(rule, "fixed")
                 res = r2
             else:

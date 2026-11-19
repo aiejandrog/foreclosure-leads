@@ -109,6 +109,13 @@ the time), and does not skip past an unanswered real question or objection.
 - sayable: short enough to say in one breath or two (roughly under forty-five words), one point and at most one \
 question, natural spoken English (or Spanish), nothing that reads like writing.
 
+ALLOWED BY THE PLAYBOOK (never a fail on their own): "whatever you've got in the place", "what you've put into it", \
+"if there's equity in it, he'll tell you", the fixed line "So you're not interested in saving your property, or the equity \
+you've got in it?", "ask the court for more time" named as one of the options, "later today or first thing tomorrow", and \
+the general figures in the playbook's numbers section said in words. Every lead is a homeowner with a foreclosure filing \
+or tax-sale case on the home, so "the filing" or "the case" is grounded even with no lead facts; a SALE DATE is not, \
+unless the lead facts or the homeowner give one.
+
 score: overall quality of SAY as the next thing to say, an integer 0-10 (10 = exactly what a top closer would say here).
 failure_classes: for every failed criterion, one or more labels from this fixed list (no others): """ + ", ".join(FAILURE_CLASSES) + """. \
 Empty list when everything passes.
