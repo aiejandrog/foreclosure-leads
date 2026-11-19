@@ -361,6 +361,14 @@ def _wp_street(street):
     m = _UNIT_RE.search(street or '')
     unit = m.group(1) if m else ''
     base = _UNIT_RE.sub(' ', str(street or ''))
+    raw = base.split()
+    if (not unit and len(raw) >= 3 and re.search(r'\d', raw[-1])
+            and re.sub(r'[^a-z]', '', raw[-2].lower()) in _SUFFIXES
+            and re.sub(r'[^a-z]', '', raw[-2].lower()) not in _ROUTE_WORDS):
+        # "... ST 9-14": a bare unit kept whole, before the split below cuts it into "9th 14th"
+        # (2026-11-18, found against the paid Whitepages records, which spell it "Apt 9-14")
+        unit = re.sub(r'[^0-9A-Za-z\-]', '', raw.pop())
+        base = ' '.join(raw)
     toks = re.sub(r'[^A-Za-z0-9 ]', ' ', base).split()
     if (not unit and len(toks) >= 3 and toks[-1].isdigit() and toks[-2].lower() in _SUFFIXES
             and toks[-2].lower() not in _ROUTE_WORDS):

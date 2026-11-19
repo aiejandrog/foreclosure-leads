@@ -62,7 +62,10 @@ chk("' advisor call booked: '" in cm and "'&date=' + _cda.iso" in cm and 'Tap th
     'the booked time lands in the note, opens the calendar on that day, and nothing is logged without a tap')
 if shutil.which('node'):
     pick = cm[cm.index('var COACH_OC = '):cm.index('/* The handoff for THIS lead')]
-    hjs = "var COACH_ORIGIN='http://127.0.0.1:8777';\n" + pick + r"""
+    sys.path.insert(0, HERE)
+    import call_mode as _cmod
+    hjs = ("var COACH_ORIGIN='http://127.0.0.1:8777';\nvar OUTCOMES=" + json.dumps([{'k': o[0], 't': o[1]} for o in _cmod.CALL_OUTCOMES])
+           + ";\n" + pick + r"""
 var ok={src:'bsg-coach', 'case':'CACE-26-000001', outcome:'appointment', when:'tomorrow at 9 AM', iso:'2026-11-17', hm:'09:00',
         note:'Wants to <keep> it.   Call set for 9.', want:'keep', objection:'has an "attorney"'};
 var o=[coachDonePick(ok,'http://127.0.0.1:8777',5),
@@ -70,9 +73,12 @@ var o=[coachDonePick(ok,'http://127.0.0.1:8777',5),
        coachDonePick(Object.assign({},ok,{src:'x'}),'http://127.0.0.1:8777',5),
        coachDonePick(Object.assign({},ok,{outcome:'delete_everything'}),'http://127.0.0.1:8777',5),
        coachDonePick(Object.assign({},ok,{'case':'<img src=x>'}),'http://127.0.0.1:8777',5),
-       coachDonePick(Object.assign({},ok,{when:'<b>9</b> "x"', iso:'17/11/2026', hm:'25:00'}),'http://127.0.0.1:8777',5)];
+       coachDonePick(Object.assign({},ok,{when:'<b>9</b> "x"', iso:'17/11/2026', hm:'25:00'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{code:'appt', outcome:'appointment'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{code:'dnc', outcome:'dnc'}),'http://127.0.0.1:8777',5),
+       coachDonePick(Object.assign({},ok,{outcome:'hasOwnProperty'}),'http://127.0.0.1:8777',5)];
 console.log(JSON.stringify(o));
-"""
+""")
     rr = subprocess.run([shutil.which('node'), '-e', hjs], capture_output=True, text=True, timeout=60)
     if rr.returncode:
         chk(False, 'coach handoff check runs in node: %s' % rr.stderr[-300:])
@@ -87,6 +93,8 @@ console.log(JSON.stringify(o));
             'the wrap-up note is saved only for the outcome he tapped, with markup characters dropped')
         chk(ho[5] and ho[5]['when'] == 'b9b x' and ho[5]['iso'] == '' and ho[5]['hm'] == '',
             'the time text is stripped to plain characters and a malformed date or time is dropped: %s' % ho[5])
+        chk(ho[6] and ho[6]['k'] == 'appt' and ho[7] and ho[7]['k'] == 'dnc' and ho[8] is None,
+            'the coach\'s Call Mode code is taken as is, and a prototype key is not an outcome')
 
 # --- JS behaviour in node ------------------------------------------------------------------
 node = shutil.which('node')
@@ -309,7 +317,7 @@ with tempfile.TemporaryDirectory() as d:
         AI['reply'] = ('OUTCOME: appointment\nWANT: keep\nOBJECTION: has an attorney\nWHEN: tomorrow at nine\n'
                        'NOTE: Wants to keep the house, attorney is filing next week. Advisor call set for tomorrow morning.')
         st, w = wrap({'Origin': own, 'Sec-Fetch-Site': 'same-origin'})
-        chk(st == 200 and w == {'outcome': 'appointment', 'want': 'keep', 'objection': 'has an attorney', 'when': 'tomorrow at nine',
+        chk(st == 200 and w == {'outcome': 'appt', 'want': 'keep', 'objection': 'has an attorney', 'when': 'tomorrow at nine',
                                 'note': 'Wants to keep the house, attorney is filing next week. Advisor call set for tomorrow morning.'},
             'the wrap-up drafts outcome, want, pushback, time and note: %s' % w)
         AI['reply'] = 'OUTCOME: sold the house to us\nNOTE: x'

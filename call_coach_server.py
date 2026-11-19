@@ -15,9 +15,12 @@ same origin can accept the audio POST. One process, two jobs.
 import json
 import os
 import re
+import socket
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
@@ -30,6 +33,7 @@ PORT = int(os.environ.get("COACH_PORT", "8777"))
 HOST = "127.0.0.1"
 
 _lock = threading.Lock()
+_meta_lock = threading.Lock()     # every read-modify-write of a session's meta.json (audio, checkpoint, end)
 _leads = None
 _leads_mtime = 0.0
 
@@ -115,6 +119,15 @@ AI_MODEL = os.environ.get("COACH_AI_MODEL", "claude-sonnet-5-5")
 # wife in surgery, an ex-wife on the deed). COACH_AI_FAST_MODEL="" turns the fast lane off.
 AI_FAST_MODEL = os.environ.get("COACH_AI_FAST_MODEL", "deepseek-v4-1-flash")
 AI_TIMEOUT = float(os.environ.get("COACH_AI_TIMEOUT", "9"))      # seconds per try; Sonnet's slow lines run 4 to 6
+# ONE CLOCK FOR THE WHOLE LINE (forensics 11-18). Every try had its own 9 s and a line could be asked up to
+# four times (the first ask, then too long / weak words / made-up pay answer / a goodbye), each with a retry:
+# worst case well past half a minute, while the page holds its "asking" flag and asks nothing else. Shown
+# lines came back in 1.0 s typical and 4.4 s worst, so anything still out at 8 s is a moment that has passed.
+# Every try and every re-ask now draws on one budget; a re-ask that cannot fit is skipped and the line is
+# fixed in code (trimmed) or dropped.
+AI_BUDGET = float(os.environ.get("COACH_AI_BUDGET", "8"))
+AI_REASK_MIN = 2.0          # seconds of budget a re-ask needs to be worth sending
+AI_TRY_MIN = 0.8            # below this a try cannot come back in time
 # The call has a path (CALL_SCRIPT_NEPQ.md, the same stages the page shows). The first version of
 # this prompt only said "reflect and ask a question", and on test call 11-16 11:34 it circled:
 # "sounds like you're feeling overwhelmed, what would a good outcome look like" three times and
@@ -341,7 +354,71 @@ AI_SYSTEM = (
     "STEP: <one step id from the path>\n"
     "SAY: <the line>")
 _AI_BAD = re.compile(r"[\d$]")
-AI_SPLIT = "\n\n<<<THIS CALL>>>\n"       # everything before it is identical on every request (cacheable)
+
+# DIGITS THAT ARE NOT FIGURES. The no-number rule exists so the model never invents an amount, a rate or a
+# date. It was enforced as "any digit kills the line", so "five minutes" written as "5 minutes", "24/7" or
+# "1st" threw away an otherwise good answer and left the box on the old line. Those few forms are spelled
+# out here before the check; anything else with a digit (an amount, a percent, a year) still never shows.
+_SMALL = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve")
+_ORD = {"1st": "first", "2nd": "second", "3rd": "third", "4th": "fourth", "5th": "fifth", "6th": "sixth",
+        "7th": "seventh", "8th": "eighth", "9th": "ninth", "10th": "tenth"}
+
+
+def spell_digits(line):
+    """`line` with the harmless digit forms in words: 24/7, ordinals 1st-10th, and a lone 0-12 followed by a
+    word ("5 minutes", "chapter 7 or"). Money, percents, decimals, times and longer numbers are left alone,
+    so the digit check still catches them."""
+    s = re.sub(r"(?<![\w$])24\s*/\s*7(?![\w%])", "around the clock", str(line or ""))
+    s = re.sub(r"(?<![\w$.,])(10th|[1-9](?:st|nd|rd|th))\b", lambda m: _ORD.get(m.group(1).lower(), m.group(1)), s, flags=re.I)
+    s = re.sub(r"(?<![\w$.,:/])(1[0-2]|[0-9])(?=(?:\s+[A-Za-z])|[,.?!]?$)(?!\s*(?:%|percent|k\b|grand|thousand|hundred|million|dollars?|bucks|am\b|pm\b|a\.m|p\.m|o.?clock))",
+               lambda m: _SMALL[int(m.group(1))], s)
+    return s
+
+
+def _wordset(t):
+    return set(w for w in _words(t) if len(w) > 2)
+
+
+def near_dup(line, prior):
+    """The earlier line `line` repeats, or ''. Same words in the same order, or most of the same words
+    (forensics 11-18: 18 of 165 shown lines repeated an earlier line of the same call)."""
+    a = " ".join(_words(line))
+    ws = _wordset(line)
+    for p in prior:
+        if not p:
+            continue
+        if a and a == " ".join(_words(p)):
+            return p
+        pw = _wordset(p)
+        if len(ws) >= 5 and len(pw) >= 5 and len(ws & pw) / float(len(ws | pw)) >= 0.6:
+            return p
+    return ""
+
+
+def trim_line(line, limit=45):
+    """A line cut to whole sentences within `limit` words: the opening sentences that fit, plus the closing
+    question (the ask) when the line ends on one. Used when a too-long line cannot be asked again in time.
+    Forensics 11-18: 23 of 165 shown lines ran past fifty-five words, the longest 114."""
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(line or "").strip()) if x.strip()]
+    if len(" ".join(sents).split()) <= limit or len(sents) < 2:
+        return line
+    tail = sents[-1] if sents[-1].endswith("?") else ""
+    body = sents[:-1] if tail else sents
+    room = limit - len(tail.split())
+    keep = []
+    for s in body:
+        if len(" ".join(keep + [s]).split()) > room:
+            break
+        keep.append(s)
+    if not keep and not tail:
+        return line
+    if not keep:
+        keep = [body[0]] if len((body[0] + " " + tail).split()) <= limit + 10 else []
+    out = " ".join(keep + ([tail] if tail else []))
+    return out or line
+
+
+AI_SPLIT ="\n\n<<<THIS CALL>>>\n"       # everything before it is identical on every request (cacheable)
 
 # THE PLAYBOOK. The prompt above knows the path of the call; it does not know the sales system.
 # That lives in one note the caller can edit (Jesse's CIOC, the objection moves, the questions, what
@@ -794,12 +871,15 @@ AI_LANES = {
 }
 
 
-def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
+def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", stat=None):
     """The next line for the caller as {"line", "step", "n", "of", "name"}, or {} (no key, nothing
     to answer, a slow or failed call, or a reply that breaks the no-numbers rule). Never raises: a
     dead model must not touch the call."""
+    st = stat if stat is not None else {}
+    st.update(deadline=time.monotonic() + AI_BUDGET, tries=0, err="", why="")
     key = venice_key()
     if not key:
+        st["why"] = "no_key"
         return {}
     rows = []
     for l in (lines or [])[-24:]:
@@ -812,6 +892,7 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
             who = "CALLER"            # one microphone: your line, read out, is the caller for certain
         rows.append(who + ": " + t[:400])
     if not rows:
+        st["why"] = "no_words"
         return {}
     # COST. Venice bills Claude with prompt caching: text it has seen in the last five minutes costs a
     # twentieth of new text. The rules and the playbook (about 13,000 of 16,000 tokens) are the same
@@ -858,6 +939,10 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
     said = " ".join(r.split(": ", 1)[1] for r in rows[-6:])
 
     use = {"model": AI_MODEL}
+    st["model"] = use["model"]
+
+    def left():
+        return st["deadline"] - time.monotonic()
 
     def ask(sys_text):
         static, _, call = sys_text.partition(AI_SPLIT)
@@ -867,20 +952,9 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
                 "messages": [{"role": "system", "content": static}, {"role": "user", "content": user}],
                 "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True,
                                       "strip_thinking_response": True}}
-        import urllib.request
-        out = ""
-        for _try in range(2):            # one retry: a dropped request must not leave the box blank
-            try:
-                req = urllib.request.Request(AI_URL, data=json.dumps(body).encode("utf-8"),
-                                             headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=AI_TIMEOUT) as r:
-                    j = json.loads(r.read().decode("utf-8"))
-                out = str(j["choices"][0]["message"].get("content") or "")
-            except Exception:
-                out = ""
-            if out.strip():
-                break
+        out = _ai_post(body, key, st)
         if not out.strip():
+            st["why"] = "model:" + (st["err"] or "empty")
             return {}
 
         def field(name):
@@ -895,20 +969,42 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
             step = "close"
         # No figure may come from the model. The one exception is the clock time the homeowner just
         # gave ("ten fifteen tomorrow"): repeating it back is the booking, and it is never a dollar sign.
+        if kind != "time":
+            line = spell_digits(line)
         bad = ("$" in line) if kind == "time" else bool(_AI_BAD.search(line))
         line = re.sub(r"\s*[\u2014\u2013]\s*", ", ", line)        # a dash is written, not spoken
-        if not line or line.upper().rstrip(".") == "SKIP" or len(line) > 640 or bad:
+        if not line or line.upper().rstrip(".") == "SKIP":
+            st["why"] = "skip"
+            return {}
+        if len(line) > 640:
+            st["why"] = "too_long_640"
+            return {}
+        if bad:
+            st["why"] = "digits"
             return {}
         line = no_praise(line)
+        st["why"] = ""
         res = {"line": line, "step": step, "of": len(AI_STEPS), "type": kind, "heard": heard[:200], "model": use["model"]}
         if step:
             res["n"] = AI_STEP_IDS.index(step) + 1
             res["name"] = AI_STEPS[res["n"] - 1][1]
         return res
 
+    def reask(extra):
+        """Ask again with `extra` added, or None when the budget has no room for another try."""
+        if left() < AI_REASK_MIN:
+            return None
+        return ask(system + extra)
+
+    def done(res):
+        st["why"] = "" if (res and res.get("line")) else (st["why"] or "empty")
+        st["model"] = use["model"]
+        return res
+
     last_said = rows[-1].split(": ", 1)[1] if rows else ""
     if _AI_META.search(last_said):
-        return {}                      # the callers are talking about the script: keep what is on screen
+        st["why"] = "meta"
+        return done({})                # the callers are talking about the script: keep what is on screen
     if not rows[-1].startswith("CALLER"):
         _given = [x for x in prior + [shown] if x]
         _ph = mate_hint(last_said, _given) or plan_hint(last_said, prior + [shown], when)
@@ -921,27 +1017,39 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
         if AI_FAST_MODEL and (_hint or _AI_PAYQ.search(last_said) or _AI_NOTINT.search(last_said)):
             use["model"] = AI_FAST_MODEL            # the content is handed over; the fast model says it
     res = ask(system)
+    # A FIGURE IN DIGITS. Asked once more with the rule spelled out, instead of leaving the box empty.
+    if not res and st["why"] == "digits":
+        r2 = reask("\n\nYour last answer had a number written in digits or a dollar sign, so it could not be shown. "
+                   "Write the line again with every number in words. If it is an amount, a rate or a date you were "
+                   "not given in these instructions, leave it out.")
+        if r2 is not None:
+            res = r2
     # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
-    # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose.
-    if (res and res.get("type") in ("objection", "question", "answer") and len(res.get("line", "").split()) > 55
+    # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose. With no
+    # time left to ask again, the line is cut to whole sentences in code.
+    if (res and res.get("type") in ("objection", "question", "answer", "unclear") and len(res.get("line", "").split()) > 55
             and not _AI_PAYQ.search(last_said)):
         n_words = len(res["line"].split())
-        short = ask(system + "\n\nYour last answer was " + str(n_words) + " words: \"" + res["line"] + "\" That is too "
-                    "long to say out loud. Say the same point in under forty words: keep the one sentence that matters "
-                    "and the one question, cut everything else. No second question, no extra reason.")
+        short = reask("\n\nYour last answer was " + str(n_words) + " words: \"" + res["line"] + "\" That is too "
+                      "long to say out loud. Say the same point in under forty words: keep the one sentence that matters "
+                      "and the one question, cut everything else. No second question, no extra reason.")
         if short and short.get("line") and len(short["line"].split()) < n_words and not folds(short):
             res = short
+        if len(res["line"].split()) > 55:
+            res["line"] = trim_line(res["line"], 45)
     if res and _AI_WEAK.search(res.get("line", "")) and res.get("type") != "stop":
-        res = ask(system + "\n\nYour last answer used the words of someone who expects a no (worst case, hang up, "
-                  "lost nothing, no pressure, not going to push, talking too much). Never. Give the short objection "
-                  "answer: agree in a few words, ONE reframe about their situation, then the ask with a time.")
-        if res and _AI_WEAK.search(res.get("line", "")):
-            return {}
+        res = reask("\n\nYour last answer used the words of someone who expects a no (worst case, hang up, "
+                    "lost nothing, no pressure, not going to push, talking too much). Never. Give the short objection "
+                    "answer: agree in a few words, ONE reframe about their situation, then the ask with a time.")
+        if not res or _AI_WEAK.search(res.get("line", "")):
+            st["why"] = st["why"] or "weak"
+            return done({})
     # A made-up answer about how we get paid is never shown: asked again with the facts, then dropped.
     if res and _AI_PAYLIE.search(res.get("line", "")):
-        res = ask(system + AI_PAY_ANSWER + " Your last answer invented how the company gets paid. That is forbidden.")
-        if res and _AI_PAYLIE.search(res.get("line", "")):
-            return {}
+        res = reask(AI_PAY_ANSWER + " Your last answer invented how the company gets paid. That is forbidden.")
+        if not res or _AI_PAYLIE.search(res.get("line", "")):
+            st["why"] = st["why"] or "paylie"
+            return done({})
     # THE CHALLENGE, guaranteed (Alex, 11-16: "why didn't you ask, so you're not interested in saving
     # your property, your equity?"). The first "not interested" of a call gets his question, word for
     # word, whatever the model wrote. Later ones get the model's other angles. A stop request is
@@ -953,20 +1061,73 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
                "type": "objection", "heard": last_said[:200]}
         res["n"] = AI_STEP_IDS.index(res["step"]) + 1
         res["name"] = AI_STEPS[res["n"] - 1][1]
-        return res
+        return done(res)
     # NEVER FOLD, enforced. If the line ends the call, or calls their words a stop request, and nobody
     # in the last few lines actually asked to stop being called, that line is not shown: the model is
     # asked again and told so. A second fold shows nothing rather than a goodbye.
     if res and folds(res) and not _AI_STOP.search(said + " " + res.get("heard", "")):
-        res = ask(system + "\n\nIMPORTANT: the homeowner has NOT asked to stop being called. Your last answer ended "
-                  "the call or treated their words as a stop request. That is wrong. Their last words are an "
-                  "objection: TYPE is objection. Answer it with a NEVER FOLD angle you have not used and go back "
-                  "to the ask. No goodbye, no 'take care', nothing about a list.")
-        if res and folds(res):
-            return {}
-        if res and res.get("type") == "stop":
+        res = reask("\n\nIMPORTANT: the homeowner has NOT asked to stop being called. Your last answer ended "
+                    "the call or treated their words as a stop request. That is wrong. Their last words are an "
+                    "objection: TYPE is objection. Answer it with a NEVER FOLD angle you have not used and go back "
+                    "to the ask. No goodbye, no 'take care', nothing about a list.")
+        if not res or folds(res):
+            st["why"] = st["why"] or "fold"
+            return done({})
+        if res.get("type") == "stop":
             res["type"] = "objection"
-    return res
+    # SAID ALREADY. The model is told every earlier line and still repeated one 18 times in 165 (forensics
+    # 11-18). A repeat is asked for once more in new words; a second repeat leaves the screen as it is.
+    if res and res.get("line") and res.get("type") != "stop":
+        dup = near_dup(res["line"], prior + [shown])
+        if dup:
+            r2 = reask("\n\nYour last answer repeated a line you already gave on this call: \"" + dup[:240] + "\". The "
+                       "homeowner has heard it. Answer their last words with something they have not heard yet, in new "
+                       "words, and keep moving toward the booking.")
+            if r2 and r2.get("line") and not near_dup(r2["line"], prior + [shown]) and not folds(r2):
+                res = r2
+            else:
+                st["why"] = "repeat"
+                return done({})
+    return done(res)
+
+
+def _ai_post(body, key, st):
+    """POST one request to the model; the reply text, or '' after at most two tries inside st's deadline.
+    A failure is recorded in st["err"] (timeout, http429, conn, badjson, ...) instead of vanishing: before
+    11-18 every exception became a silent blank line and the log could not tell a dead key from a slow model."""
+    data = json.dumps(body).encode("utf-8")
+    for attempt in range(2):
+        rem = st["deadline"] - time.monotonic()
+        if rem < AI_TRY_MIN:
+            st["err"] = st["err"] or "budget"
+            break
+        st["tries"] += 1
+        try:
+            req = urllib.request.Request(AI_URL, data=data,
+                                         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=min(AI_TIMEOUT, rem)) as r:
+                j = json.loads(r.read().decode("utf-8"))
+            out = str(j["choices"][0]["message"].get("content") or "")
+            if out.strip():
+                st["err"] = ""
+                return out
+            st["err"] = "empty"
+        except urllib.error.HTTPError as e:
+            st["err"] = "http%d" % e.code
+            if e.code in (400, 401, 402, 403, 404):
+                break                    # a refused request comes back refused; retrying only burns the clock
+        except urllib.error.URLError as e:
+            st["err"] = "timeout" if isinstance(e.reason, (socket.timeout, TimeoutError)) else "conn"
+        except (socket.timeout, TimeoutError):
+            st["err"] = "timeout"
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            st["err"] = "badjson"
+        except Exception as e:           # never let the model touch the call
+            st["err"] = type(e).__name__
+        if attempt == 0 and st["err"] not in ("timeout", "empty"):
+            # a dropped connection or a 429/5xx: a short pause, never longer than the clock allows
+            time.sleep(max(0.0, min(0.3, st["deadline"] - time.monotonic() - AI_TRY_MIN)))
+    return ""
 
 
 # THE CALL WRAP-UP. When the call ends the same model reads the whole transcript and drafts the log
@@ -975,6 +1136,20 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq=""):
 # himself; only then does it go to Call Mode. One microphone still mislabels who said what, and one
 # wrong "appointment" logged by a machine would corrupt the cadence and the stats.
 WRAP_OUTCOMES = ("appointment", "callback", "talked", "not_interested", "voicemail", "bad_number")
+# ONE VOCABULARY (11-18). The model keeps answering in the words above (they score well and it was
+# never re-tested on codes), but everything the coach stores or hands on is Call Mode's own outcome
+# code (call_mode.CALL_OUTCOMES; _coachhandofftest.py pins the two lists equal). The old names map
+# here so a meta.json from before this change and one from after mean the same thing.
+CALL_MODE_CODES = ("noanswer", "voicemail", "callback", "talked", "appt", "gate", "badnum", "notint", "wrong", "dnc")
+OLD_OUTCOME_NAMES = {"appointment": "appt", "not_interested": "notint", "bad_number": "badnum"}
+
+
+def outcome_code(v):
+    """A Call Mode outcome code, "auto_silence" (the 90-second stop), or None for anything else."""
+    v = str(v or "").strip().lower()
+    v = OLD_OUTCOME_NAMES.get(v, v)
+    return v if v in CALL_MODE_CODES or v == "auto_silence" else None
+
 WRAP_SYSTEM = (
     "You write the log entry for a phone call that just ended. The caller is Alejandro with Biscayne Solutions "
     "Group; the other person is a property owner with a court case or tax sale on the property. Labels in the "
@@ -1030,7 +1205,7 @@ def ai_wrapup(lines, lane=""):
         return {}
     want = field("WANT").lower()
     none = lambda v: "" if v.lower().rstrip(".") in ("none", "n/a", "unknown", "") else v
-    return {"outcome": oc, "want": want if want in ("keep", "sell", "undecided") else "",
+    return {"outcome": outcome_code(oc), "want": want if want in ("keep", "sell", "undecided") else "",
             "objection": none(field("OBJECTION"))[:80], "when": none(field("WHEN"))[:60], "note": none(field("NOTE"))[:320]}
 
 
@@ -1215,13 +1390,14 @@ def append_audio(sid, blob):
         f.write(blob)
     n = os.path.getsize(path)
     mp = os.path.join(d, "meta.json")
-    try:
-        with open(mp, "r", encoding="utf-8") as f:
-            m = json.load(f)
-        m["audio_bytes"] = n
-        _write_json(mp, m)
-    except (OSError, ValueError):
-        pass
+    with _meta_lock:
+        try:
+            with open(mp, "r", encoding="utf-8") as f:
+                m = json.load(f)
+            m["audio_bytes"] = n
+            _write_json(mp, m)
+        except (OSError, ValueError):
+            pass
     return n
 
 
@@ -1245,6 +1421,11 @@ def end_session(sid, payload):
     d = _sdir(sid)
     if not d:
         return None
+    with _meta_lock:
+        return _end_session(d, sid, payload)
+
+
+def _end_session(d, sid, payload):
     mp = os.path.join(d, "meta.json")
     try:
         with open(mp, "r", encoding="utf-8") as f:
@@ -1259,8 +1440,11 @@ def end_session(sid, payload):
     # one row per coach prompt: which intent, partial or final words, ms held, ms the words ran behind
     m["coach_fires"] = payload.get("coach_fires")
     m["consent_ack"] = payload.get("consent_ack")
-    m["outcome"] = payload.get("outcome")
+    m["outcome"] = outcome_code(payload.get("outcome"))
     m["wrapup"] = payload.get("wrapup")        # the AI draft and what the caller kept of it
+    if payload.get("ai_stats") is not None:
+        m["ai_stats"] = payload.get("ai_stats")  # asks, lines shown, and why the others were not
+    m.pop("checkpoint_utc", None)
     _write_json(mp, m)
     # One append-only line per call so outcomes are greppable without opening each session
     # folder. Lives INSIDE call_sessions/ so the same .gitignore line covers it.
@@ -1272,6 +1456,45 @@ def end_session(sid, payload):
             }, ensure_ascii=False) + "\n")
     except OSError:
         pass
+    return m
+
+
+def checkpoint_session(sid, payload):
+    """Save the call-so-far into meta.json without ending it. Forensics 11-18: 28 of 64 sessions were never
+    ended (tab reloaded or closed, next lead opened), and those kept no transcript and no coach_fires, so
+    ~60% of all AI asks left no trace. The page now checkpoints every minute and on pagehide. A checkpoint
+    never touches a session that has ended and never shortens what is already saved. {} when skipped."""
+    d = _sdir(sid)
+    if not d:
+        return None
+    mp = os.path.join(d, "meta.json")
+    with _meta_lock:
+        try:
+            with open(mp, "r", encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            m = {"session_id": sid}
+        if m.get("ended_utc"):
+            return {}
+        fires = payload.get("coach_fires")
+        if not isinstance(fires, list) or len(fires) < len(m.get("coach_fires") or []):
+            return {}
+        m["checkpoint_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for k in ("duration_s", "stages_visited", "objections_fired", "redflags_fired", "ai_stats"):
+            if payload.get(k) is not None:
+                m[k] = payload.get(k)
+        m["coach_fires"] = fires
+        _write_json(mp, m)
+    lines = payload.get("lines")
+    if isinstance(lines, list) and lines:
+        tp = os.path.join(d, "transcript.json")
+        try:
+            with open(tp, "r", encoding="utf-8") as f:
+                have = len(json.load(f).get("lines") or [])
+        except (OSError, ValueError, AttributeError):
+            have = 0
+        if len(lines) >= have:
+            save_transcript(sid, {"lines": lines})
     return m
 
 
@@ -1298,7 +1521,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         if self.command != "HEAD":
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                # The page went away (reload, next call) while its answer was being written: 10 tracebacks
+                # in coach_server.log by 11-18. Nothing to do but note it in one line.
+                sys.stderr.write("[coach] client gone before the reply to %s\n" % (self.path.split("?")[0],))
+                self.close_connection = True
 
     def _body(self):
         try:
@@ -1393,8 +1622,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
             t0 = time.time()
-            res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"), b.get("lane") or "", b.get("eq") or "")
-            res = dict(res or {"line": ""}, ms=int((time.time() - t0) * 1000))
+            stat = {}
+            try:
+                res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"),
+                              b.get("lane") or "", b.get("eq") or "", stat=stat)
+            except Exception as e:            # a bug in the line rules must not 500 the page mid-call
+                res, stat["why"] = {}, "error:" + type(e).__name__
+            ms = int((time.time() - t0) * 1000)
+            res = dict(res or {"line": ""}, ms=ms)
+            if not res.get("line"):
+                res["why"] = stat.get("why") or "empty"
+            # One line per ask, so a blank box can be traced afterwards. Codes and timings only, never words.
+            sys.stderr.write("[coach] suggest %s ms=%d tries=%s model=%s%s\n" % (
+                "shown" if res.get("line") else "blank why=" + res["why"], ms, stat.get("tries", 0),
+                stat.get("model", "-"), (" err=" + stat["err"]) if stat.get("err") else ""))
             return self._send(200, res, private=True)
 
         if p == "/api/wrapup":
@@ -1425,6 +1666,11 @@ class Handler(BaseHTTPRequestHandler):
                 if n is None:
                     return self._send(404, {"error": "unknown session"})
                 return self._send(200, {"ok": True, "lines": n})
+            if verb == "checkpoint":
+                m = checkpoint_session(sid, self._json_body())
+                if m is None:
+                    return self._send(404, {"error": "unknown session"})
+                return self._send(200, {"ok": True, "saved": bool(m)})
             if verb == "end":
                 m = end_session(sid, self._json_body())
                 if m is None:
