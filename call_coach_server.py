@@ -1136,6 +1136,20 @@ def _ai_post(body, key, st):
 # himself; only then does it go to Call Mode. One microphone still mislabels who said what, and one
 # wrong "appointment" logged by a machine would corrupt the cadence and the stats.
 WRAP_OUTCOMES = ("appointment", "callback", "talked", "not_interested", "voicemail", "bad_number")
+# ONE VOCABULARY (11-18). The model keeps answering in the words above (they score well and it was
+# never re-tested on codes), but everything the coach stores or hands on is Call Mode's own outcome
+# code (call_mode.CALL_OUTCOMES; _coachhandofftest.py pins the two lists equal). The old names map
+# here so a meta.json from before this change and one from after mean the same thing.
+CALL_MODE_CODES = ("noanswer", "voicemail", "callback", "talked", "appt", "gate", "badnum", "notint", "wrong", "dnc")
+OLD_OUTCOME_NAMES = {"appointment": "appt", "not_interested": "notint", "bad_number": "badnum"}
+
+
+def outcome_code(v):
+    """A Call Mode outcome code, "auto_silence" (the 90-second stop), or None for anything else."""
+    v = str(v or "").strip().lower()
+    v = OLD_OUTCOME_NAMES.get(v, v)
+    return v if v in CALL_MODE_CODES or v == "auto_silence" else None
+
 WRAP_SYSTEM = (
     "You write the log entry for a phone call that just ended. The caller is Alejandro with Biscayne Solutions "
     "Group; the other person is a property owner with a court case or tax sale on the property. Labels in the "
@@ -1191,7 +1205,7 @@ def ai_wrapup(lines, lane=""):
         return {}
     want = field("WANT").lower()
     none = lambda v: "" if v.lower().rstrip(".") in ("none", "n/a", "unknown", "") else v
-    return {"outcome": oc, "want": want if want in ("keep", "sell", "undecided") else "",
+    return {"outcome": outcome_code(oc), "want": want if want in ("keep", "sell", "undecided") else "",
             "objection": none(field("OBJECTION"))[:80], "when": none(field("WHEN"))[:60], "note": none(field("NOTE"))[:320]}
 
 
@@ -1426,7 +1440,7 @@ def _end_session(d, sid, payload):
     # one row per coach prompt: which intent, partial or final words, ms held, ms the words ran behind
     m["coach_fires"] = payload.get("coach_fires")
     m["consent_ack"] = payload.get("consent_ack")
-    m["outcome"] = payload.get("outcome")
+    m["outcome"] = outcome_code(payload.get("outcome"))
     m["wrapup"] = payload.get("wrapup")        # the AI draft and what the caller kept of it
     if payload.get("ai_stats") is not None:
         m["ai_stats"] = payload.get("ai_stats")  # asks, lines shown, and why the others were not

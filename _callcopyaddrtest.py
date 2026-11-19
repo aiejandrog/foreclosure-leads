@@ -41,6 +41,13 @@ CASES = [
     ('300 NE 2 AVE 6-3, MIAMI, FL 33132', '300 NE 2nd Ave Apt 6-3, Miami, FL 33132'),
     ('400 SW 8 ST 12, MIAMI, FL 33130', '400 SW 8th St Apt 12, Miami, FL 33130'),
     ('500 US HIGHWAY 1, MIAMI, FL 33156', '500 US Highway 1, Miami, FL 33156'),
+    ('50 E 1 AVE BLDG 3 APT 4, MIAMI, FL 33132', '50 E 1st Ave Bldg 3 Apt 4, Miami, FL 33132'),
+    ('10 OCEAN DR PH 2, MIAMI BEACH, FL 33139', '10 Ocean Dr Ph 2, Miami Beach, FL 33139'),
+    ('1000 W 2ND AVE LOT 12, HIALEAH, FL 33010', '1000 W 2nd Ave Lot 12, Hialeah, FL 33010'),
+    ('123 NW 5TH ST 33125', '123 NW 5th St, FL 33125'),
+    ('12 1/2 SW 3 ST, MIAMI, FL 33130', '12 1/2 SW 3rd St, Miami, FL 33130'),
+    ('100 X ST, MIAMI, FL 331451234', '100 X St, Miami, FL 33145'),
+    ('15 HWY A1A, FORT LAUDERDALE, FL 33316', '15 Hwy A1A, Fort Lauderdale, FL 33316'),
 ]
 
 try:
@@ -104,6 +111,18 @@ with sync_playwright() as p:
       o.linkThere = !!wl;
       if (wl) { wl.addEventListener('click', e => e.preventDefault()); wl.click(); await new Promise(r => setTimeout(r, 50)); }
       o.linkCopied = copied;
+      /* the copy must never stop the link from opening */
+      let prevented = null;
+      if (wl) { const h = e => { prevented = e.defaultPrevented; }; wl.parentNode.addEventListener('click', h, true); wl.click(); wl.parentNode.removeEventListener('click', h, true); }
+      o.linkPrevented = prevented;
+      /* an older a.wpcopy elsewhere on the page is not ours: no copy */
+      copied = null;
+      const old = document.createElement('a'); old.className = 'wpcopy'; old.href = '#x'; document.body.appendChild(old);
+      old.addEventListener('click', e => e.preventDefault()); old.click(); await new Promise(r => setTimeout(r, 30));
+      o.oldCopied = copied; old.remove();
+      /* a quote or tag in county data stays inside the attribute */
+      const box = document.createElement('div'); box.innerHTML = wpCopyBtn({a: '1 O"NEIL <b>X</b> ST, MIAMI, FL 33101'});
+      o.quoteOk = box.querySelectorAll('button.wpcopy').length === 1 && !box.querySelector('b');
       copied = null;
       _openCase(cPh);
       const cb = document.querySelector('.pastecall button.wpcopy');
@@ -118,6 +137,9 @@ rec('Find a number card has Copy address', out['listBtn'], out)
 rec('...tapping it copies the Whitepages spelling', out['listCopied'] == '5800 Margate Blvd Apt 111, Margate, FL 33063', out)
 rec('Find a number card: the Whitepages addr link is the reverse-address search', out['linkThere'], out)
 rec('...tapping the link copies the search-bar spelling too', out['linkCopied'] == '5800 Margate Blvd Apt 111, Margate, FL 33063', out)
+rec('...and the link still opens (not prevented by the copy)', out['linkPrevented'] is False, out)
+rec('an older a.wpcopy link is not hijacked by the Copy address listener', out['oldCopied'] is None, out)
+rec('a quote or tag in the address cannot break out of the button', out['quoteOk'], out)
 rec('lead card paste box has Copy address', out['cardBtn'], out)
 rec('...tapping it copies the Whitepages spelling', out['cardCopied'] == '2929 NW 123rd Ter Apt B105, Miami, FL 33167', out)
 rec('Whitepages addr link opens the reverse-address search carrying the copy string',
