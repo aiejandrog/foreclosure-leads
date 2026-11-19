@@ -7936,7 +7936,11 @@ function wpcBtn(c){
 }
 function wireWpcBtns(){
   Array.prototype.forEach.call(document.querySelectorAll('button.wpcopen'), function(b){
-    b.onclick = function(){ var c = b.getAttribute('data-c'); if(c) screenWpPaste(c); };
+    /* From the lead card (not a Find-a-number card) the capture comes back to the card: Back returns to
+       it and Save lands on it (2026-11-19, Alex: "now do the same for the call mode lead card"). */
+    b.onclick = function(){ var c = b.getAttribute('data-c'); if(!c) return;
+      var onCard = !(b.closest && b.closest('.lkcard'));
+      screenWpPaste(c, onCard ? function(){ SCREEN = 'lead'; screenLead(); } : null, onCard ? 'card' : 'lk'); };
   });
 }
 function _wpcRowHtml(it, j){
@@ -7948,10 +7952,11 @@ function _wpcRowHtml(it, j){
         return '<button type="button" data-j="' + j + '" data-k="' + x[0] + '" class="' + (it.k === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('')
     + '</div></div>';
 }
-function screenWpPaste(c, back){
+function screenWpPaste(c, back, from){
   var r = _wpcRow(c);
   if(!r){ toast('This lead is no longer on the list', {bad:true}); return; }
-  WPC = {c:c, items:(WPC && WPC.c === c) ? WPC.items : [], back:back || null, txt:(WPC && WPC.c === c) ? WPC.txt : ''};
+  WPC = {c:c, items:(WPC && WPC.c === c) ? WPC.items : [], back:back || (WPC && WPC.c === c ? WPC.back : null),
+         from:from || (WPC && WPC.c === c ? WPC.from : 'lk'), txt:(WPC && WPC.c === c) ? WPC.txt : ''};
   SCREEN = 'wppaste';
   try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
   var nP = 0, nE = 0;
@@ -7998,7 +8003,7 @@ function wpcSave(c){
       if(it.k === 'o'){
         n.wpm = n.wpm || []; if(n.wpm.indexOf(v.num) < 0) n.wpm.push(v.num);
         if(!_lkDigits(n.phone)) n.phone = v.num;
-        _addNum(r, v.num); res.p++;
+        _addNum(r, v.num); if(!res.first) res.first = v.num; res.p++;
       } else {
         n.wpr = n.wpr || [];
         var hit = n.wpr.filter(function(e){ return e && _lkDigits(e.n) === v.num; })[0];
@@ -8022,7 +8027,7 @@ function wpcSave(c){
     n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'lookup',
                     out:'Whitepages capture: ' + res.p + ' owner number(s), ' + res.e + ' owner email(s), ' + res.rel + ' relative/not-sure', by:caller()});
     if(!ROWS.some(function(x){ return x.c === c; }) && res.p) ROWS.push(r);
-    LKDONE[c] = 1;
+    if(!WPC || WPC.from !== 'card') LKDONE[c] = 1;
     saveNotes(); try{ queueSync(); }catch(e){}
   }
   toast('Saved: ' + res.p + ' owner number' + (res.p === 1 ? '' : 's') + ', ' + res.e + ' owner email' + (res.e === 1 ? '' : 's')
@@ -8032,7 +8037,15 @@ function wpcSave(c){
      to call ... it took me out to look at the other prospects"). Same hand-off as Save & call on the
      list (lkSave): an owner number opens this lead's card on that number with the way back to the next
      lead to look up, but it does not dial by itself. An owner email with no number opens the composer. */
-  var _back = WPC && WPC.back; WPC = null; SCREEN = 'lead';
+  var _back = WPC && WPC.back, _from = WPC && WPC.from; WPC = null; SCREEN = 'lead';
+  /* LEAD CARD: stay on this lead. A new owner number becomes the number on the dial button; otherwise
+     (relatives only, or nothing new) the card simply repaints with whatever was added. An owner email
+     with no new number still opens the composer below, and comes back to this card. */
+  if(_from === 'card' && cur && cur.c === c){
+    if(res.p){ var _ki = (r.p || []).map(function(x){ return _lkDigits(x); }).indexOf(_lkDigits(res.first));
+      if(_ki >= 0) phIdx = _ki; screenLead(); return res; }
+    if(!res.e){ screenLead(); return res; }
+  }
   if(res.p){
     var _lks = (typeof lkSorted === 'function') ? lkSorted() : [], _nx = null;
     for(var _q = 0; _q < _lks.length; _q++) if(_lks[_q].c === c){ _nx = (_lks[_q + 1] || _lks[_q - 1] || {}).c || null; break; }
@@ -10118,6 +10131,12 @@ function txKind(k, st){
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
 function setCallback(r, hours, label){
+  /* A NUMBER OF HOURS OR NOTHING (2026-11-19). The after-call screen once wired this onto every
+     `.cb` button, and the Mail / Knock / Neither route buttons share that class with no data-h:
+     +undefined is NaN, the Date below was Invalid, and n.next was saved as "NaN-NaN-NaN" and
+     synced to the board. Whatever calls this, a non-number writes nothing. */
+  hours = +hours;
+  if(!r || !isFinite(hours)) return;
   var n = notes[r.c] = notes[r.c] || {status:'',note:''};
   var t = new Date(Date.now() + hours*3600*1000);
   /* LOCAL date parts, mirroring the board's _setNext. toISOString() is UTC, and Miami is UTC-4 —
@@ -11749,10 +11768,13 @@ function afterCall(r, o, nextC){
     window._tapShieldUntil = Date.now() + 400;
     phIdx = _nextPh; toast('Next number'); screenLead();
   };
-  Array.prototype.forEach.call(document.querySelectorAll('.cb'), function(b){
+  /* ONLY the callback chips (data-h). `.cb` is also the route panel's Mail / Knock / Neither
+     buttons, which routeWire() wired a few lines up: selecting on the bare class overwrote their
+     onclick with this one, so a route tap set no route and saved a "NaN-NaN-NaN" callback. */
+  Array.prototype.forEach.call(document.querySelectorAll('.cb[data-h]'), function(b){
     b.onclick = function(){
       setCallback(r, +b.dataset.h, b.textContent.toLowerCase());
-      Array.prototype.forEach.call(document.querySelectorAll('.cb'),function(x){x.disabled=true;});
+      Array.prototype.forEach.call(document.querySelectorAll('.cb[data-h]'),function(x){x.disabled=true;});
       b.classList.add('on');
       /* Setting a callback IS choosing what happens next — making him also tap "Next lead" was one
          more mandatory tap in a flow he runs a hundred times a day. Brief hold so the chip's

@@ -44,6 +44,16 @@ BAT = os.path.join(HERE, 'refresh-dealflow.bat')
 LOG = os.path.join(HERE, 'leads-run.log')
 FLAG = os.path.join(HERE, 'refresh-running.flag')
 HISTORY_KEEP = 14
+# STALLED (2026-11-19). A run that is killed (window closed, task stopped, sleep, a hung child)
+# never reaches `refresh_progress.py done` and never deletes its start flag, so view() went on
+# answering "running, step N of M" until the next run started. The step marker alone cannot tell a
+# long step from a dead one: steps legitimately run for hours and the state file is only written
+# between steps. So the sign of life is the newer of the last step marker and the last write to
+# leads-run.log, which every step appends to as it works. No sign of life for this long is a stall.
+try:
+    STALL_S = max(60.0, float(os.environ.get('DEALFLOW_REFRESH_STALL_MIN') or 30) * 60)
+except ValueError:
+    STALL_S = 1800.0
 
 _MARK = re.compile(r'^\s*python\s+-u\s+refresh_progress\.py\s+step\s+(\S+)\s*$', re.I)
 _ECHO = re.compile(r'^\s*echo\s+(.*)$', re.I)
@@ -127,6 +137,13 @@ def _flag_time():
     """When this run started: the start flag's mtime, written by the .bat's first lines."""
     try:
         return os.path.getmtime(FLAG)
+    except OSError:
+        return None
+
+
+def _log_mtime():
+    try:
+        return os.path.getmtime(LOG)
     except OSError:
         return None
 
@@ -273,8 +290,17 @@ def view(st=None, now=None, cat=None, hist=None):
     if running and (flag is None or abs(flag - started) > 2):
         # No start flag (deleted at the final exit), or a NEWER run's flag: this run is not going on.
         stale = True
+    # Last sign of life: the newest step marker or the newest line in the run log. A log write older
+    # than this run's start belongs to the previous run and is not counted.
+    beat = float(st.get('updated') or started)
+    lm = _log_mtime()
+    if lm is not None and lm >= started:
+        beat = max(beat, lm)
+    beat = min(beat, now)
+    quiet = max(0.0, now - beat)
+    stalled = bool(running and not stale and quiet > STALL_S)
     eta = None
-    if running and not stale and typ:
+    if running and not stale and not stalled and typ:
         eta = 0.0
         for r in rows:
             if r['state'] == 'todo':
@@ -297,6 +323,12 @@ def view(st=None, now=None, cat=None, hist=None):
            'ended': _iso(float(st['ended'])) if st.get('ended') else None,
            'rc': st.get('rc'), 'why': _why(st['rc']) if st.get('ended') and st.get('rc') is not None else None,
            'rows': rows}
+    if running and not stale:
+        # `state` stays 'running' (the start flag is still there and nothing wrote an end): what
+        # changes is that the caller is told nothing has moved since `beat`.
+        out['beat'] = _iso(beat)
+        out['quiet'] = round(quiet)
+        out['stalled'] = stalled
     if cur and idx is not None:
         out['step'] = {'i': idx + 1, 'key': cur['key'], 'tag': order[idx]['tag'],
                        'label': order[idx]['label'], 'secs': round(now - cur['start']),
@@ -378,7 +410,11 @@ def render(v, width=100, height=40, tail=None):
             out.append(D + ' This screen fills in as soon as refresh-dealflow.bat reaches its first step.' + X)
         return out
     st = v['state']
-    if st == 'running':
+    if st == 'running' and v.get('stalled'):
+        head = R + W + ' DEALFLOW REFRESH  STALLED' + X
+        tail_t = '   nothing written since %s (%s ago)  |  started %s' % (
+            _clock_iso(v.get('beat')), _fmt(v.get('quiet')), _clock_iso(v['started']))
+    elif st == 'running':
         head = B + W + ' DEALFLOW REFRESH  RUNNING' + X
         tail_t = '   started %s  |  %s in' % (_clock_iso(v['started']), _fmt(v['elapsed']))
         if v.get('eta') is not None:

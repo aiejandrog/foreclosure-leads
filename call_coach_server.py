@@ -1613,11 +1613,10 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     # STILL READING (11-19). The last words are the caller reading the line on his screen: the homeowner has not
     # answered yet, so a new line now would answer the coach's own words. Keep what is on screen.
     _recent = [x for x in (prior[-3:] + [shown]) if x]
-    if rows and rows[-1].startswith("CALLER") and _recent:
-        _tail = last_said
-        if len(_words(_tail)) <= 3 and len(rows) >= 2 and rows[-2].startswith("CALLER"):
-            _tail = rows[-2].split(": ", 1)[1]            # "Right?" tacked onto the line he just read
-        if _read_back(_tail, _recent):
+    # One microphone: the label on those words is often "?" or wrong, so the words decide, not the label.
+    if rows and _recent:
+        # Only the LAST words count: a short answer after his read ("No, nobody did.") is the homeowner.
+        if _read_back(last_said, _recent) or _reading_line(last_said, _recent):
             st["why"] = "wait"
             return done({})
     if _AI_META.search(last_said):
