@@ -68,8 +68,6 @@ rec('no quoted playbook line trips fact_check on a dated, verified lead (%d chec
 src = open(os.path.join(HERE, 'call_coach_server.py'), encoding='utf-8').read()
 rec('ai_line checks every line with never_say AND fact_check', 'return r if r[0] else fact_check(line, days, lane, eq, _convo)' in src
     and src.count('check(res["line"])') >= 2)
-print('\n%d failure(s)' % len(FAILS) if FAILS else '\nall passed')
-sys.exit(1 if FAILS else 0)
 
 # STILL READING: the caller is reading the line on his screen, so no model call and the screen stays.
 _calls = []
@@ -85,4 +83,7 @@ except Exception as _e:
 S._ai_post = _orig
 print(('ok   ' if (_r == {} and not _calls) else 'FAIL ') + 'caller still reading the coach line: nothing new, no model call')
 if not (_r == {} and not _calls):
-    sys.exit(1)
+    FAILS.append('still reading')
+
+print('\n%d failure(s)' % len(FAILS) if FAILS else '\nall passed')
+sys.exit(1 if FAILS else 0)
