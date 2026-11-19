@@ -9992,6 +9992,12 @@ function txKind(k, st){
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
 function setCallback(r, hours, label){
+  /* A NUMBER OF HOURS OR NOTHING (2026-11-19). The after-call screen once wired this onto every
+     `.cb` button, and the Mail / Knock / Neither route buttons share that class with no data-h:
+     +undefined is NaN, the Date below was Invalid, and n.next was saved as "NaN-NaN-NaN" and
+     synced to the board. Whatever calls this, a non-number writes nothing. */
+  hours = +hours;
+  if(!r || !isFinite(hours)) return;
   var n = notes[r.c] = notes[r.c] || {status:'',note:''};
   var t = new Date(Date.now() + hours*3600*1000);
   /* LOCAL date parts, mirroring the board's _setNext. toISOString() is UTC, and Miami is UTC-4 —
@@ -11616,10 +11622,13 @@ function afterCall(r, o, nextC){
     window._tapShieldUntil = Date.now() + 400;
     phIdx = _nextPh; toast('Next number'); screenLead();
   };
-  Array.prototype.forEach.call(document.querySelectorAll('.cb'), function(b){
+  /* ONLY the callback chips (data-h). `.cb` is also the route panel's Mail / Knock / Neither
+     buttons, which routeWire() wired a few lines up: selecting on the bare class overwrote their
+     onclick with this one, so a route tap set no route and saved a "NaN-NaN-NaN" callback. */
+  Array.prototype.forEach.call(document.querySelectorAll('.cb[data-h]'), function(b){
     b.onclick = function(){
       setCallback(r, +b.dataset.h, b.textContent.toLowerCase());
-      Array.prototype.forEach.call(document.querySelectorAll('.cb'),function(x){x.disabled=true;});
+      Array.prototype.forEach.call(document.querySelectorAll('.cb[data-h]'),function(x){x.disabled=true;});
       b.classList.add('on');
       /* Setting a callback IS choosing what happens next — making him also tap "Next lead" was one
          more mandatory tap in a flow he runs a hundred times a day. Brief hold so the chip's

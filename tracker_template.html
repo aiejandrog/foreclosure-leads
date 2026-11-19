@@ -538,6 +538,8 @@ body.compact td.propcell .submeta b.pv{font-size:12px}
 .mtg{color:var(--muted);font-size:11px}
 .tdt{color:var(--gold-d);font-size:11px;font-weight:700}
 .eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
+.equnvt{font-style:normal;font-weight:700;font-size:.86em;letter-spacing:.04em;text-transform:uppercase;color:var(--amber-ink)}
+.cstat .v .eqnote{display:block;font-family:var(--f-label);font-size:9px;font-weight:700;font-style:normal;letter-spacing:.08em;text-transform:uppercase;color:var(--amber-ink);margin-top:1px}
 td.owncell .addrline,td.propcell .addrline,td.mailcell .addrline{font-weight:600;line-height:1.35}
 td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font-size:10.5px;line-height:1.4;margin-top:4px;font-weight:400}
 td.num .fchips{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:3px;margin-bottom:5px}
@@ -2671,7 +2673,7 @@ function _applyServerDeadNotes(){
   }catch(e){}
 }
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
-let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
+let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1, sortUser = false;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false, mlOnly = false;
 // NEW SINCE LAST VISIT. The other filters answer "which of these leads matter"; this one answers
@@ -2702,6 +2704,33 @@ let nearOnly = false, nearRadius = 5;   // 📍 within N miles of home base (ROU
 // resolved address and a traced phone belongs in CALL exactly like an auction lead does.
 let funnelStage = '';
 try { const _fs = localStorage.getItem('fcFunnel') || ''; if(_fs) funnelStage = _fs; } catch(e){}
+/* THE CHOSEN SORT STICKS (2026-11-19, stress test: "sort resets when you switch views"). It lived
+   only in sortK, so a reload or a trip to Call Mode and back dropped it, and the Fresh-filings /
+   stage / mislisted / Closers views each ignored it for an order of their own. Now it is stored
+   (fcSort, this device) and restored at boot, the dropdown always shows what is applied, and a
+   sort the operator CHOSE (sortUser) is applied inside those views too. The default sort is "no
+   choice": each view keeps its own order under it, exactly as before. */
+function _sortKeyOk(k){
+  if(typeof k !== 'string' || !/^[A-Za-z_]\w{0,24}$/.test(k)) return false;
+  const sel = document.getElementById('sortby');
+  if(sel && Array.prototype.some.call(sel.options, o => o.value === k)) return true;
+  return !!document.querySelector('th[data-k="' + k + '"]');
+}
+function _syncSortUI(){
+  const sel = document.getElementById('sortby'); if(!sel) return;
+  if(Array.prototype.some.call(sel.options, o => o.value === sortK)) sel.value = sortK;
+  else sel.selectedIndex = -1;      // a column-header sort the dropdown has no entry for: show none, not a wrong one
+}
+function _saveSort(){
+  sortUser = sortK !== '_fresh';
+  try{ localStorage.setItem('fcSort', JSON.stringify({k: sortK, d: sortD})); }catch(e){}
+  _syncSortUI();
+}
+try{
+  const _ss = JSON.parse(localStorage.getItem('fcSort') || 'null');
+  if(_ss && _sortKeyOk(_ss.k) && (_ss.d === 1 || _ss.d === -1)){ sortK = _ss.k; sortD = _ss.d; sortUser = sortK !== '_fresh'; }
+}catch(e){}
+_syncSortUI();
 // A lead is in the LIS PENDENS (freshly-filed) stage — no auction date yet, worked as a nurture
 // over months. Set by lis_pendens.py (stage:'LP'). This is the front-of-funnel lane.
 function _isLP(r){ return r && (r.stage === 'LP' || r.st === 'LP'); }
@@ -3069,27 +3098,71 @@ var _EQ_TIP_APPROX = 'Approximate — a condo special assessment (40-yr recert) 
 var _EQ_TIP_UNKNOWN = 'Equity unknown — no final judgment is posted, so the debt is not known. It is not zero. Pull the docket or ask the owner what they owe.';
 var _EQ_TIP_LPEST = 'Estimate — no judgment yet. The recorded loans are amortized from their recording month at that month\'s Freddie Mac 30-year average (30-year term), like PropStream\'s Est. Balance. Missed payments, interest and fees are on top; ask the owner what they owe.';
 var _EQ_TIP_CEIL = 'At most this much — the recorded lien search is not verified for this property, so any mortgage or lien it missed is counted as $0. Ask the owner what they owe.';
+/* AN UNVERIFIED FIGURE SAYS SO IN WORDS (2026-11-19, stress test). A row read "≤100% eq" beside
+   its value and a STRONG badge while the hub for the same lead said "at most (the whole value), liens
+   not verified": the only thing separating a guess from a fact on the row was one glyph. Rules, for the
+   row, the phone card tile and every text built from them:
+     - liens not verified (r.eqstate is not clear / priced, or was never stamped) and the figure is
+       100%: nothing verified was subtracted, so there is no number to show. "eq unverified".
+     - liens not verified, under 100%: the cap stays ("≤40% eq") and the word rides beside it.
+     - only a verified chain prints a plain percent.
+   Display only. netEqPct, _netEqOf, the 30%+ filter, the sorts and every hold are untouched. */
+var _EQ_TIP_UNVERIFIED = 'Unverified — the recorded lien search has not established what is owed on this property, and nothing that IS verified has been subtracted from the value. This is not an equity figure. Ask the owner what they owe.';
+var _EQ_TIP_BAL = 'Estimate — value less the balloon loan at the amount it was RECORDED for. That is the face of the note, not a payoff, and no other lien on the property has been searched. Ask the owner what they owe.';
+var _EQ_UNV = ' <span class="equnvt">unverified</span>';
+/* BALLOON rows (st BAL, the refi lane) have no judgment and are exempt from _debtUnknown because
+   they "price off their own loan" — but no equity reader ever subtracted that loan, so every one
+   read as the whole house (≤100%). The row now shows value less the recorded loan, as an estimate.
+   _netEqOf is deliberately NOT changed here: it feeds the sorts, and what ranks is not this
+   change's call. */
+function _balLoan(r){ return (r && r.st === 'BAL' && r.bal) ? Math.max(0, +r.bal.amt || +r.bal.amount || 0) : 0; }
+function _balEqPct(r){ var b = _basisOf(r), a = _balLoan(r); return (b > 0 && a > 0) ? Math.round(Math.max(0, b - a) / b * 100) : null; }
 function _eqRowHtml(r){
   if(!_basisOf(r)) return '';
   if(_debtUnknown(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_UNKNOWN+'">eq unknown</span>';
+  if(r.st === 'BAL'){
+    var bp = _balEqPct(r);
+    return bp == null ? ' · <span class="eqfake" title="'+_EQ_TIP_UNVERIFIED+'">eq unverified</span>'
+                      : ' · <span class="eqfake" title="'+_EQ_TIP_BAL+'">~'+bp+'% eq est.</span>';
+  }
   var p = _eqPct(r);
   if(_isLpEst(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_LPEST+'">~'+p+'% eq est.</span>';
-  if(r.eqfake||(r.st!=='TD'&&r.condo)) return ' · <span class="eqfake" title="'+_EQ_TIP_APPROX+'">~'+p+'% eq</span>';
-  if(_eqCeiling(r)) return ' · <span class="eqfake" title="'+_EQ_TIP_CEIL+'">≤'+p+'% eq</span>';
+  var unv = _eqCeiling(r);
+  if(unv && p >= 100) return ' · <span class="eqfake" title="'+_EQ_TIP_UNVERIFIED+'">eq unverified</span>';
+  if(r.eqfake||(r.st!=='TD'&&r.condo)) return ' · <span class="eqfake" title="'+_EQ_TIP_APPROX+'">~'+p+'% eq'+(unv?_EQ_UNV:'')+'</span>';
+  if(unv) return ' · <span class="eqfake" title="'+_EQ_TIP_CEIL+'">≤'+p+'% eq'+_EQ_UNV+'</span>';
   return ' · '+p+'% '+(r.st==='TD'?'margin':'eq');
 }
 function _eqStatTxt(r){
   if(!_basisOf(r)) return '—';
   if(_debtUnknown(r)) return 'unknown';
+  if(r.st === 'BAL'){ var bp = _balEqPct(r); return bp == null ? 'unverified' : '~'+bp+'% est.'; }
   var p = _eqPct(r);
   if(_isLpEst(r)) return '~'+p+'% est.';
+  if(_eqCeiling(r) && p >= 100) return 'unverified';
   if(r.eqfake||(r.st!=='TD'&&r.condo)) return '~'+p+'%';
   if(_eqCeiling(r)) return '≤'+p+'%';
   return p+'%';
 }
+/* The word under the phone card's Equity tile when the figure above it is a cap or a gross guess on
+   an unverified chain. '' when the tile already says it (unknown / unverified / est.) or is a fact. */
+function _eqStatNote(r){
+  if(!r || !_basisOf(r) || _debtUnknown(r) || r.st === 'TD' || r.st === 'BAL' || _isLpEst(r)) return '';
+  return (_eqCeiling(r) && _eqPct(r) < 100) ? 'unverified' : '';
+}
+/* True when the equity figure on this row is anything but a verified fact: drives the muted style. */
+function _eqSoft(r){
+  return !!(r && (r.eqfake || (r.st!=='TD' && r.condo) || (_basisOf(r) && (_debtUnknown(r) || _eqCeiling(r) || r.st === 'BAL'))));
+}
 function _netEqTxt(r, fmtFn){
   if(_debtUnknown(r)) return 'unknown — ' + (r.st === 'LP' ? 'no judgment yet, loan balance not known' : 'judgment not posted');
   var f = fmtFn || fmtMoney, n = _netEqOf(r);
+  if(r && r.st === 'BAL'){
+    var _ba = _balLoan(r), _bb = _basisOf(r);
+    return (_ba > 0 && _bb > 0)
+      ? 'about ' + f(Math.max(0, _bb - _ba)) + ' est. (recorded balloon loan ' + f(_ba) + ', not a payoff; liens not verified)'
+      : 'unverified — no loan amount on file for this note, liens not verified';
+  }
   if(_isLpEst(r)) return 'about ' + f(n) + ' (est. loan balances ' + f(_lpDebtEst(r)) + ', recorded ' + f(+r.orestface||0) + ')';
   return (_eqCeiling(r) && n > 0) ? ('at most ' + f(n) + ' (liens not verified)') : f(n);
 }
@@ -4181,7 +4254,7 @@ function _csScriptBody(r){
       '</div>' +
       '<table class="scriptknow-t"><tbody>' +
         rows.map(([k, v, p]) => '<tr><td>' + k + '</td><td><b>' + v + '</b></td><td class="prov">' + p + '</td></tr>').join('') +
-        '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (_debtUnknown(r) ? 'unknown' : (ne ? (_eqCeiling(r) ? '≤ ' : '') + _fmk(ne) : '—')) + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
+        '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (_debtUnknown(r) ? 'unknown' : (r.st === 'BAL' ? _netEqTxt(r, _fmk) : (ne ? (_eqCeiling(r) ? 'at most ' + _fmk(ne) + ' (liens not verified)' : _fmk(ne)) : '—'))) + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
         (!td && oe > 0 ? '<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>' + _fmk(oe) + '</b></td><td class="prov">value − everything recorded</td></tr>' : '') +
         (r.zprice && r.zstatus === 'LISTED' ? '<tr><td>Actively listed at</td><td><b>' + _fmk(+r.zprice) + '</b></td><td class="prov">Zillow ' + esc(r.zstatus) + '</td></tr>' : '') +
         (+r.rfval > 0 ? '<tr><td>Redfin Estimate</td><td><b>' + _fmk(+r.rfval) + '</b></td><td class="prov">independent AVM · advisory</td></tr>' : '') +
@@ -4400,7 +4473,18 @@ function _dialedAfter(n){
     return t.d && optoutDate && t.d > optoutDate;                   // legacy date-only fallback
   });
 }
-function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
+/* A REAL CALENDAR DAY OR NOTHING (2026-11-19). notes[case].next arrived as "NaN-NaN-NaN" (Call Mode
+   built it from an Invalid Date, see setCallback) and the board printed "Follow-up NaN-NaN-NaN" and
+   "fu in NaNd". Every reader of a stored day goes through this: 'YYYY-MM-DD' that is a real date,
+   else ''. A missing or malformed follow-up renders as no follow-up. */
+function _isoDay(v){
+  const s = String(v == null ? '' : v), m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if(!m) return '';
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return (+m[1] >= 2000 && d.getFullYear() === +m[1] && d.getMonth() === +m[2]-1 && d.getDate() === +m[3]) ? s : '';
+}
+function _fuDate(n){ return n ? _isoDay(n.next) : ''; }
+function _dneg(iso){ iso=_isoDay(iso); if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
 const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
 // REACHABILITY AT A GLANCE. The row told you what you had already DONE (touches, follow-ups) but
@@ -4436,10 +4520,11 @@ function contactChip(r){
   if(ts.length){ const last=ts[ts.length-1];
     h+='<span class="cx cx-done" title="'+esc(ts.length+' touch(es) — last: '+last.ch+' '+last.out+' on '+last.d)+'">'+(CH_ICON[last.ch]||'•')+' '+_rel(last.d)+(ts.length>1?' ·'+ts.length:'')+'</span>';
   } else h+='<span class="cx cx-new" title="Not contacted yet">not contacted</span>';
-  if(n.next){ const d=_dneg(n.next); h+='<span class="cx '+(d<=0?'cx-due':'cx-fu')+'" title="'+esc('Follow-up '+n.next)+'">'+(d<0?'overdue '+(-d)+'d':d===0?'due today':'fu '+_rel(n.next))+'</span>'; }
+  const nx=_fuDate(n);
+  if(nx){ const d=_dneg(nx); h+='<span class="cx '+(d<=0?'cx-due':'cx-fu')+'" title="'+esc('Follow-up '+nx)+'">'+(d<0?'overdue '+(-d)+'d':d===0?'due today':'fu '+_rel(nx))+'</span>'; }
   return h;
 }
-function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _setNext(n, days){ days=+days; if(!isFinite(days)) return; if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 /* WHO SENT IT. The board has no identity of its own — it is one operator's laptop — but it shares
    an ORIGIN with Call Mode, which stores the name from the access code in fcCaller. Read that, so a
    touch logged here and a touch logged on the phone are attributed the same way and the phone's
@@ -7205,7 +7290,8 @@ function logModalBody(r){
   const n=notes[r.case]||{}, ts=(n.touches||[]).slice().reverse();
   const owner=esc((r.owners||'').split(';')[0].trim());
   const btns=QUICKLOG.map((q,i)=>'<button class="qlog" data-c="'+esc(r.case)+'" data-i="'+i+'" type="button">'+q.lbl+'</button>').join('');
-  const fu = n.next ? '<b>'+esc(n.next)+'</b> <span class="mut">('+_rel(n.next)+')</span>' : '<span class="mut">none set</span>';
+  const _fu = _fuDate(n);   // a malformed stored date is "none set", never printed back
+  const fu = _fu ? '<b>'+esc(_fu)+'</b> <span class="mut">('+_rel(_fu)+')</span>' : '<span class="mut">none set</span>';
   const fub='<button class="fuset" data-c="'+esc(r.case)+'" data-d="2" type="button">+2d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="5" type="button">+5d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="14" type="button">+2w</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="0" type="button">clear</button>';
   const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
   // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
@@ -17843,7 +17929,8 @@ function _mergeLead(local, remote){
   ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
   if(tt.length) out.touches = tt;
   // follow-up: the sooner defined date
-  if(remote.next && !_DEAD(out.status) && (!out.next || remote.next < out.next)) out.next = remote.next;   // a suppressed lead is handed no next step (D14)
+  const _okDay = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v == null ? '' : v));   // "NaN-NaN-NaN" is not a date: it neither wins nor blocks a real one
+  if(_okDay(remote.next) && !_DEAD(out.status) && (!_okDay(out.next) || remote.next < out.next)) out.next = remote.next;   // a suppressed lead is handed no next step (D14)
   /* AFTER THE YES (D14, mirrors send_server._merge_note). Call Mode writes stage, stageAt, nextStep,
      equityVerified, keepOrSell, apptUnverified and afterYesAt as ONE unit; this merge used to drop
      all of them from a teammate's copy, so their next-step dates never reached this board. The side
@@ -18703,6 +18790,21 @@ function view(){
   // clear your last saved home. The active-filters bar (below) is the general escape hatch.
   if(favOnly && !favs.size) favOnly = false;
   let rows;
+  const _userSort = rs => {
+    const sortVal = r => {
+      // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
+      // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
+      if(sortK==='_fresh') return _firstMoverScore(r);
+      if(sortK==='next'){ const nx=_fuDate(notes[r.case]); return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; none or malformed sinks
+      if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
+      // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
+      // ~98% equity is pure noise -> sink it (keeps real high-equity leads like San Pedro rankable).
+      if(sortK==='eq' && r.eqfake && r.value>0 && (r.judg||0)/r.value < 0.08) return -1;
+      const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
+    };
+    rs.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
+    return rs;
+  };
   // kimi: the county pill is a HARD SCOPE, not a default-view filter (Alejandro 2026-07-20: PB
   // rows showed while Miami-Dade was selected — search/saved/closers modes silently ignored the
   // pill). When a county is picked it constrains EVERY mode; 'All' (county==='') changes nothing.
@@ -18738,7 +18840,7 @@ function view(){
       if(!!mb.over !== !!ma.over) return (mb.over ? 1 : 0) - (ma.over ? 1 : 0);
       return (ma.d || 99) - (mb.d || 99);
     });
-    return rows;
+    return sortUser ? _userSort(rows) : rows;
   } else if(lpOnly){
     // FRESH FILINGS mode: only the lis-pendens (just-filed) leads, its own lane because they have no
     // auction date and are worked as a months-long nurture, not a countdown. Newest filing first.
@@ -18746,7 +18848,7 @@ function view(){
     if(hideViewed) rows = rows.filter(r => !filed.has(r.case) || _viewedResurfaced(r));
   if(newOnly) rows = rows.filter(r => _isNewLead(r));
     rows = rows.slice().sort((a,b) => (toISO(b.filedDate||'') > toISO(a.filedDate||'') ? 1 : -1));
-    return rows;
+    return sortUser ? _userSort(rows) : rows;
   } else if(funnelStage){
     // FUNNEL mode: every lead sitting at one rung of the ladder, best equity first. Spans the
     // auction board AND the fresh filings on purpose — "who do I call next" does not care which
@@ -18761,7 +18863,7 @@ function view(){
     });
     if(hideViewed) rows = rows.filter(r => !filed.has(r.case) || _viewedResurfaced(r));
     if(newOnly) rows = rows.filter(r => _isNewLead(r));
-    return rows;
+    return sortUser ? _userSort(rows) : rows;
   } else if(closersOnly){
     // Closers mode: the shortlist worth working THIS week, across every tier, ranked by closeability
     // (handled in the sort below). Its own mode so it ignores tier/other filters (not county
@@ -18814,7 +18916,7 @@ function view(){
       return pct >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r);
     });
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
-    if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
+    if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const _nx = _fuDate(n); const due = !!_nx && _dneg(_nx) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
     // 📍 NEAR HOME: only properties within nearRadius miles of the home base (ROUTE_ORIGIN). Composes
     // with tier/county/every other filter above; sorted nearest-first below so the closest deal is on top.
     if(nearOnly) rows = rows.filter(r => r.lat && r.lng && _haversine(ROUTE_ORIGIN.lat, ROUTE_ORIGIN.lng, r.lat, r.lng) <= nearRadius);
@@ -18824,20 +18926,9 @@ function view(){
   if(hideViewed) rows = rows.filter(r => !filed.has(r.case) || _viewedResurfaced(r));
   if(newOnly) rows = rows.filter(r => _isNewLead(r));
   if(nearOnly){ rows.sort((a,b) => _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,a.lat,a.lng) - _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,b.lat,b.lng)); return rows; }   // nearest to home first
-  if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); return rows.slice(0, 25); }   // top 25 — a focused, workable shortlist ranked by closeability
-  const sortVal = r => {
-    // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
-    // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
-    if(sortK==='_fresh') return _firstMoverScore(r);
-    if(sortK==='next'){ const nx=(notes[r.case]||{}).next; return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; no follow-up sinks
-    if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
-    // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
-    // ~98% equity is pure noise -> sink it (keeps real high-equity leads like San Pedro rankable).
-    if(sortK==='eq' && r.eqfake && r.value>0 && (r.judg||0)/r.value < 0.08) return -1;
-    const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
-  };
-  rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
-  return rows;
+  // top 25 — a focused, workable shortlist. WHICH 25 is always closeability; a chosen sort only orders them.
+  if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); const _top = rows.slice(0, 25); return sortUser ? _userSort(_top) : _top; }
+  return _userSort(rows);
 }
 // 🚗 DOOR-KNOCK ROUTE — a keyless Google Maps driving route ANCHORED AT AN ORIGIN (default: Alejandro's
 // home base). ALGORITHM: measure every geocoded property's distance from the origin, take the nearest N,
@@ -19274,7 +19365,7 @@ function render(){
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
         // _eqPct, not raw r.eq: the baked gross ignored every lien, so this tile said "Equity 94%"
         // while the submeta two lines below said "41% eq" — on the phone, the device he calls from.
-        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo)||(_basisOf(r)&&(_debtUnknown(r)||_eqCeiling(r))))?' eqfake':'')+'">'+_eqStatTxt(r)+'</div></div>'+
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+(_eqSoft(r)?' eqfake':'')+'">'+_eqStatTxt(r)+(_eqStatNote(r)?'<span class="eqnote">'+_eqStatNote(r)+'</span>':'')+'</div></div>'+
       '</div>':'')+
       (r._verdict!=='VERIFY'?mrText(r):'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
@@ -19475,6 +19566,7 @@ document.getElementById('dealreset').onclick = () => { deal = Object.assign({}, 
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days'||sortK==='next') ? 1 : -1;   // soonest auction / soonest follow-up first; everything else high-to-low
+  _saveSort();
   render();
 };
 // county filter — populated on first render (DATA only exists AFTER the gate decrypts it), hidden if 1 county
@@ -20233,7 +20325,7 @@ document.addEventListener('click', e=>{
   const lu = e.target.closest && e.target.closest('.empty-lookup'); if(lu){ runLookup((document.getElementById('q').value||'').trim()); return; }
 });
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
-  const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
+  const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; _saveSort(); render();
 });
 // Records / Cases link: copies the owner name or case# to the clipboard so it can be pasted into
 // the clerk's search form. The anchor still opens the search page in a new tab via its native

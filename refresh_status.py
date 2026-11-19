@@ -328,6 +328,15 @@ function show(j){
   if(!j || !j.ok){ paint(BAKED.lvl, BAKED.msg, null); return; }
   var baked=t(S.baked), st=t(j.started), en=t(j.ended);
   var mine=baked && st && baked.getTime()>=st.getTime()-60000;    // this page was built by that run
+  /* STALLED: the run still holds its start flag, but no step has started and nothing has been
+     written to the run log since j.beat (refresh_progress.STALL_S). Say since when, never "running". */
+  if(j.running && j.stalled){
+    var z=j.step;
+    paint('warn','&#9888; <b>Refresh stalled since '+hm(j.beat)+'</b>'
+      +(z?' &middot; step '+z.i+' of '+j.n+': '+esc(z.label):'')
+      +' &middot; nothing written for '+dur(j.quiet)+' &middot; started '+hm(j.started)
+      +' &middot; check the refresh window on the laptop', null); return;
+  }
   if(j.running){
     var s=j.step;
     var m='&#8635; <b>Refresh running</b>'+(s?' &middot; step '+s.i+' of '+j.n+': '+esc(s.label)+' ('+dur(s.secs)+')'
@@ -346,15 +355,23 @@ function show(j){
   }
   paint(BAKED.lvl, BAKED.msg, null);
 }
-function poll(){
-  if(W.document && W.document.hidden) return;
+/* A LIVE LINE NEEDS A LIVE ANSWER. The strip is repainted only when the bridge answers, so a bridge
+   that went away mid-run left "Refresh running, step N of M" on screen for as long as the tab stayed
+   open. One missed poll is tolerated (a slow answer); after two in a row the strip goes back to what
+   this page was built with, which is the last thing actually known. */
+var miss=0;
+function poll(force){
+  if(!force && W.document && W.document.hidden) return null;
   var ac=W.AbortController?new W.AbortController():null, to=ac?W.setTimeout(function(){ac.abort();},2500):null;
-  W.fetch('http://127.0.0.1:8823/refresh', ac?{signal:ac.signal}:{})
+  return W.fetch('http://127.0.0.1:8823/refresh', ac?{signal:ac.signal}:{})
     .then(function(r){ return r.json(); })
-    .then(function(j){ if(to) W.clearTimeout(to); show(j); })
-    .catch(function(){ if(to) W.clearTimeout(to); });
+    .then(function(j){ if(to) W.clearTimeout(to); miss=0; show(j); })
+    .catch(function(){ if(to) W.clearTimeout(to); if(++miss>=2) paint(BAKED.lvl, BAKED.msg, null); });
 }
+el.__dfPoll=function(){ return poll(true); };
 poll(); W.setInterval(poll, 20000);
+/* a tab that was hidden skipped its polls: ask again the moment it is looked at */
+if(W.document && W.document.addEventListener) W.document.addEventListener('visibilitychange', function(){ if(!W.document.hidden) poll(); });
 }
 if(typeof window!=='undefined'){ window.__dfRfs=dfRfs; window.__dfRfsS=S; }
 dfRfs(S, document.getElementById('rfstat'), true);
