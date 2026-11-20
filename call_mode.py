@@ -7109,6 +7109,11 @@ function head(){
   /* FIND A LEAD (2026-11-19): the search over every lead on this phone, first in the lane row. Opened
      by the document-level [data-find] listener, so it works on screens that never run wire(). */
   var _flBtn = '<button data-find="1" title="Find a lead by case, owner or street">&#128270; Find a lead</button>';
+  try{
+    var _rl = recentLeads()[0];
+    if(_rl && !(SCREEN === 'lead' && BLANE !== '__lk' && cur && cur.c === _rl.c))
+      _flBtn += '<button data-reclast="' + esc(_rl.c) + '" title="The last lead you worked">&#8617; ' + esc(String(ownerLabel(_rl.r)).slice(0, 22)) + '</button>';
+  }catch(e){}
   return DFNAV + _qh + '<div class="top">'+wfBar()+'<div class="lane">'+_flBtn+laneBtns+_lkBtn+'</div>'
     + viewBar()
     + boardBar()
@@ -7539,6 +7544,7 @@ function lkSave(c, raw, viaClip){
   n.phone = num;
   n.wpm = n.wpm || []; if(n.wpm.indexOf(num) < 0) n.wpm.push(num);
   row.ps = ['wpm'];
+  try{ recAdd(c); }catch(e){}
   saveNotes(); try{ queueSync(); }catch(e){}
   var existing = ROWS.filter(function(x){ return x.c === c; })[0];
   if(existing){ _addNum(existing, num); row = existing; }
@@ -8556,6 +8562,7 @@ function _savePasted(r, raw){
   n.wpm = n.wpm || []; if(n.wpm.indexOf(v.num) < 0) n.wpm.push(v.num);
   if(!_lkDigits(n.phone)) n.phone = v.num;
   saveNotes(); try{ queueSync(); }catch(e){}
+  try{ recAdd(r.c); }catch(e){}
   var k = _addNum(r, v.num);
   return {k:k, num:v.num, was:(k < p0)};
 }
@@ -9080,7 +9087,42 @@ function screenCallStats(){
    numbers are on this page at all. PHIDX carries every lead that has a phone (inside the encrypted
    payload — these are phone numbers and the repo is public).                                   */
 function digitsOf(s){ return String(s == null ? '' : s).replace(/\D/g, ''); }
+/* NUMBERS SAVED ON A LEAD (2026-11-19, Alejandro: "I put their number, because I saved their number,
+   they don't show up"). PHIDX is baked at the last refresh, so a number typed or pasted since
+   (notes.phone, notes.wpm, notes.wpr: this phone, the board, or a teammate's sync) was in no index and
+   the lookup said "No lead in the database has this number". These are read live from the notes. */
+function savedNums(c){
+  var n = notes[c] || {}, out = [];
+  var add = function(x){ var d = _lkDigits(x); if(d && out.indexOf(d) < 0) out.push(d); };
+  add(n.phone);
+  (n.wpm || []).forEach(add);
+  (n.wpr || []).forEach(function(e){ add(e && typeof e === 'object' ? e.n : e); });
+  return out;
+}
+function savedLookup(d){
+  var hits = [], by = Object.create(null);
+  if(String(d || '').length < 4) return hits;
+  try{ _flIndex().forEach(function(e){ by[e.c] = e.r; }); }catch(e){}
+  Object.keys(notes || {}).forEach(function(c){
+    if(hits.length >= 12) return;
+    savedNums(c).forEach(function(num){
+      var ok = d.length >= 10 ? (num === d.slice(-10)) : (num.slice(-d.length) === d);
+      if(!ok) return;
+      var r = by[c] || {};
+      hits.push({num: num, owner: r.o || r.on || '', street: r.a || '', c: c,
+                 d: (typeof r.d === 'number' ? r.d : null), eq: null, fo: r.fo, ct: r.ct, h: '',
+                 pcs: r.pcs || null, saved: 1});
+    });
+  });
+  return hits;
+}
 function phLookup(q){
+  var d = digitsOf(q), a = _phIndexLookup(q), seen = Object.create(null);
+  a.forEach(function(h){ seen[h.c + '|' + h.num] = 1; });
+  savedLookup(d).forEach(function(h){ if(!seen[h.c + '|' + h.num]){ seen[h.c + '|' + h.num] = 1; a.push(h); } });
+  return a;
+}
+function _phIndexLookup(q){
   var d = digitsOf(q);
   if(!PHIDX || !PHIDX.d || d.length < 4) return [];
   var t = PHIDX.t || [], map = PHIDX.d, hits = [], seenIdx = {};
@@ -9152,7 +9194,7 @@ function screenLookup(prefill){
                    : '<b style="color:' + (h.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">sale in ' + h.d + ' day' + (h.d===1?'':'s') + '</b>')
         : '<span class="mut">no auction date yet</span>';
       return '<div class="refbox" style="margin-top:10px">'
-        + '<div class="ltag" style="margin:0 0 6px">' + fmt(h.num) + '</div>'
+        + '<div class="ltag" style="margin:0 0 6px">' + fmt(h.num) + (h.saved ? ' <span class="chip">number you saved</span>' : '') + '</div>'
         + '<div style="font:800 16px \'Segoe UI\',Arial;color:var(--ink)">' + esc(h.owner || 'name unknown') + '</div>'
         + '<div style="margin-top:3px">' + esc(h.street) + '</div>'
         + '<div style="margin-top:6px">' + clock + (money ? ' &middot; ' + money : '') + '</div>'
@@ -11952,6 +11994,7 @@ function _ftsaCapToast(n, extra){
    shape. n.dials is additive and never deduped — it is the dial-through count the whole logging
    problem exists to recover; the touch itself stays deduped for cooldown purposes. */
 function logOutcome(r,o,digits){
+  try{ recAdd(r.c); }catch(e){}
   var n=notes[r.c]=notes[r.c]||{status:'',note:''};
   var _ns = noState(r);                      // read BEFORE this outcome mutates the note
   n.touches=n.touches||[];
@@ -12298,6 +12341,34 @@ function _openCase(c, num){
    mailCheck and screenMail still decide. Everything else opens a detail with the reason and no dial,
    text or email button. The last query is kept on this phone only; nothing is synced or sent. */
 var FL_KEY = 'fcFindQ', FL_MAX = 25, _FLIX = null, _FLQ = '', _FLT = null, _FLRES = [], _FLSHEET = false;
+/* LEADS YOU JUST WORKED (2026-11-19, Alejandro: "I just saved a prospect's information ... I refresh,
+   or close Call Mode and open it again ... it doesn't stay on the prospect that I was on"). Saving a
+   number or logging a call takes the lead OUT of the list he was on (it becomes a dial row, or cools
+   down), so the place-restore had nothing to land on. Every lead he ACTS on (number saved, call
+   logged) is remembered here, on this phone only, newest first, 48 hours. The top bar offers the
+   last one and Find a lead lists them. Opening one goes through flOpen: every gate still runs, and a
+   lead that may not be worked right now opens read-only with the reason. Nothing is synced. */
+var _RECK = 'fcRecent:' + (typeof location !== 'undefined' ? location.pathname.replace(/index\.html?$/i, '') : '');
+function _recRead(){
+  try{
+    var a = JSON.parse(localStorage.getItem(_RECK) || '[]'), keep = Date.now() - 48 * 3600000;
+    return (Array.isArray(a) ? a : []).filter(function(x){ return x && typeof x.c === 'string' && x.ts > keep; }).slice(0, 8);
+  }catch(e){ return []; }
+}
+function recAdd(c){
+  try{
+    if(!c) return;
+    var a = _recRead().filter(function(x){ return x.c !== c; });
+    a.unshift({c: String(c), ts: Date.now()});
+    localStorage.setItem(_RECK, JSON.stringify(a.slice(0, 8)));
+  }catch(e){}
+}
+function recentLeads(){
+  var by = Object.create(null), out = [];
+  try{ _flIndex().forEach(function(e){ by[e.c] = e; }); }catch(e){ return out; }
+  _recRead().forEach(function(x){ if(by[x.c]) out.push(by[x.c]); });
+  return out;
+}
 function _flLoadQ(){ try{ var v = localStorage.getItem(FL_KEY); return typeof v === 'string' ? v.slice(0, 80) : ''; }catch(e){ return ''; } }
 function _flSaveQ(q){ try{ if(q) localStorage.setItem(FL_KEY, String(q).slice(0, 80)); else localStorage.removeItem(FL_KEY); }catch(e){} }
 /* A case number reduced to {yy, seq}: the two digits of the filing year and the sequence number
@@ -12353,6 +12424,14 @@ function flSearch(q){
   q = String(q || '').trim().slice(0, 80);
   if(!q) return [];
   var L = _flIndex(), hits = [];
+  /* A PHONE NUMBER (7+ digits, nothing but number characters): the lead that number is on, from the
+     baked index or from a number saved on the lead. Case numbers are shorter or carry letters. */
+  if(/^[\d\s().+\-]+$/.test(q) && digitsOf(q).length >= 7){
+    var _pc = Object.create(null), _ph = [];
+    try{ phLookup(q).forEach(function(h){ _pc[h.c] = 1; }); }catch(e){}
+    for(var _k = 0; _k < L.length; _k++) if(_pc[L[_k].c]) _ph.push(L[_k]);
+    if(_ph.length) return _ph.slice(0, FL_MAX);
+  }
   var hasDig = /\d/.test(q);
   var caseLike = hasDig && (/^[\d\s\-\/]+$/.test(q) || !/\s/.test(q));
   var qk = caseLike ? _flCaseKey(q) : null;
@@ -12454,8 +12533,15 @@ function _flCard(e, ix){
 function _flResults(q){
   var box = $('flres'); if(!box) return;
   q = String(q || '').trim();
-  _FLRES = q ? flSearch(q) : [];
-  if(!q){ box.innerHTML = '<div class="sub" style="padding:8px 2px">Type a case number, an owner\'s name or part of the street.</div>'; return; }
+  _FLRES = q ? flSearch(q) : recentLeads();
+  if(!q){
+    box.innerHTML = '<div class="sub" style="padding:8px 2px">Type a case number, an owner\'s name, part of the street, or a phone number.</div>'
+      + (_FLRES.length ? '<div class="ltag" style="margin:8px 2px 4px">LEADS YOU JUST WORKED</div>' + _FLRES.map(_flCard).join('') : '');
+    Array.prototype.forEach.call(box.querySelectorAll('.flres'), function(el){
+      el.onclick = function(){ var e = _FLRES[+el.getAttribute('data-fx')]; if(e) flOpen(e); };
+    });
+    return;
+  }
   if(!_FLRES.length){ box.innerHTML = '<div class="card"><b>No lead matches &ldquo;' + esc(q) + '&rdquo;.</b><div class="sub">'
     + 'Searched all ' + _flIndex().length + ' leads on this phone. A lead not in this build is not on the phone yet.</div></div>'; return; }
   box.innerHTML = _FLRES.map(_flCard).join('')
@@ -12549,6 +12635,13 @@ function flDetail(e){
 /* One listener for the search button in every top bar, so a screen that never runs wire() still
    opens it. */
 if(typeof document !== 'undefined') document.addEventListener('click', function(ev){
+  var rb = ev.target && ev.target.closest ? ev.target.closest('[data-reclast]') : null;
+  if(rb){
+    ev.preventDefault(); ev.stopPropagation();
+    var _c = rb.getAttribute('data-reclast'), _e = recentLeads().filter(function(x){ return x.c === _c; })[0];
+    if(_e){ if(SCREEN !== 'find' && SCREEN !== 'finddetail'){ try{ _sideEnter(); }catch(x){} } flOpen(_e); }
+    return;
+  }
   var b = ev.target && ev.target.closest ? ev.target.closest('[data-find]') : null;
   if(!b) return;
   ev.preventDefault(); ev.stopPropagation();
