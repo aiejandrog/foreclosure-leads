@@ -228,6 +228,7 @@ var notes = {W:{wq:'2026-10-26'}, W2:{wq:'2026-10-26'}};
 var LK = [{c:'OLDLP', lp:1, x:mdy(60)}, {c:'S30', x:'12/31/2099', d:30}, {c:'NEW2', lp:1, x:mdy(2)},
           {c:'S5', x:'12/31/2099', d:5}, {c:'W', lp:1, x:mdy(90)}, {c:'NEW6', lp:1, x:mdy(6)}, {c:'W2', x:'12/31/2099', d:3}];
 function lkRows(){ return LK; }
+var LKSKIPPED = false, LKVACANT = false; function lkSkippedRows(){ return []; } function lkVacantRows(){ return []; }
 console.log(JSON.stringify(lkSorted().map(function(r){ return r.c; })));
 '''
 rc, so, se = node(H3)
@@ -261,7 +262,7 @@ rec('each seat page prints its own Find a number count (a count, no lead)',
     "LOOKUPN=__LOOKUPN__" in SRC and "lookupn=_lk_mine" in SRC)
 
 print('\nFIND A NUMBER: SHOW ALL, HAS EQUITY')
-H5 = 'var LKSHOW = 200, LKEQ = false, LKSALE = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', '_lkSoon', 'lookupList')) + r"""
+H5 = 'var LKSHOW = 200, LKEQ = false, LKSALE = false, LKSKIPPED = false, LKVACANT = false, LKFOCUS = null, LKDRAFT = {}, NO_SALE = 9999;\nfunction lkSkippedRows(){ return []; } function lkVacantRows(){ return []; }\n' + ''.join(grab_fn(n) for n in ('isBalloon', 'isEquity', 'isRecordedEquity', '_lkSoon', 'lookupList')) + r"""
 function esc(x){ return String(x); } function head(){ return ''; } function ownerLabel(r){ return r.c; }
 function propertyLabel(){ return ''; } function _bView(){ return {auction:''}; } function fileLinks(){ return []; }
 function wpeAddrs(){ return []; } function _lkGroup(){ return 3; } function wpBlock(){ return ''; } function mailOnFileBtn(){ return ''; } function wpcBtn(){ return ''; } function wpCopyBtn(){ return ''; } function lkAsDial(r){ return r; } function money(x){ return String(x); } function _lkPickHtml(){ return ''; }

@@ -4408,7 +4408,9 @@ a.rtmap{display:block;text-align:center;min-height:44px;line-height:44px;margin:
   font:700 13px "Segoe UI",Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45);
   touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.25)}
 .lkfab:active{background:#1b2c50}
+.vmquick{left:10px;right:auto;background:var(--gold);color:#14203a;border-color:var(--gold)}
 body.shopen .lkfab{display:none !important}
+body.shopen .vmquick{display:block !important}
 /* THE FILE — the reference block on the outcome screen, up for the whole call */
 .refbox{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0f1d3a;border:1px solid #2a3f6b}
 .reft{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5}
@@ -7101,7 +7103,7 @@ function head(){
     ? ('<div class="supn" style="background:#3d2c08;color:#F6E9C8">'+esc((typeof textHoldWhy==='function' && textHoldWhy()) || 'Texting is held — the do-not-contact list is stale.')+'</div>')
     : '';
   var _lkN = lkRows().length;
-  var _lkBtn = _lkN ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
+  var _lkBtn = (_lkN || lkSkippedRows().length || lkVacantRows().length) ? '<button data-lk="1" class="' + (BLANE === '__lk' ? 'on' : '') + '">&#128269; Find a number &middot; ' + _lkN + '</button>' : '';
   /* THE CLOCK SITS ON TOP (2026-11-19). It was the last thing in viewBar(), under the lane and view
      buttons, which put Pause / +30 min / End work about 415-490px down the first screen. The script
      bar is fixed to the bottom, so on a short screen (375x553, an iPhone SE with Safari's bars up) it
@@ -7225,12 +7227,14 @@ function wpStreetFmt(street){
     if(/\d/.test(w) && /[a-z]/i.test(w) && !/^\d+(st|nd|rd|th)$/i.test(w)) return w.toUpperCase();
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   });
-  if(unit) out.push('Apt', unit.toUpperCase());
+  /* "# E19", not "Apt E19" (2026-11-19, Alejandro, with a screenshot of the search bar): Whitepages
+     writes the unit with a # and a space, and its search bar matches that spelling to the unit. */
+  if(unit) out.push('#', unit.toUpperCase());
   return out.join(' ');
 }
 /* COPY ADDRESS (2026-11-18, Alejandro: "add a copy address button"). The string to paste into the
-   Whitepages search bar, in Whitepages' own spelling: "5800 Margate Blvd Apt 111, Margate, FL 33063".
-   Street through wpStreetFmt (ordinal numbered streets, "Apt" for # / unit, title case), then the
+   Whitepages search bar, in Whitepages' own spelling: "5800 Margate Blvd # 111, Margate, FL 33063".
+   Street through wpStreetFmt (ordinal numbered streets, "# N" for apt / unit, title case), then the
    city, FL and the ZIP. Ours is "5800 MARGATE BLVD APT 111, MARGATE, 33063" with no state, which the
    search bar does not match as reliably. */
 function wpSearchAddr(r){
@@ -7333,7 +7337,59 @@ function _lkOk(r){
   if(!r || !r.lk || LKDONE[r.c] || !_seatMine(r) || _clmOwner(r.c)) return false;
   return !hardSuppressed(lkAsDial(r, ''));
 }
-function lkRows(){ return (COV || []).filter(_lkOk); }
+/* SET ASIDE FROM THE LIST (2026-11-19, Alejandro). Two things stop a lookup before it starts, and
+   both used to stay in the way while he scrolled for the next prospect:
+     - the address is not on Whitepages  -> "Show skipped", one tap brings it back
+     - the property is VACANT            -> the Vacant list: nobody lives there to call, so it is
+       worked a different way (the vacant rundown: owner of record, why it is empty, who to reach)
+   Each is a 'lookup' touch on the case note, so it syncs to the other seat and the board like any
+   touch, is never counted as a dial, and is tied to the address it was said about: a lead whose
+   address changes comes back to the list. The newest mark of each kind wins. */
+var LKSKIPPED = false, LKVACANT = false;
+function _lkMark(r, key){
+  var latest = null;
+  (((notes[r.c] || {}).touches) || []).forEach(function(t){
+    if(t.ch !== 'lookup' || !t[key] || t[key].a !== (r.a || '')) return;
+    if(!latest || +t.tsu > +latest.tsu) latest = t;
+  });
+  return latest ? latest[key] : null;
+}
+function lkAddressMissing(r){ var m = _lkMark(r, 'wpaddr'); return !!(m && m.missing); }
+function lkIsVacant(r){ var m = _lkMark(r, 'vac'); return !!(m && m.on); }
+function lkRows(){ return (COV || []).filter(_lkOk).filter(function(r){ return !lkAddressMissing(r) && !lkIsVacant(r); }); }
+function lkSkippedRows(){ return (COV || []).filter(_lkOk).filter(function(r){ return lkAddressMissing(r) && !lkIsVacant(r); }); }
+function lkVacantRows(){ return (COV || []).filter(_lkOk).filter(lkIsVacant); }
+function _lkMarkSave(c, out, key, val){
+  var r = (COV || []).filter(function(x){ return x.c === c && x.lk; })[0];
+  if(!r) return;
+  var n = notes[c] = notes[c] || {};
+  n.touches = n.touches || [];
+  var last = n.touches.reduce(function(at, t){ return Math.max(at, +t.tsu || 0); }, 0);
+  var t = {ch:'lookup', d:today(), ts:nowTS(), tsu:Math.max(Date.now(), last + 1), out:out, by:caller()};
+  val.a = r.a || '';
+  t[key] = val;
+  n.touches.push(t);
+  saveNotes(); try{ queueSync(); }catch(e){}
+  LKFOCUS = null;
+  render(); _lkSaveState(); _lkScroll(false);
+}
+function lkAddressResult(c, missing){
+  _lkMarkSave(c, missing ? 'Whitepages address not found' : 'Whitepages lookup restored', 'wpaddr', {missing:!!missing});
+}
+function lkVacantResult(c, on){
+  _lkMarkSave(c, on ? 'Marked VACANT: moved to the Vacant list' : 'Vacant mark removed', 'vac', {on:!!on});
+  if(on) toast('Moved to Vacant. It is under the Vacant button at the top of this list.');
+}
+/* Every vacant address, one per line, in the Whitepages spelling: what the vacant rundown takes. */
+function lkVacantCopy(){
+  var q = lkVacantRows().map(function(r){ return wpSearchAddr(r) || r.a || ''; }).filter(Boolean).join('\n');
+  if(!q) return;
+  var done = function(){ toast('Copied ' + lkVacantRows().length + ' vacant address(es).'); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(q).then(done, function(){ prompt('Copy this:', q); });
+    else prompt('Copy this:', q);
+  }catch(e){ prompt('Copy this:', q); }
+}
 /* A number already saved on the lead (this phone, the board, or a teammate's sync) makes it a
    dial row on load, so a lookup done yesterday is not done again today. */
 function promoteLookups(){
@@ -7370,7 +7426,7 @@ function _lkGroup(r){
 }
 function lkSorted(){
   _WQSET = null;
-  return lkRows().map(function(r, ix){ return {r:r, ix:ix, g:_lkGroup(r)}; }).sort(function(a, b){
+  return (LKVACANT ? lkVacantRows() : LKSKIPPED ? lkSkippedRows() : lkRows()).map(function(r, ix){ return {r:r, ix:ix, g:_lkGroup(r)}; }).sort(function(a, b){
     if(a.g !== b.g) return a.g - b.g;
     /* worker picks keep the worker panel's order: soonest sale, then newest filing */
     if(a.g === 0){ var da = (typeof a.r.d === 'number' && a.r.d >= 0) ? a.r.d : 99999,
@@ -7398,8 +7454,17 @@ function lookupList(){
             + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
             + '<button class="lkf' + (LKEQ || LKSALE ? '' : ' on') + '" data-eq="0">All ' + all.length + '</button>'
             + '<button class="lkf' + (LKSALE ? ' on' : '') + '" data-eq="2">Sale in 14 days ' + nSoon + '</button>'
-            + '<button class="lkf' + (LKEQ && !LKSALE ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button></div></div>';
-  if(!rows.length) return head() + head_ + '<div class="card">Nothing to look up right now.</div><div class="sheetpad"></div>';
+            + '<button class="lkf' + (LKEQ && !LKSALE ? ' on' : '') + '" data-eq="1">Has equity ' + nEq + '</button>'
+            + '<button id="lkskipped" class="lkf' + (LKSKIPPED ? ' on' : '') + '">'
+            + (LKSKIPPED ? 'Back to prospects' : 'Show skipped ' + lkSkippedRows().length) + '</button>'
+            + '<button id="lkvacant" class="lkf' + (LKVACANT ? ' on' : '') + '">'
+            + (LKVACANT ? 'Back to prospects' : '&#127962; Vacant ' + lkVacantRows().length) + '</button></div>'
+            + (LKVACANT ? '<div class="sub" style="margin-top:8px">Marked vacant: nobody lives there to call. These are off the '
+                + 'calling list and waiting for the vacant rundown (owner of record, why it is empty, who to reach).</div>'
+                + (all.length ? '<button id="lkvaccopy" style="width:100%;min-height:44px;margin-top:8px">&#128203; Copy all ' + all.length + ' vacant address' + (all.length === 1 ? '' : 'es') + '</button>' : '')
+              : LKSKIPPED ? '<div class="sub" style="margin-top:8px">Skipped because Whitepages did not have the address. Restore one to look it up again.</div>' : '')
+            + '</div>';
+  if(!rows.length) return head() + head_ + '<div class="card">' + (LKVACANT ? 'No lead is marked vacant.' : LKSKIPPED ? 'Nothing skipped.' : 'Nothing to look up right now.') + '</div><div class="sheetpad"></div>';
   var CAP = LKSHOW, shown = rows.slice(0, CAP);
   /* the script drawer is for the lead with the gold border: the first card until he taps another */
   if(!shown.some(function(r){ return r.c === LKFOCUS; })) LKFOCUS = shown[0].c;
@@ -7474,6 +7539,13 @@ function lookupList(){
          + _lkPickHtml(r.c)
          + mailOnFileBtn(lkAsDial(r, ''))
          + wpcBtn(r.c)
+         + '<div style="display:flex;gap:6px;margin-top:8px">'
+         + (LKVACANT ? '' : '<button class="lkaddress" data-c="' + esc(r.c) + '" data-missing="' + (LKSKIPPED ? '0' : '1')
+             + '" style="flex:1;min-width:0;min-height:44px;background:#132244;border:1px solid #2a3f6b;color:var(--ink);border-radius:10px">'
+             + (LKSKIPPED ? 'Restore prospect' : 'Not on Whitepages') + '</button>')
+         + '<button class="lkvac" data-c="' + esc(r.c) + '" data-on="' + (LKVACANT ? '0' : '1')
+         + '" style="flex:1;min-width:0;min-height:44px;background:#132244;border:1px solid var(--gold);color:var(--gold);border-radius:10px">'
+         + (LKVACANT ? 'Not vacant: back to prospects' : '&#127962; Vacant') + '</button></div>'
          + (wpeAddrs(r.c).length ? '<div class="sub">Owner email on file (Morning Worker sends it): ' + esc(wpeAddrs(r.c).join(', ')) + '</div>' : '')
          + '</div>';
   }).join('');
@@ -7602,7 +7674,7 @@ function _lkSaveState(){
   try{
     if(BLANE === '__lk') _LKY = window.scrollY || 0;
     localStorage.setItem(_LKK, JSON.stringify({d: new Date().toDateString(), ts: Date.now(),
-      on: BLANE === '__lk' ? 1 : 0, eq: LKEQ ? 1 : 0, sale: LKSALE ? 1 : 0, show: LKSHOW, f: LKFOCUS, from: LKFROM, y: _LKY, dr: LKDRAFT}));
+      on: BLANE === '__lk' ? 1 : 0, eq: LKEQ ? 1 : 0, sale: LKSALE ? 1 : 0, skipped:LKSKIPPED ? 1 : 0, vacant:LKVACANT ? 1 : 0, show: LKSHOW, f: LKFOCUS, from: LKFROM, y: _LKY, dr: LKDRAFT}));
   }catch(e){}
 }
 function _lkLoadState(){
@@ -7614,6 +7686,7 @@ function _lkLoadState(){
   }
   if(s.d !== new Date().toDateString()) return null;
   LKEQ = s.eq === 1; LKSALE = s.sale === 1;
+  LKSKIPPED = s.skipped === 1; LKVACANT = s.vacant === 1 && !LKSKIPPED;
   if(typeof s.show === 'number' && s.show >= 200) LKSHOW = Math.min(s.show, 5000);
   if(typeof s.f === 'string') LKFOCUS = s.f;
   if(typeof s.y === 'number') _LKY = s.y;
@@ -9906,7 +9979,9 @@ function screenLead(){
     +   _navRow()
     + '</div>'
     + '<div class="sub">'+(i+1)+' of '+(_NAVP||pool()).length+' &middot; showing '+SHOWN+' of '+TOTAL+' that qualify</div>'
-    + '<div class="sheetpad"></div>';
+    + '<div class="sheetpad"></div>'
+    + '<button class="lkfab vmquick" id="vmquick">Voicemail script</button>';
+  $('vmquick').onclick = function(){ vmOpen(r); };
   // Render the outcome screen SYNCHRONOUSLY on tap and let the tel: navigation proceed. iOS
   // backgrounds the tab the instant the dialer opens; painting after would never happen.
   _wirePaste(r);
@@ -10412,7 +10487,9 @@ function screenOutcome(){
     + refBlock
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
-    +'</div><div class="sheetpad"></div>';
+    +'</div><div class="sheetpad"></div>'
+    + '<button class="lkfab vmquick" id="vmquick">Voicemail script</button>';
+  $('vmquick').onclick = function(){ vmOpen(r); };
   /* A redial IS a dial — record it, or the dial-through count undercounts the actual work (the
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
@@ -12240,7 +12317,20 @@ function wire(){
       BLANE = '__lk'; i=0; render(); _lkScroll(true); };
   });
   Array.prototype.forEach.call(document.querySelectorAll('button.lkf'), function(b){
-    b.onclick=function(){ var v = b.getAttribute('data-eq'); LKEQ = v === '1'; LKSALE = v === '2'; LKSHOW = 200; render(); _lkSaveState(); };
+    b.onclick=function(){ var v = b.getAttribute('data-eq'); LKEQ = v === '1'; LKSALE = v === '2'; LKSKIPPED = false; LKVACANT = false; LKSHOW = 200; render(); _lkSaveState(); };
+  });
+  if($('lkskipped')) $('lkskipped').onclick = function(){
+    LKSKIPPED = !LKSKIPPED; LKVACANT = false; LKSHOW = 200; LKFOCUS = null; render(); _lkSaveState();
+  };
+  if($('lkvacant')) $('lkvacant').onclick = function(){
+    LKVACANT = !LKVACANT; LKSKIPPED = false; LKSHOW = 200; LKFOCUS = null; render(); _lkSaveState();
+  };
+  if($('lkvaccopy')) $('lkvaccopy').onclick = function(){ lkVacantCopy(); };
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkvac'), function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); lkVacantResult(b.getAttribute('data-c'), b.getAttribute('data-on') === '1'); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('button.lkaddress'), function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); lkAddressResult(b.getAttribute('data-c'), b.getAttribute('data-missing') === '1'); };
   });
   var _lkm = $('lkmore');
   if(_lkm) _lkm.onclick = function(){ LKSHOW += 200; var y = window.scrollY; render(); try{ window.scrollTo(0, y); }catch(e){} };
@@ -13111,22 +13201,26 @@ function _vmTexts(r){
 function vmClose(){ var o=document.getElementById('vmfull'); if(o && o.parentNode) o.parentNode.removeChild(o); }
 function vmOpen(r){
   vmClose();
+  var hold = _vmHold(r, phIdx) || hardSuppressed(r);
   var t=_vmTexts(r), es=(lang()==='es' && t.es);
   var o=document.createElement('div'); o.id='vmfull'; o.className='vmfull';
   o.innerHTML='<div class="vmin"><div class="vmtop"><span>VOICEMAIL &middot; READ IT LIVE</span>'+langChips()+'</div>'
     + _vmWarnHtml()
+    + (hold ? '<div class="warnbar">' + esc(hold) + '</div>' : '')
     + (t.tone ? '<div class="mut" style="font-size:12px;margin-top:8px">'+esc(es && t.tone.es ? t.tone.es : t.tone.en)+'</div>' : '')
     /* the callback number never breaks across lines: he reads it aloud, slowly, twice */
     + '<div class="vmsay">'+esc(fillScript(es ? t.es : t.en, r))
         .split(esc(SENDER.phone||'\u0000')).join('<span style="white-space:nowrap">'+esc(SENDER.phone||'')+'</span>')+'</div>'
-    + '<button class="vmlog" id="vmlog">&#10003;&nbsp; Left voicemail &mdash; log it</button>'
+    + (hold ? '' : '<button class="vmlog" id="vmlog">&#10003;&nbsp; Left voicemail &mdash; log it</button>')
     + '<button class="vmx" id="vmx">Close</button></div>';
   document.body.appendChild(o);
   Array.prototype.forEach.call(o.querySelectorAll('.lchip'), function(b){
     b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); vmOpen(r); };
   });
   o.querySelector('#vmx').onclick=function(){ vmClose(); };
-  o.querySelector('#vmlog').onclick=function(){
+  if(o.querySelector('#vmlog')) o.querySelector('#vmlog').onclick=function(){
+    var hold = _vmHold(r, phIdx) || hardSuppressed(r);
+    if(hold){ toast(hold, {bad:true}); return; }
     vmClose();
     var b=document.querySelector('.oc button[data-oc="voicemail"]');
     if(b && !b.disabled) b.click(); else toast('Tap "Left voicemail" below to log it');

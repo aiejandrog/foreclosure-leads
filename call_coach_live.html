@@ -1158,7 +1158,15 @@ function pick(i){
   if(o1.indexOf(',')>=0) o1=o1.split(',').slice(1).join(' ');
   var own=o1.replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/);
   var corp=/\b(LLC|INC|CORP|TRUST|ESTATE|HOLDINGS|PROPERTIES|COMPANY|BANK)\b/i.test(String(m.owners||''));
-  if(own[0]&&own[0].length>1&&!corp&&!$('f_first').value) $('f_first').value=own[0].charAt(0).toUpperCase()+own[0].slice(1).toLowerCase();
+  /* "Hi, Lopez?" (2026-11-19): the first word is the surname wherever the roll writes the last name
+     first with no comma (Palm Beach). The server reads the name the way Call Mode does and sends
+     `first`; an empty one means there is no name worth saying. The guess below is only for an older
+     server that does not send it. */
+  /* a name this page filled in for the LAST lead is not this lead's name; one he typed stays */
+  if(S._autoFirst&&$('f_first').value===S._autoFirst) $('f_first').value='';
+  if(typeof m.first==='string'){ if(m.first&&!$('f_first').value) $('f_first').value=m.first; }
+  else if(own[0]&&own[0].length>1&&!corp&&!$('f_first').value) $('f_first').value=own[0].charAt(0).toUpperCase()+own[0].slice(1).toLowerCase();
+  S._autoFirst=$('f_first').value;
   var st1=String(m.address||'').split(',')[0].trim();
   if(st1) $('f_st1').value=st1;
   if(m.auction) $('f_date').value=m.auction;

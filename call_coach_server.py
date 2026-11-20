@@ -1879,12 +1879,66 @@ def ai_wrapup(lines, lane=""):
             "objection": none(field("OBJECTION"))[:80], "when": none(field("WHEN"))[:60], "note": none(field("NOTE"))[:320]}
 
 
+_ENTITY_RE = re.compile(
+    r"\b(LLC|L L C|INC|INCORPORATED|CORP|CORPORATION|COMPANY|LTD|LIMITED|LLP|LLLP|PLLC|TRUST|TRUSTEE|TRUSTEES|"
+    r"REVOCABLE|IRREVOCABLE|ESTATE|EST|HEIRS|DEVISEES|BENEFICIARIES|BANK|BANCORP|ASSOCIATION|ASSOC|ASSN|"
+    r"CONDOMINIUM|CONDO|HOMEOWNERS|HOA|PROPERTIES|PROPERTY|HOLDINGS|INVESTMENTS|INVESTMENT|INVESTORS|GROUP|"
+    r"PARTNERS|PARTNERSHIP|FUND|FUNDING|CAPITAL|REALTY|ENTERPRISES|VENTURES|MORTGAGE|SERVICING|LENDING|"
+    r"FINANCIAL|FINANCE|CREDIT UNION|FEDERAL|NATIONAL|FOUNDATION|MINISTRIES|MINISTRY|SERVICES|SOLUTIONS|"
+    r"MANAGEMENT|DEVELOPMENT|DEVELOPERS|CONSTRUCTION|BUILDERS|HOMES|HOUSES|APARTMENTS|VILLAS|TOWNHOMES|"
+    r"COMMUNITY|CLUB|SOCIETY|AUTHORITY|COUNTY|UNITED STATES|SECRETARY|DEPARTMENT|FSB|UNKNOWN|TENANT|OCCUPANT)\b")
+_NAME_FRAGMENTS = set(
+    "A AN THE WE US OUR I ME MY YOU YOUR HE HIM HIS SHE HER IT ITS THEY THEM THEIR THIS THAT WHO ALL ANY NONE NO NOT "
+    "AND OR OF FOR TO AT IN ON BY AS IS FROM WITH MR MRS MS MISS DR SR JR II III IV AKA FKA NKA DBA ETAL ET AL ETUX "
+    "ETVIR UNK NA DE DEL DELA LA LAS LOS EL LE DA DI DOS DU VAN VON DER DEN ST SAN SANTA MC MAC NW NE SW SE "
+    "OWNER VIA TITLE SEARCH".split())
+
+
+def greet_first(oname, owners, county="", case="", officer=False):
+    """The first name to say on the phone, or '' when there is none worth saying.
+
+    "Hi, Lopez?" (2026-11-19): the coach page took the first word of the owner string, which is the
+    SURNAME wherever the roll writes the last name first. Same reading as call_mode._greet_name and the
+    page's firstName(): "LAST, FIRST" is marked by its comma in any county; Palm Beach's roll writes
+    "LAST FIRST" with no comma; everything else arrives "First Last". A company, trust or estate has
+    no first name, and neither does a pronoun, a title or a surname particle. officer=True is the
+    investor lane: the owner is a company and `oname` is the person behind it, who is who answers."""
+    own1 = str(owners or "").split(";")[0].strip()
+    src = str(oname or "").strip() or own1
+    if not src:
+        return ""
+    flat = lambda v: re.sub(r"\s+", " ", re.sub(r"[.,]", " ", str(v).upper())).strip()
+    if _ENTITY_RE.search(flat(src)) or (not officer and _ENTITY_RE.search(flat(own1))) or re.search(r"\d", src):
+        return ""
+    if "," in own1 and "," not in src and not officer:
+        # the roll says LAST,FIRST outright and the cleaned name still leads with that surname
+        _l, _s = re.sub(r"[^A-Z ]", " ", own1.split(",")[0].upper()).split(), src.upper().split()
+        if _l and len(_s) >= 2 and _s[0] == _l[0] and own1.split(",", 1)[1].strip():
+            src = own1.split(",", 1)[1]
+    src = re.split(r"&| and ", src, flags=re.I)[0].strip() or src
+    if "," in src:
+        last, _, rest = src.partition(",")
+        src = rest.strip() or last.strip()
+    elif ("PALM" in str(county or "").upper() or str(case or "").startswith("50")) and "," not in own1:
+        toks = src.split()
+        if len(toks) >= 2:
+            src = " ".join(toks[1:])
+    toks = re.sub(r"[^A-Za-z '\-]", " ", src).split()
+    if not toks:
+        return ""
+    tok = toks[0].strip("'-").upper()
+    if len(tok) < 2 or tok in _NAME_FRAGMENTS or not re.search(r"[AEIOUY]", tok):
+        return ""
+    return tok[0] + tok[1:].lower()
+
+
 def lead_card(r):
     """The fields the coach actually shows on a call."""
     return {
         "case": r.get("Case #"),
         "address": r.get("Address"),
         "owners": r.get("owners"),
+        "first": greet_first(r.get("owner_clean"), r.get("owners"), "MIAMI-DADE", r.get("Case #")),
         "auction": r.get("AuctionDate"),
         "days": _days_to(r.get("AuctionDate")),
         "judgment": r.get("Final Judgment Amount"),
@@ -1937,6 +1991,8 @@ def slim_card(r, src):
         "case": r.get("case"),
         "address": r.get("addr"),
         "owners": r.get("oname") or r.get("owners"),
+        "first": greet_first(r.get("oname"), r.get("owners"), r.get("county"), r.get("case"),
+                             officer=str(r.get("st") or "").upper() == "BAL"),
         "auction": r.get("auction") or None,
         "days": days,
         "judgment": None, "opening_bid": None,          # the slim files carry estimates, never quoted here

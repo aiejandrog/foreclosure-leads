@@ -339,7 +339,8 @@ rec('no tel/dial link anywhere in a DNC row', 'href' not in out.get('withdnc', '
 rec('DNC household / line labels shown', 'household' in wd)
 rec('a one-number lead with a DNC number still shows the list', 'do-not-call flag' in out.get('onlydnc', ''))
 
-# Whitepages address link on the card: Whitepages' own spelling (ordinals, "Apt"), as wp_web builds it.
+# Whitepages address link on the card: the SEARCH BAR spelling (ordinals, "# B105"). wp_web keeps "Apt"
+# for its /address/ page links; the search bar matches a unit written with # (2026-11-19).
 _pg = call_mode._PAGE
 _a = _pg.index('function fileLinks(')
 _js = os.path.join(_T, 'wplinks.js')
@@ -354,7 +355,7 @@ _p2 = subprocess.run([os.environ.get('NODE_BIN', 'node'), _js], capture_output=T
 _got = json.loads(_p2.stdout or 'null') if _p2.returncode == 0 else None
 import wp_web as _W
 from urllib.parse import quote as _q
-_want = ['https://www.whitepages.com/reverse-address#' + _q(_W._wp_street(x) + ', Miami, FL 33101', safe="-_.!~*'()")
+_want = ['https://www.whitepages.com/reverse-address#' + _q(_W._wp_street(x).replace(' Apt ', ' # ') + ', Miami, FL 33101', safe="-_.!~*'()")
          for x in ('2929 NW 123 TER', '8600 NW 34 PL #B105', '9999 NE 99 AVE 999', '5000 US HIGHWAY 1')]
 rec('card Whitepages address link opens the reverse-address search with wp_web street spelling',
     _got == _want, (_got, _want, _p2.stderr[-300:]))
