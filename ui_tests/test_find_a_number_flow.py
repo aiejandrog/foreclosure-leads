@@ -61,6 +61,7 @@ def _build(lookup_details=False):
     html = call_mode.build_html([], 0, {'ct': 'x', 'k': 'y'}, 'built', 'sig', 'bsig',
                                 sync_js=call_mode.extract_sync_js(tpl), funnel_js=call_mode.extract_funnel_js(tpl),
                                 text_js=call_mode.extract_text_js(tpl),
+                                mail_js=call_mode.bake_mail_js(call_mode.extract_mail_js(tpl), 'lookup test'),
                                 histcov='{"ledgers_ok": true, "why": "", "capped": false, "total": 1, "shipped": 1}')
     path = os.path.join(_T, 'call.html')
     Path(path).write_text(html, encoding='utf-8')
@@ -196,6 +197,63 @@ class FindANumberFlow(unittest.TestCase):
         self.assertIn('Complaint not read yet', filing)
         self.assertIn('Property value $400,000', filing)
         self.assertEqual(self.ev("lkAsDial(COV.find(r => r.c === '%s'), '').v" % LK2), 400000)
+        self.assertEqual(self.errors, [])
+
+    def test_paste_selects_new_number_on_an_existing_row(self):
+        self.to_list()
+        self.ev("""() => {
+            ROWS.push(lkAsDial(COV.find(r => r.c === '%s'), '3055550188'));
+            lkSave('%s', '3055550199', true);
+        }""" % (LK1, LK1))
+        self.assertEqual(self.ev('cur.p[phIdx]'), '3055550199')
+        self.assertEqual(self.ev('cur.c'), LK1)
+        self.assertEqual(self.errors, [])
+
+    def test_held_lookup_keeps_draft_and_explains_the_hold(self):
+        self.to_list()
+        self.ev("""() => {
+            notes['%s'] = {touches:[{ch:'letter', d:today(), tsu:Date.now(), out:'Mailed'}]};
+            window.testMessages = [];
+            toast = m => window.testMessages.push(m);
+            lkSave('%s', '3055550199', true);
+        }""" % (LK1, LK1))
+        self.assertEqual(self.ev('BLANE'), '__lk')
+        self.assertEqual(self.ev("LKDRAFT['%s']" % LK1), '3055550199')
+        self.assertIn('letter', self.ev('window.testMessages.join(" ")'))
+        self.assertEqual(self.errors, [])
+
+    def test_failed_email_can_continue_to_prospect_and_call(self):
+        self.to_list()
+        self.ev("""() => {
+            mailCheck = (r, raw) => ({addr:raw, stage:'cold', why:''});
+            screenMail(lkAsDial(COV.find(r => r.c === '%s'), ''), 'owner@example.com',
+                () => { SCREEN='lead'; BLANE='__lk'; render(); });
+            mailViaBridge = () => Promise.resolve({ok:false, why:'Bridge unavailable'});
+            document.getElementById('mlgo').click();
+        }""" % LK1)
+        self.page.wait_for_function("document.getElementById('mlwhy').textContent === 'Bridge unavailable'")
+        self.page.locator('#mlprospect').click()
+        self.assertEqual(self.ev('[SCREEN, cur.c]'), ['prospect', LK1])
+        self.page.locator('input.lknum').fill('3055550199')
+        self.page.locator('button.lkadd').click()
+        self.assertEqual(self.ev('[SCREEN, cur.c, cur.p[phIdx]]'), ['outcome', LK1, '3055550199'])
+        self.assertEqual(self.ev("(notes['%s'].touches || []).filter(t => t.ch === 'email').length" % LK1), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_old_email_response_keeps_reopened_composer(self):
+        self.to_list()
+        self.ev("""() => {
+            mailCheck = (r, raw) => ({addr:raw, stage:'cold', why:''});
+            let r = lkAsDial(COV.find(r => r.c === '%s'), '');
+            screenMail(r, 'owner@example.com', () => { SCREEN='lead'; BLANE='__lk'; render(); });
+            mailViaBridge = () => new Promise(resolve => { window.finishOldMail = resolve; });
+            document.getElementById('mlgo').click();
+            document.getElementById('mlprospect').click();
+            screenMail(r, 'other@example.com');
+            window.finishOldMail({ok:true, to:'owner@example.com'});
+        }""" % LK1)
+        self.page.wait_for_function("notes['%s'] && notes['%s'].touches" % (LK1, LK1))
+        self.assertEqual(self.ev('[SCREEN, _MAIL[1]]'), ['mail', 'other@example.com'])
         self.assertEqual(self.errors, [])
 
 

@@ -4669,7 +4669,7 @@ var TEXTPERSON=__TEXTPERSON__;
    can freshen it. A failed poll keeps the bake: the phone often cannot see the laptop. */
 var TEXTHOLD=__TEXTHOLD__;
 /* Relatives switch, baked from DEALFLOW_RELATIVE_DIAL (see _relative_dial_on). false = a number tagged
-   relative is log-only: no tel: link, no redial, the call he placed on his phone is recorded. */
+   relative's initial call is log-only. The outcome screen offers an explicit redial of the current number. */
 var RELDIAL=__RELDIAL__;
 var TEXTHOLDBAKE=TEXTHOLD;
 var TEXTHOLDLIVE=false;
@@ -7540,18 +7540,25 @@ function lkSave(c, raw, viaClip){
   n.wpm = n.wpm || []; if(n.wpm.indexOf(num) < 0) n.wpm.push(num);
   row.ps = ['wpm'];
   saveNotes(); try{ queueSync(); }catch(e){}
-  if(!ROWS.some(function(x){ return x.c === c; })) ROWS.push(row);
+  var existing = ROWS.filter(function(x){ return x.c === c; })[0];
+  if(existing){ _addNum(existing, num); row = existing; }
+  else ROWS.push(row);
   /* Where to come back to: the lead after this one on the list, so the call's outcome returns him
      to the next lead to look up, not to the dial queue (2026-11-09). */
   var _lks = lkSorted(), _nx = null;
   for(var _q = 0; _q < _lks.length; _q++) if(_lks[_q].c === c){ _nx = (_lks[_q + 1] || _lks[_q - 1] || {}).c || null; break; }
+  var wasScreen = SCREEN, wasBoard = BLANE;
+  SCREEN = 'lead';
+  LKFROM = c;
+  if(!_openCase(c, num)){
+    LKFROM = null; SCREEN = wasScreen; BLANE = wasBoard;
+    LKDRAFT[c] = num;
+    _lkSaveState();
+    return;
+  }
   LKDONE[c] = 1;
   delete LKDRAFT[c];
   LKFOCUS = _nx;
-  BLANE = null;
-  LKFROM = c;
-  _openCase(c);
-  if(!(cur && cur.c === c)) LKFROM = null;          /* it did not open: nothing to come back from */
   _lkSaveState();
   /* SAVE & CALL means call: the card is open on that number, so tap its dial button for him. The
      same handler logs the attempt and opens the outcome screen; outside 8-8 it only arms. */
@@ -7742,9 +7749,10 @@ function applyPasted(){
    see it. Both are call only, never texted from Call Mode. A tag on a number the lead already had (a
    traced number that turned out to be the sister's) is recorded the same way and wins over its source.
    LEGAL REVIEW: calling relatives is not cleared by the attorney. With RELDIAL false (the default) a
-   relative number is log-only: no tel: link, no redial; the button records a call he already placed so
+   relative number's initial button records a call he already placed so
    it still counts as one dial with an outcome. A visible warning shows whenever Relative is picked and
-   on the card of a relative number. Not checked against the do-not-call registry, same as any paste. */
+   on the card of a relative number. The outcome screen's current-number Redial link is available
+   at Alejandro's direction (2026-11-19). Not checked against the do-not-call registry, same as any paste. */
 var PASTEKIND = 'o', PASTEKIND_C = null;
 function wprList(c){
   var out = [], seen = {};
@@ -8379,6 +8387,7 @@ function screenMail(r, raw, back){
   if(v.why){ toast(v.why, {bad:true}); return; }
   var ret = back || screenLead;
   SCREEN = 'mail'; _MAIL = [r, v.addr, back];
+  var composer = _MAIL;
   document.getElementById('sheet').classList.add('hid');
   var M = composeMail(r, v.addr, lang()), s = _mailSender();
   $('app').innerHTML = '<div class="card mailcard">'
@@ -8390,6 +8399,7 @@ function screenMail(r, raw, back){
     + '<div class="pcnote">This send goes through the laptop bridge, from the company address (the bsgfl.com and biscaynesolutionsgroup.com warm-up aliases, Reply-To on bsgflorida.com). The bridge sends it only when the address is one the pipeline already verified, the lead is clear to contact, and the daily limits have room. Your mail app is not opened.</div>'
     + '<button type="button" id="mlgo" class="pcgo">Send from the company address</button>'
     + '<div id="mlwhy" class="pcnote bad" style="display:none"></div>'
+    + '<button type="button" id="mlprospect" class="ghost" style="margin-top:12px">Continue to prospect</button>'
     + '<button type="button" id="mlback" class="ghost" style="margin-top:12px">&#8592; Back to the card</button>'
     + '</div><div class="sheetpad"></div>';
   wireLang();
@@ -8415,10 +8425,11 @@ function screenMail(r, raw, back){
         if(res.to) M.to = res.to;
         mailLog(r, M, 'company mail');
         toast('Email sent from the company address');
-        ret();
+        if(SCREEN === 'mail' && _MAIL === composer) ret();
         return;
       }
       sending = false;
+      if(SCREEN !== 'mail' || _MAIL !== composer) return;
       var b = $('mlgo');
       if(b){ b.disabled = false; b.textContent = 'Send from the company address'; }
       var box = $('mlwhy');
@@ -8426,6 +8437,27 @@ function screenMail(r, raw, back){
     });
   };
   $('mlback').onclick = function(){ ret(); };
+  $('mlprospect').onclick = function(){ screenMailProspect(r); };
+}
+function screenMailProspect(r){
+  var dial = ROWS.filter(function(x){ return x.c === r.c; })[0];
+  SCREEN = 'lead'; BLANE = null;
+  if(dial && _openCase(r.c)) return;
+  cur = dial || r; phIdx = 0;
+  var hold = dial ? (supReason(dial, 'all') || {}).t : '';
+  SCREEN = 'prospect'; _MAIL = null;
+  document.getElementById('sheet').classList.remove('hid');
+  $('app').innerHTML = '<div class="card"><div class="addr">' + esc(propertyLabel(cur)) + '</div>'
+    + '<div class="own">' + esc(ownerLabel(cur)) + '</div>'
+    + eqCardHtml(cur)
+    + (hold ? '<div class="warnbar">' + esc(hold) + '</div>' : '')
+    + '<div class="sub">Enter a phone number from Whitepages to open this prospect for a call.</div>'
+    + '<div class="pastecall"><div class="pcrow"><input class="lknum" data-c="' + esc(r.c) + '" placeholder="Phone number" type="tel"></div>'
+    + '<button class="lkadd pcgo" data-c="' + esc(r.c) + '">Save &amp; call</button>'
+    + '<button id="mlreturn" class="pcgo keep">Back to Find a number</button></div></div><div class="sheetpad"></div>';
+  wire();
+  $('mlreturn').onclick = function(){ SCREEN = 'lead'; BLANE = '__lk'; render(); };
+  renderSheet(cur);
 }
 /* Addresses already pasted on this lead (here, the board or a teammate's phone): one tap each. */
 function _wpeList(r){
@@ -10321,6 +10353,7 @@ function screenOutcome(){
     + '</div>';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    +'<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
     + fast
     /* BACK TO THE NUMBERS (2026-11-02, Alex: "from when you click on a number ... i want to be able to
        go back in case i wanted to press on another number"). Returns to this lead's card, same number
@@ -10335,12 +10368,6 @@ function screenOutcome(){
     +(_vmHold(r, phIdx) ? '<div class="nc">'+esc(_vmHold(r, phIdx))+'</div>'
       : '<button class="vmbtn" id="vmbtn">&#127897;&nbsp; Voicemail &mdash; show the script</button>')
     + refBlock
-    /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
-       hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
-       the proven path (the main dial button), and returning from the dialer lands right back on
-       this screen because the SCREEN guard defers any sync repaint. */
-    + (relLogOnly(r, phIdx) ? '<div class="nc" style="margin-top:8px">Relative: dial it on your phone. Call Mode only logs it.</div>'
-        : '<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>')
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'</div><div class="sheetpad"></div>';
@@ -10384,7 +10411,9 @@ function screenOutcome(){
       }
     };
   });
-  if($('redial')) $('redial').addEventListener('click', function(){
+  if($('redial')) $('redial').addEventListener('click', function(ev){
+    var check = pasteCheck(r, d);
+    if(check.why){ ev.preventDefault(); toast(check.why, {bad:true}); return; }
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
     var _rr = {d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial', by:caller()};
@@ -12225,7 +12254,7 @@ function wire(){
 }
 /* Open one lead's card in the dial lane that holds it (a board-lane row, or a lead just given a
    number on the Find-a-number list). */
-function _openCase(c){
+function _openCase(c, num){
   _PKPIN = c; _MOVE = 1;   /* opened on purpose: this case holds its owner's one card, and render() may leave the lead it is on */
   if(LKFROM && c !== LKFROM) LKFROM = null;   /* a different lead opened on purpose: no way back to the list */
   var lane0 = lane;
@@ -12239,13 +12268,21 @@ function _openCase(c){
     try{ var _rw = ROWS.filter(function(r){ return r.c === c; })[0]; if(_rw) QVIEW = _viewOf(_rw); }catch(_e){}
     var P=pool();
     for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
-    if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render(); return; }
+    if(hit>=0){ if(!_QVBACK && (QVIEW !== _qvWas || lane !== _laneWas)) _QVBACK = {v:_qvWas, l:_laneWas, c:_cardWas}; i=hit; render();
+      if(num && cur && cur.c === c){ var ix = (cur.p || []).indexOf(num); if(ix >= 0){ phIdx = ix; screenLead(); } }
+      return true; }
     QVIEW = _qvWas; lane = _laneWas;
   }
   /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
      seat. Say which rather than doing nothing when tapped. */
-  toast(_clmOwner(c) ? 'A teammate is on this lead right now'
-                     : 'Not in a dial lane right now \u2014 suppressed, or on the other phone');
+  var held = ROWS.filter(function(r){ return r.c === c; })[0], reason = '';
+  if(held){
+    if(_clmOwner(c)) reason = 'A teammate is on this lead right now';
+    else if(!_seatMine(held)) reason = 'This lead belongs to the other caller';
+    else reason = (supReason(held, 'all') || {}).t || '';
+  }
+  toast((num ? 'Number saved. ' : '') + (reason || 'This prospect is unavailable for a call right now'), {bad:true});
+  return false;
 }
 /* ══════════════ FIND A LEAD (2026-11-19, Alejandro) ══════════════
    "what about all of the leads that aren't on that screen and I'm trying to look up? Something like
