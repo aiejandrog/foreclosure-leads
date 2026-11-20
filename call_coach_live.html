@@ -198,6 +198,7 @@ code{color:var(--accent)}
     <div class="row">
       <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
+      <a href="/calls" target="_blank" rel="noopener" style="display:inline-block;padding:9px 14px;border-radius:8px;text-decoration:none;background:#c6a14b;color:#14203a;border:1px solid #c6a14b;font-weight:700" title="Every recorded call: transcript, audio, outcome, and a button that opens the folder">&#128193; Call recordings</a>
       <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (about 1 cent a minute). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
     </div>
 
@@ -231,6 +232,7 @@ code{color:var(--accent)}
     </select>
     <span class="sp"></span>
     <input id="q2" placeholder="Switch lead: case, address or name" title="Type a case number, street or name and press Enter: the call on screen is saved and this lead loads" style="width:230px;padding:5px 8px;border-radius:6px;border:1px solid #2a3a4a;background:#0d1520;color:#e6edf3;font:inherit" onkeydown="if(event.key==='Enter') Coach.switchTo()">
+    <a href="/calls" target="_blank" rel="noopener" title="Every recorded call: transcript, audio, outcome, and a button that opens the folder" style="padding:5px 10px;border-radius:6px;text-decoration:none;background:#c6a14b;color:#14203a;border:1px solid #c6a14b;font-weight:700">&#128193; Recordings</a>
     <button title="Save what is on screen and start a clean call on the same lead (R)" style="border-color:#4aa3ff;color:#bfe0ff" onclick="Coach.newCall()">New call (R)</button>
     <button id="pausebtn" title="Hide the coach card and stop new prompts (P)" onclick="Coach.pauseCoach()">Pause coach (P)</button>
     <button title="The last things they said (C)" onclick="Coach.catchUp()">Catch me up (C)</button>
@@ -257,7 +259,7 @@ code{color:var(--accent)}
       <div><label>First name</label><input id="f_first" placeholder="Maria" oninput="Coach.fill()"></div>
       <div><label>Street</label><input id="f_st1" placeholder="NW 12th Ave" oninput="Coach.fill()"></div>
       <div><label>Sale date</label><input id="f_date" placeholder="the 18th" oninput="Coach.fill()"></div>
-      <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="Coach.fill()"></div>
+      <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="try{localStorage.setItem('coachCaller',this.value)}catch(e){};Coach.fill()"></div>
     </div>
 
     <!-- FAST COACH: one card, always in this spot. Driven by the transcript, partial words included. -->
@@ -1549,7 +1551,7 @@ function aiCheck(){
   var _ac=(typeof AbortController!=='undefined')?new AbortController():null;
   var _kill=_ac?setTimeout(function(){ try{ _ac.abort(); }catch(e){} },AI_CUT):null;
   fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},signal:_ac?_ac.signal:undefined,
-    body:JSON.stringify({lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
+    body:JSON.stringify({caller:($('f_sender')||{}).value||'', lines:S.lines.slice(-24).map(function(l){ return {spk:l.spk, text:l.text}; }), lang:S.lang, shown:S.ai.line||'', asked:S.ai.hist, days:(S.lead&&S.lead.days!=null)?S.lead.days:null, lane:(S.lead&&S.lead.lane)||'', eq:(S.lead&&fcFacts(S.lead).eqOk)?'verified':''})})
   .then(function(r){ return r.ok?r.json():{why:'http'+r.status}; }).then(function(j){
     clearTimeout(_kill);
     if(seq!==S.ai.seq){ aiStat('stale'); return; }
@@ -1931,7 +1933,7 @@ function start(){
     S.stream=stream; S.plain=false;
     var lead=S.lead||{};
     fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({case:lead.case||null,address:lead.address||null,owners:lead.owners||null,auction:lead.auction||null,phone:null,consent_ack:true})})
+      body:JSON.stringify({case:lead.case||null,address:lead.address||null,owners:lead.owners||null,auction:lead.auction||null,phone:null,consent_ack:true,caller:($('f_sender')||{}).value||''})})
     .then(function(r){return r.json();}).then(function(j){
       S.sid=j.session_id;
       $('dot').textContent='● REC'; $('dot').className='rec';
@@ -1975,7 +1977,7 @@ function wrapAsk(){
   for(var i=0;i<btns.length;i++) btns[i].className='';
   if(!S.lines.length){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 nothing was said'; return; }
   fetch('/api/wrapup',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lines:S.lines.map(function(l){ return {spk:l.spk, text:l.text}; }), lane:(S.lead&&S.lead.lane)||''})})
+    body:JSON.stringify({caller:($('f_sender')||{}).value||'', lines:S.lines.map(function(l){ return {spk:l.spk, text:l.text}; }), lane:(S.lead&&S.lead.lane)||''})})
   .then(function(r){ return r.ok?r.json():{}; }).then(function(j){
     if(!j||!j.outcome){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; return; }
     S.wrap=j; S.wrapPending=false;
@@ -2226,6 +2228,8 @@ return {newCall:newCall,switchTo:switchTo,choose:choose,dropLead:dropLead,start:
         setKey:setKey,keepGoing:keepGoing,
         coachMore:coachMore,coachHide:coachHide,pauseCoach:pauseCoach,catchUp:catchUp,retryAI:retryAI,useMicCoach:useMicCoach,_test:_test};
 })();
+/* "Your name" is remembered on this computer: Carlos types it once and every coach line says his name. */
+(function(){ try{ var v=localStorage.getItem('coachCaller'); if(v && document.getElementById('f_sender')) document.getElementById('f_sender').value=v; }catch(e){} })();
 </script>
 </body>
 </html>

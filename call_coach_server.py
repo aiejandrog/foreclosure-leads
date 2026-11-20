@@ -1932,6 +1932,25 @@ def greet_first(oname, owners, county="", case="", officer=False):
     return tok[0] + tok[1:].lower()
 
 
+def _caller_name(v):
+    """The first name typed in "Your name" on the coach page, or '' when it is empty or not a name."""
+    t = re.sub(r"[^A-Za-z '\-]", " ", str(v or "")).split()
+    return (t[0][:20].capitalize()) if t else ""
+
+
+def with_caller(res, caller):
+    """The prompts are written in Alejandro's voice. When someone else is on the call (Carlos, 11-19: the
+    card told him to say "It's Alejandro with Biscayne Solutions Group"), the line says the caller's name."""
+    c = _caller_name(caller)
+    if not c or c == "Alejandro" or not isinstance(res, dict):
+        return res
+    out = dict(res)
+    for k in ("line", "note"):
+        if isinstance(out.get(k), str):
+            out[k] = re.sub(r"\bAlejandro\b", c, out[k])
+    return out
+
+
 def lead_card(r):
     """The fields the coach actually shows on a call."""
     return {
@@ -2097,6 +2116,81 @@ def _write_json(path, obj):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
+
+
+CALLS_PAGE_CSS = (
+    "body{margin:0;background:#0e1216;color:#e6edf3;font:14px/1.45 system-ui,Segoe UI,sans-serif}"
+    "header{position:sticky;top:0;background:#101a24;border-bottom:1px solid #1d4468;padding:12px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}"
+    "h1{font-size:18px;margin:0 10px 0 0;color:#ffd479}"
+    "button,a.b{font:inherit;background:#132244;color:#e6edf3;border:1px solid #2a3f6b;border-radius:8px;padding:7px 12px;cursor:pointer;text-decoration:none}"
+    "button.big{background:#c6a14b;color:#14203a;border-color:#c6a14b;font-weight:700}"
+    "input{font:inherit;background:#0b1520;color:#e6edf3;border:1px solid #2a3f6b;border-radius:8px;padding:7px 10px;min-width:240px}"
+    ".path{color:#8b98a6;font-size:12px}"
+    "table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-bottom:1px solid #1b2733;vertical-align:top;text-align:left}"
+    "th{color:#8b98a6;font-weight:600;font-size:12px;position:sticky;top:58px;background:#0e1216}"
+    "tr:hover td{background:#111c27}.oc{font-weight:700}.oc.appointment{color:#5fd38d}.oc.talked{color:#ffd479}"
+    ".note{color:#bcdcff;font-size:12.5px;max-width:520px}.dim{color:#5e6b78}audio{height:30px;width:220px}"
+    "pre{white-space:pre-wrap;background:#0b1520;border:1px solid #1d4468;border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,Consolas,monospace}"
+)
+
+
+def calls_index(limit=300):
+    """Every recorded call, newest first: when, how long, which lead, what happened, and what is on disk."""
+    out = []
+    try:
+        names = sorted((n for n in os.listdir(SESSIONS) if os.path.isdir(os.path.join(SESSIONS, n))), reverse=True)
+    except OSError:
+        names = []
+    for sid in names[:limit]:
+        d = os.path.join(SESSIONS, sid)
+        try:
+            with open(os.path.join(d, "meta.json"), "r", encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            m = {}
+        w = m.get("wrapup") or {}
+        ai = w.get("ai") if isinstance(w, dict) else {}
+        out.append({
+            "sid": sid, "started": m.get("started_utc") or "", "dur": m.get("duration_s"),
+            "case": m.get("case") or "", "address": m.get("address") or "", "owners": m.get("owners") or "",
+            "caller": m.get("caller") or "",
+            "outcome": m.get("outcome") or (w.get("picked") if isinstance(w, dict) else "") or "",
+            "note": (w.get("note") if isinstance(w, dict) else "") or (ai or {}).get("note") or "",
+            "objection": (ai or {}).get("objection") or "",
+            "audio": os.path.isfile(os.path.join(d, "audio.webm")),
+            "transcript": os.path.isfile(os.path.join(d, "transcript.txt")),
+            "coach_lines": len(m.get("coach_fires") or []),
+        })
+    return out
+
+
+def calls_page():
+    """The Call recordings page: one row per call, open the transcript or play the audio here, or open
+    the folder in Explorer. Local only (127.0.0.1), the same machine the recordings are on."""
+    import html as _h
+    e = lambda v: _h.escape(str(v or ""), quote=True)
+    rows = []
+    for c in calls_index():
+        t = c["started"].replace("T", " ")[:16]
+        dur = ("%d:%02d" % divmod(int(c["dur"]), 60)) if isinstance(c["dur"], (int, float)) else ""
+        lead = (e(c["case"]) + ("<br><span class='dim'>" + e(c["address"]) + "</span>" if c["address"] else "")) or "<span class='dim'>no prospect</span>"
+        tr = ("<a class='b' target='_blank' href='/calls/%s/transcript'>Transcript</a>" % e(c["sid"])) if c["transcript"] else "<span class='dim'>no transcript</span>"
+        au = ("<audio preload='none' controls src='/calls/%s/audio'></audio>" % e(c["sid"])) if c["audio"] else ""
+        rows.append("<tr data-q='%s'><td>%s<br><span class='dim'>%s UTC</span></td><td>%s</td><td>%s</td><td class='oc %s'>%s</td>"
+                    "<td class='note'>%s%s</td><td>%s<br>%s</td></tr>" % (
+                        e((c["case"] + " " + c["address"] + " " + c["owners"] + " " + c["note"] + " " + c["sid"]).lower()),
+                        e(c["sid"][:10]), e(t[11:]), dur, lead, e(c["outcome"]), e(c["outcome"] or "-"),
+                        e(c["note"][:400]), ("<br><span class='dim'>Objection: " + e(c["objection"]) + "</span>") if c["objection"] else "",
+                        tr, au))
+    return ("<!doctype html><html><head><meta charset='utf-8'><title>Call recordings</title>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'><style>__CSS__</style></head><body>"
+            "<header><h1>&#128193; Call recordings &middot; __N__</h1>"
+            "<button class='big' onclick=\"fetch('/api/open_sessions',{method:'POST'}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Could not open the folder')})\">Open the folder</button>"
+            "<input id='f' placeholder='Filter: case, street, name, outcome' oninput=\"var q=this.value.toLowerCase();document.querySelectorAll('tbody tr').forEach(function(r){r.style.display=r.dataset.q.indexOf(q)>=0?'':'none'})\">"
+            "<a class='b' href='/'>&larr; Back to the coach</a><span class='path'>__DIR__</span></header>"
+            "<table><thead><tr><th>Date</th><th>Length</th><th>Prospect</th><th>Outcome</th><th>Note</th><th>Files</th></tr></thead><tbody>__ROWS__</tbody></table>"
+            "</body></html>").replace("__CSS__", CALLS_PAGE_CSS).replace("__N__", str(len(rows))).replace("__DIR__", e(SESSIONS)).replace(
+                "__ROWS__", "".join(rows) or "<tr><td colspan=6 class='dim'>No calls recorded yet.</td></tr>")
 
 
 def _sdir(sid):
@@ -2324,6 +2418,33 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError):
                 return self._send(200, {"cards": []})
 
+        if p == "/calls":
+            return self._send(200, calls_page(), "text/html; charset=utf-8", private=True)
+        if p == "/api/calls":
+            return self._send(200, {"dir": SESSIONS, "calls": calls_index()}, private=True)
+        if p.startswith("/calls/"):
+            _seg = [unquote(x) for x in p.strip("/").split("/")]
+            _d = _sdir(_seg[1]) if len(_seg) == 3 else None
+            if not _d:
+                return self._send(404, {"error": "no such call"}, private=True)
+            if _seg[2] == "transcript":
+                try:
+                    with open(os.path.join(_d, "transcript.txt"), "r", encoding="utf-8") as f:
+                        import html as _h
+                        return self._send(200, "<!doctype html><meta charset='utf-8'><title>%s</title><style>%s</style><body style='padding:18px'>"
+                                          "<a class='b' href='/calls'>&larr; All calls</a><h1 style='margin:14px 0'>%s</h1><pre>%s</pre></body>" % (
+                                              _h.escape(_seg[1]), CALLS_PAGE_CSS, _h.escape(_seg[1]), _h.escape(f.read())),
+                                          "text/html; charset=utf-8", private=True)
+                except OSError:
+                    return self._send(404, {"error": "no transcript"}, private=True)
+            if _seg[2] == "audio":
+                try:
+                    with open(os.path.join(_d, "audio.webm"), "rb") as f:
+                        return self._send(200, f.read(), "audio/webm", private=True)
+                except OSError:
+                    return self._send(404, {"error": "no audio"}, private=True)
+            return self._send(404, {"error": "not found"}, private=True)
+
         if p == "/api/sessions":
             try:
                 names = sorted(os.listdir(SESSIONS), reverse=True)[:50]
@@ -2339,6 +2460,21 @@ class Handler(BaseHTTPRequestHandler):
         p = u.path
         parts = [unquote(x) for x in p.strip("/").split("/")]
 
+        if p == "/api/open_sessions":
+            own = ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
+            origin, site = self.headers.get("Origin"), self.headers.get("Sec-Fetch-Site")
+            if (self.headers.get("Host") not in own or (origin and origin not in ["http://" + o for o in own])
+                    or (site and site != "same-origin")):
+                return self._send(403, {"error": "same-origin only"}, private=True)
+            try:
+                os.makedirs(SESSIONS, exist_ok=True)
+                if hasattr(os, "startfile"):
+                    os.startfile(SESSIONS)          # Explorer, on the folder only: no path from the request is used
+                    return self._send(200, {"ok": True, "dir": SESSIONS}, private=True)
+                return self._send(200, {"ok": False, "error": "Open it by hand: " + SESSIONS}, private=True)
+            except OSError as ex:
+                return self._send(200, {"ok": False, "error": "Could not open %s (%s)" % (SESSIONS, type(ex).__name__)}, private=True)
+
         if p == "/api/suggest":
             # The coach page's own request only (same rule as /api/dgkey): this spends the key.
             own = ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
@@ -2352,6 +2488,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 res = ai_line(b.get("lines"), b.get("lang") or "", b.get("shown") or "", b.get("asked") or [], b.get("days"),
                               b.get("lane") or "", b.get("eq") or "", stat=stat)
+                res = with_caller(res, b.get("caller"))
             except Exception as e:            # a bug in the line rules must not 500 the page mid-call
                 res, stat["why"] = {}, "error:" + type(e).__name__
             ms = int((time.time() - t0) * 1000)
@@ -2377,7 +2514,7 @@ class Handler(BaseHTTPRequestHandler):
                     or (site and site != "same-origin")):
                 return self._send(403, {"error": "same-origin only"}, private=True)
             b = self._json_body()
-            return self._send(200, ai_wrapup(b.get("lines"), str(b.get("lane") or "").lower()) or {"outcome": ""}, private=True)
+            return self._send(200, with_caller(ai_wrapup(b.get("lines"), str(b.get("lane") or "").lower()) or {"outcome": ""}, b.get("caller")), private=True)
 
         # /api/session/start
         if p == "/api/session/start":
