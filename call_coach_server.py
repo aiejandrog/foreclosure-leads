@@ -542,6 +542,7 @@ PB_SIT = (
     ("the buyer-side options", "whole", ("value", "offer", "notselling")),
     ("witty ways", "whole", ("early", "scam", "lender", "offer", "others")),
     ("sharp lines", "whole", ("brushed2",)),
+    ("jesse closing a client", "groups", ()),
 )
 # Jesse's lines are grouped under short labels; which live topics pull each label in.
 PB_GROUPS = (
@@ -554,6 +555,12 @@ PB_GROUPS = (
     (r"moving to the senior", SIT_OBJ + ("value", "yes", "offer")),
     (r"asking for the time", ("yes", "time", "busy")),
     (r"explains the options", ("value", "offer")),
+    # the Giselle-call groups (2026-11-20): labels inside "Jesse closing a client"
+    (r"^an attorney already answered", ("attorney",)),
+    (r"paying a law firm", ("attorney", "pay", "money", "think")),
+    (r"handing them the decision", ("think", "decide", "no", "notint", "spouse")),
+    (r"a money problem", ("bankruptcy", "bank", "fear")),
+    (r"^after the yes", ("yes", "time")),
 )
 # The code-side rule blocks that are situational too, and the topics that bring each one.
 AI_SIT_RULES = (
@@ -754,6 +761,11 @@ NEVER_RULES = (
     ("promise", re.compile(r"\b(?:we|he|our (?:senior )?advisor)\s+(?:stop|save|cancel|halt)s?\s+" + _OBJ + r"\b", re.I), False,
      "it promises an outcome (we stop the sale). Offer options, never an outcome."),
     ("guarantee", re.compile(r"\bguarantee", re.I), True, "it says guarantee. Nothing is guaranteed; offer options."),
+    # "nobody's accusing you of a crime" (live call 2026-11-19): the word plants the fear it denies. neg=False
+    # on purpose: the reassuring, negated form is exactly the one to block.
+    ("crime", re.compile(r"\b(crimes?|criminal|police|jail|prison|arrest(?:ed)?)\b", re.I), False,
+     "it mentions crime, police, jail or arrest. Never bring these up, even to reassure: the word plants the "
+     "fear it denies. This is a civil money matter; talk about the debt and the options."),
     ("authority", re.compile(r"\b(?:i['’]?m|i am|we['’]?re|we are|i['’]?m calling|we['’]?re calling|calling you)\s+"
                              r"(?:calling\s+)?(?:from|on behalf of|with|for)\s+(?:the|your)\s+(?:bank|lender|court|county|"
                              r"government|clerk|lender['’]?s (?:attorneys?|lawyers?)|(?:attorneys?|lawyers?) for)", re.I), True,
