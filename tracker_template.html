@@ -2317,6 +2317,7 @@ __REFRESHSTATUS__
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
 <button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
+<button id="vacantlane" class="abtn" title="VACANT &mdash; leads marked Vacant in Call Mode (Find a number). Nobody lives there to call, so these are off the calling list and worked the vacant way: owner of record, why it is empty, who controls it, who to reach. Take the mark off in Call Mode and the lead goes back to the calling list.">&#127962; Vacant <span id="vacn"></span></button>
 <button id="mislist" class="abtn" title="MISCALCULATED DEALS — properties ACTIVELY LISTED (or pending) while the foreclosure sale is ≤21 days out. The listing agent is protecting a fantasy price while the clock runs out on their own client. The gatekeeper play (drill card 12): full commission on the buy + the re-listing after — the same property pays the agent twice, and BSG gets the deal. Red chip = listed ABOVE the cadastral value."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-8-8V4h8z"/><circle cx="9" cy="8" r="1.5"/></svg>Listed + sale</button>
 <button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
 </div>
@@ -2675,7 +2676,7 @@ function _applyServerDeadNotes(){
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1, sortUser = false;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false, mlOnly = false;
+let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false, mlOnly = false, vacOnly = false;
 // NEW SINCE LAST VISIT. The other filters answer "which of these leads matter"; this one answers
 // "which of these did I never even see before?". A fresh scrape drops 20 new cases into the middle
 // of a 700-row board — without a delta you re-scan the whole list to find them. Storage: a growing
@@ -2802,7 +2803,20 @@ function isFlaggedDead(r){
 // filter excludes it — but NOT hidden by default (badge stays visible; nothing disappears silently).
 // Company-owned is only a context tag, NOT a suppressor — a small landlord LLC can still be a real seller.
 function notForModel(r){ return !!r.vac; }
+// MARKED VACANT IN CALL MODE (2026-11-19, Alejandro: "add the vacant lane on the board"). Call Mode's
+// Vacant button writes a 'lookup' touch {vac:{a,on}} on the case note; the newest one wins. This is the
+// HOUSE being empty (a caller's finding), not r.vac (vacant LAND, a county land-use code).
+function _vacMark(r){
+  var n = notes[r.case] || {}, latest = null;
+  (n.touches || []).forEach(function(t){
+    if(!t || t.ch !== 'lookup' || !t.vac) return;
+    if(!latest || (+t.tsu || 0) > (+latest.tsu || 0)) latest = t;
+  });
+  return (latest && latest.vac.on) ? latest : null;
+}
+function _vacCount(){ var n = 0; for(var i = 0; i < DATA.length; i++) if(_vacMark(DATA[i])) n++; return n; }
 function landChips(r){ let o='';
+  { const _vm = _vacMark(r); if(_vm) o+='<span class="chip vlow" title="Marked VACANT in Call Mode'+(_vm.by?' by '+esc(_vm.by):'')+(_vm.d?' on '+esc(_vm.d):'')+'. Nobody lives there to call: work it from the Vacant lane.">&#127962; VACANT HOUSE</span>'; }
   if(r.vac) o+='<span class="chip vlow" title="VACANT LAND — no homeowner to help, and the equity shown rides on a speculative raw-land value. A systematic false-positive for this list; verify a real market value + a developer buyer before spending time.">&#127957; VACANT LAND</span>';
   if(r.co){
     var _lp = (r.llcppl||[]).length;
@@ -18831,6 +18845,10 @@ function view(){
     // remove the last saved deal) and you drop straight back to exactly the view you were on
     // before — never a forced "All tiers".
     rows = _cscope(DATA.filter(r => favs.has(r.case)));
+  } else if(vacOnly){
+    // VACANT lane: every lead a caller marked vacant, in any tier, newest mark first.
+    rows = _cscope(DATA.filter(r => _vacMark(r)));
+    rows = rows.slice().sort((a,b) => (+(_vacMark(b)||{}).tsu || 0) - (+(_vacMark(a)||{}).tsu || 0));
   } else if(mlOnly){
     // MISCALCULATED DEALS mode: actively listed/pending with the sale ≤21 days out — the realtor-
     // flip lane (drill card 12). Overpriced-vs-cadastral first, then soonest sale.
@@ -19457,7 +19475,7 @@ function resetFilters(){
   // user who hit 0 rows via 🆕 New only or 30%+ equity clicked reset and stayed stranded at 0.
   // tier resets to ALL, not 'A' — ALL became the boot default when the First-mover sort shipped,
   // and resetting to a NARROWER board than you started with is its own trap.
-  tier='ALL'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=newOnly=eq30Only=mlOnly=false;
+  tier='ALL'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=newOnly=eq30Only=mlOnly=vacOnly=false;
   funnelStage=''; try{ localStorage.setItem('fcFunnel',''); }catch(_e){}
   fcType=''; propKind=''; _saveTypeFilters(); _syncFcTypePills(); _syncPropPills();
   // hideViewed stays as the user left it (default ON) — clearing filters shouldn't dump Seen deals back on the board
@@ -19466,7 +19484,7 @@ function resetFilters(){
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','hf','td','nc','due','freshlp','newonly','eq30','mislist'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  ['wk','hd','hf','td','nc','due','freshlp','newonly','eq30','mislist','vacantlane'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL'));
   county=''; _resetCountyPills();
   render();
@@ -19489,6 +19507,8 @@ function _activeFilters(){
   if(funnelStage && FUNNEL[funnelStage])
     return scoped.concat([{k:'funnel', lbl:FUNNEL[funnelStage].ic+' Funnel: '+FUNNEL[funnelStage].t}]);
   if(lpOnly) return scoped.concat([{k:'freshlp', lbl:'🌱 Fresh filings (just filed)'}]);
+  { const _vb = document.getElementById('vacn'); if(_vb){ const _vn = _vacCount(); _vb.textContent = _vn ? String(_vn) : ''; } }
+  if(vacOnly) return scoped.concat([{k:'vacantlane', lbl:'\u{1F3DA} Vacant (marked in Call Mode)'}]);
   if(mlOnly) return scoped.concat([{k:'mislist', lbl:'🏷 Listed + sale ≤21d (realtor flip)'}]);
   if(tier!=='A') out.push({k:'tier', lbl:'Tier '+tier});
   if(county) out.push({k:'county', lbl:ctyName(county)});
@@ -19527,6 +19547,7 @@ function _clearFilter(k){
   else if(k==='closers'){ closersOnly=false; if(g('closers'))g('closers').classList.remove('active'); }
   else if(k==='freshlp'){ lpOnly=false; if(g('freshlp'))g('freshlp').classList.remove('active'); }
   else if(k==='mislist'){ mlOnly=false; if(g('mislist'))g('mislist').classList.remove('active'); }
+  else if(k==='vacantlane'){ vacOnly=false; if(g('vacantlane'))g('vacantlane').classList.remove('active'); }
   else if(k==='funnel'){ funnelStage=''; try{ localStorage.setItem('fcFunnel',''); }catch(_e){} }
   else if(k==='near'){ nearOnly=false; if(g('nearhome'))g('nearhome').classList.remove('active'); if(g('nearrad'))g('nearrad').style.display='none'; }
   else if(k==='wk'){ weekOnly=false; if(g('wk'))g('wk').classList.remove('active'); }
@@ -19639,6 +19660,11 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 { const _nb = document.getElementById('nextup');
   if(_nb) _nb.onclick = () => { if(document.getElementById('workbar') && _wq.length && _wqi < _wq.length) _wqNext(); else _wqOpen(); }; }
 { const _lp = document.getElementById('freshlp'); if(_lp) _lp.onclick = () => { lpOnly = !lpOnly; if(lpOnly){ closersOnly=mlOnly=false; const c=document.getElementById('closers'); if(c)c.classList.remove('active'); const m=document.getElementById('mislist'); if(m)m.classList.remove('active'); } _lp.classList.toggle('active', lpOnly); render(); }; }
+{ const _vl = document.getElementById('vacantlane'); if(_vl){
+    _vl.onclick = () => { vacOnly = !vacOnly; if(vacOnly){ closersOnly=lpOnly=mlOnly=false; ['closers','freshlp','mislist'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _vl.classList.toggle('active', vacOnly); render(); };
+    /* another lane turned on takes over: the Vacant lane steps back before that lane's own handler runs */
+    ['closers','freshlp','mislist'].forEach(id => { const b = document.getElementById(id); if(b) b.addEventListener('click', () => { if(vacOnly){ vacOnly = false; _vl.classList.remove('active'); } }, true); });
+  } }
 { const _ml = document.getElementById('mislist'); if(_ml) _ml.onclick = () => { mlOnly = !mlOnly; if(mlOnly){ closersOnly=lpOnly=false; ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _ml.classList.toggle('active', mlOnly); render(); }; }
 { const _nh = document.getElementById('nearhome'), _nr = document.getElementById('nearrad');
   if(_nh) _nh.onclick = () => { nearOnly = !nearOnly; if(nearOnly){ closersOnly=lpOnly=false; tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _nh.classList.toggle('active', nearOnly); if(_nr) _nr.style.display = nearOnly?'':'none'; render(); };
