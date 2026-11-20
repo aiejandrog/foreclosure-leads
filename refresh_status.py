@@ -210,9 +210,12 @@ def summary(log_path=LOG, now=None):
     rs = runs(_read_tail(log_path))
     last = rs[-1] if rs else None
     # A run with no ENDED line that started more than 6 hours ago did not finish: it was killed.
+    # UNLESS the progress file says that same run is still alive (2026-11-20): the 04:30 run took
+    # 6h52m, built the 11:12 board MID-RUN, and this guess stamped "FAILED: never finished" into the
+    # page that run itself published ten minutes before it ended rc=4. A live heartbeat outranks age.
     if last and last['rc'] is None and last['at']:
         try:
-            if (now - datetime.strptime(last['at'], '%Y-%m-%dT%H:%M')).total_seconds() > 6 * 3600:
+            if (now - datetime.strptime(last['at'], '%Y-%m-%dT%H:%M')).total_seconds() > 6 * 3600                     and not _alive(last['at']):
                 last = dict(last, rc=-1, why='never finished')
         except ValueError:
             pass
@@ -247,6 +250,22 @@ def summary(log_path=LOG, now=None):
         out_last['took'] = took
     return {'baked': now.strftime('%Y-%m-%dT%H:%M'), 'good': good, 'rows': rows,
             'last': out_last, 'earlier': earlier}
+
+
+def _alive(at):
+    """True when refresh_progress reports the run that STARTED at `at` (YYYY-MM-DDTHH:MM) is still
+    running and not stalled. Any doubt (no progress file, another run's times, an error) is False,
+    so the 6-hour rule above behaves exactly as before everywhere except over a genuinely live run."""
+    try:
+        import refresh_progress
+        j = refresh_progress.public()
+        if not (j.get('ok') and j.get('running')) or j.get('stalled'):
+            return False
+        a = datetime.strptime(at, '%Y-%m-%dT%H:%M')
+        b = datetime.strptime(str(j.get('started') or '')[:16], '%Y-%m-%dT%H:%M')
+        return abs((a - b).total_seconds()) <= 120
+    except Exception:      # noqa: BLE001 - a status guess must never break a build
+        return False
 
 
 def _took(at):
@@ -343,6 +362,16 @@ function show(j){
       :' &middot; checking the network and updating code')+' &middot; '+dur(j.elapsed)+' in'
       +(j.eta!=null?' &middot; about '+dur(j.eta)+' left':'');
     paint('run', m, j.pct); return;
+  }
+  /* THE RUN THAT BUILT THIS PAGE HAS SINCE FINISHED (2026-11-20). `mine` pages skipped the ended
+     branch below, so a page baked mid-run kept its baked guess ("never finished") even while the
+     bridge was answering with the real outcome. The page IS that run's own build: say how the run
+     ended, no Reload needed. */
+  if(j.state==='ended' && en && mine){
+    var rcm=j.rc, whym=esc(j.why||('exit '+rcm));
+    if(rcm===1||rcm===3||rcm===9||rcm===10){ paint('bad','&#10007; Refresh FAILED '+hm(j.ended)+': '+whym,null); return; }
+    if(rcm===0){ paint('ok','&#10003; Refreshed '+hm(j.started)+' (took '+dur(j.elapsed)+')',null); return; }
+    paint('warn','&#9888; Refreshed '+hm(j.started)+', '+whym+' &middot; took '+dur(j.elapsed),null); return;
   }
   if(j.state==='ended' && en && !mine && (!baked || en.getTime()>baked.getTime())){
     var rc=j.rc, why=esc(j.why||('exit '+rc));

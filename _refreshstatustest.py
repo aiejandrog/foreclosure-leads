@@ -116,6 +116,29 @@ def main():
     s = R.summary(write(running), now=datetime(2026, 10, 13, 13, 0))
     check('no ENDED line after 6h = killed (-1), good falls back',
           s['last']['rc'] == -1 and s['good'] == '2026-10-12T12:21', str(s))
+    # 2026-11-20: the 6h guess must yield to a live heartbeat for the SAME run (the 04:30 run that
+    # took 6h51m and baked "never finished" into its own board), and only for the same run.
+    import refresh_progress as RP
+    _pub = RP.public
+    try:
+        RP.public = lambda now=None: {'ok': True, 'state': 'running', 'running': True, 'stalled': False,
+                                      'started': '2026-10-13T05:30:00'}
+        s = R.summary(write(running), now=datetime(2026, 10, 13, 13, 0))
+        check('...but a 6h+ run the progress file says is ALIVE is still in progress, and counts as good',
+              s['last']['rc'] is None and s['good'] == '2026-10-13T05:30', str(s))
+        RP.public = lambda now=None: {'ok': True, 'state': 'running', 'running': True, 'stalled': True,
+                                      'started': '2026-10-13T05:30:00', 'beat': '2026-10-13T06:00:00'}
+        s = R.summary(write(running), now=datetime(2026, 10, 13, 13, 0))
+        check('...a STALLED heartbeat does not hold the kill', s['last']['rc'] == -1, str(s))
+        RP.public = lambda now=None: {'ok': True, 'state': 'running', 'running': True, 'stalled': False,
+                                      'started': '2026-10-12T05:30:00'}
+        s = R.summary(write(running), now=datetime(2026, 10, 13, 13, 0))
+        check("...another run's heartbeat does not either", s['last']['rc'] == -1, str(s))
+        RP.public = lambda now=None: (_ for _ in ()).throw(RuntimeError('x'))
+        s = R.summary(write(running), now=datetime(2026, 10, 13, 13, 0))
+        check('...and a broken progress reader never breaks the build', s['last']['rc'] == -1, str(s))
+    finally:
+        RP.public = _pub
 
     manual = LOG_1012.split('==================== REFRESH Mon 10/12/2026 12:21')[0] + (
         '==== run Mon 10/12/2026  9:10:00.00 ==== \n'
@@ -207,6 +230,27 @@ def main():
               and 'about 1h05m left' in r['h'] and 'width:52%' in r['h'] and '#E8F0FE' in r['c'], r['h'])
         check('live: the step label is escaped', '&lt;owner&gt;' in r['h'] and '<owner>' not in r['h'], r['h'])
         check('live: the function is shared for the Morning Worker', r['f'] == 'function', r['f'])
+
+        # 2026-11-20: a page built MID-RUN carries the baked guess; once the bridge says that same
+        # run ENDED, the page must say how it ended - the old code skipped `mine` pages entirely and
+        # the 11:12 board kept "FAILED: never finished" after the 04:30 run finished rc=4 at 11:22.
+        mine = {'baked': '2026-11-20T11:12', 'good': '2026-11-19T17:28', 'rows': [],
+                'last': {'at': '2026-11-20T04:30', 'rc': -1, 'why': 'never finished'}, 'earlier': None}
+        done4 = {'ok': True, 'state': 'ended', 'running': False, 'started': '2026-11-20T04:30:06',
+                 'ended': '2026-11-20T11:22:01', 'elapsed': 24715, 'rc': 4, 'why': 'a source is down'}
+        r = live(mine, '2026-11-20T14:10', done4)
+        check('live: a mine page repaints when its own run ends (rc 4 = amber, took, no Reload)',
+              'Refreshed today 4:30 AM, a source is down' in r['h'] and 'took 6h51m' in r['h']
+              and 'Reload' not in r['h'] and 'never finished' not in r['h'] and '#FBF1DC' in r['c'], r['h'])
+        r = live(mine, '2026-11-20T14:10', dict(done4, rc=0, why='ok'))
+        check('live: ...rc 0 = green', 'Refreshed today 4:30 AM (took 6h51m)' in r['h'] and '#E7F4EA' in r['c'], r['h'])
+        r = live(mine, '2026-11-20T14:10', dict(done4, rc=3, why='no network'))
+        check('live: ...a hard rc = red FAILED', 'Refresh FAILED today 11:22 AM: no network' in r['h']
+              and '#B42318' in r['c'], r['h'])
+        older = dict(mine, baked='2026-11-19T22:00')
+        r = live(older, '2026-11-20T14:10', done4)
+        check('live: a page from an OLDER run still gets the finished-later message with Reload',
+              'this page is older' in r['h'], r['h'])
         fin = {'ok': True, 'state': 'ended', 'running': False, 'started': '2026-10-24T11:36:02',
                'ended': '2026-10-24T14:48:00', 'elapsed': 11518, 'rc': 0, 'why': 'ok', 'n': 57, 'done': 57}
         r = live(base, '2026-10-24T15:00', fin)
