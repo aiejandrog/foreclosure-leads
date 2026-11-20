@@ -9281,6 +9281,7 @@ function screenLookup(prefill){
         ? (h.d < 0 ? '<b style="color:#ff8a80">sale PASSED</b>'
                    : '<b style="color:' + (h.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">sale in ' + h.d + ' day' + (h.d===1?'':'s') + '</b>')
         : '<span class="mut">no auction date yet</span>';
+      var _hs0 = h.h || hardSuppressed(r || {c:h.c, p:[h.num], pcs:h.pcs || []});
       return '<div class="refbox" style="margin-top:10px">'
         + '<div class="ltag" style="margin:0 0 6px">' + fmt(h.num) + (h.saved ? ' <span class="chip">number you saved</span>' : '') + '</div>'
         + '<div style="font:800 16px \'Segoe UI\',Arial;color:var(--ink)">' + esc(h.owner || 'name unknown') + '</div>'
@@ -9298,7 +9299,7 @@ function screenLookup(prefill){
         /* pcs: the same person's other cases, so a hard no logged on a sibling closes this one
            too (2026-10-08). The Text link also obeys the text hold, as the queue's composer does:
            a lookup is not a way around a stale do-not-contact list. */
-        +   ((function(){ var _hs = h.h || hardSuppressed(r || {c:h.c, p:[h.num], pcs:h.pcs || []});
+        +   ((function(){ var _hs = _hs0;
               if(_hs === 'CLIENT') return clientBar();
               if(_hs) return '<span class="nc" style="color:#ff8a80;font-weight:800">&#9940; DO NOT CONTACT &mdash; ' + esc(_hs) + '</span>';
               return '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
@@ -9310,8 +9311,17 @@ function screenLookup(prefill){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
         + '<div class="brhost" data-c="' + esc(h.c) + '"></div>'
-        + '<button class="lkrep" data-c="' + esc(h.c) + '" style="margin-top:10px;background:#286c34;'
-        +   'border-color:#286c34;color:#fff">&#10003; They REPLIED — flag it</button>'
+        /* THE NOTICE TEXT ASKS FOR C OR R (2026-11-20). Replies land on his phone, so this screen is
+           where they get routed: C books the appointment the text promised (next business day, 9:00
+           am), R flags the lead for a reschedule call. Both are inbound text touches, synced like
+           any touch. Never on a held lead: the hold bar above already said why. */
+        + (_hs0 ? '' : '<div style="display:flex;gap:6px;margin-top:10px">'
+        +   '<button class="lkrc" data-c="' + esc(h.c) + '" style="flex:1;min-width:0;min-height:44px;'
+        +     'background:#286c34;border:1px solid #286c34;color:#fff;border-radius:10px">&#10003; Texted C &mdash; book it</button>'
+        +   '<button class="lkrr" data-c="' + esc(h.c) + '" style="flex:1;min-width:0;min-height:44px;'
+        +     'background:#132244;border:1px solid var(--gold);color:var(--gold);border-radius:10px">&#8635; Texted R &mdash; new time</button></div>')
+        + '<button class="lkrep" data-c="' + esc(h.c) + '" style="margin-top:' + (_hs0 ? '10' : '8') + 'px;background:' + (_hs0 ? '#286c34' : '#1b2c50') + ';'
+        +   'border-color:#2a3f6b;color:#fff">&#10003; They replied (anything else) &mdash; flag it</button>'
         + (r ? '<button class="lkgo" data-c="' + esc(h.c) + '" class="ghost" style="margin-top:8px">Open the full card &rarr;</button>' : '')
         + '<div class="fcase">case ' + esc(h.c) + '</div></div>';
     }).join('');
@@ -9343,6 +9353,44 @@ function screenLookup(prefill){
           if(!v.ok){ toast('NOT texted \u2014 ' + v.why, {bad:true, ms:9000}); return; }
           location.href = href;
         });
+      };
+    });
+    function _nextBiz(){
+      var d = new Date(Date.now() + 864e5);
+      while(d.getDay() === 0 || d.getDay() === 6) d = new Date(d.getTime() + 864e5);
+      return {iso: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2),
+              say: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + (d.getMonth() + 1) + '/' + d.getDate()};
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('.lkrc'), function(b){
+      b.onclick = function(){
+        var c = b.dataset.c, n = notes[c] = notes[c] || {status:'',note:''}, nb = _nextBiz();
+        n.touches = n.touches || [];
+        n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'THEY TEXTED C (inbound) - confirmed the consultation'});
+        n.replied = today();
+        /* same walk-back guard as the after-the-yes panel: Offer made / Under contract never regress */
+        if(AY_STAGES.indexOf(n.status) < 1) n.status = 'Appointment';
+        n.stageAt = n.stageAt || {};
+        if(!n.stageAt['Appointment']) n.stageAt['Appointment'] = today();
+        n.nextStep = {date: nb.iso, what: 'Consultation 9:00 am - they texted C'};
+        n.next = nb.iso;
+        touched = true; saveNotes(); queueSync();
+        b.textContent = '\u2713 booked ' + nb.say + ' 9:00 am'; b.disabled = true;
+        var rr = box.querySelector('.lkrr[data-c="' + c + '"]'); if(rr) rr.disabled = true;
+        toast('Appointment logged - next step ' + nb.say + ' 9:00 am. Text them the confirmation.');
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.lkrr'), function(b){
+      b.onclick = function(){
+        var c = b.dataset.c, n = notes[c] = notes[c] || {status:'',note:''}, nb = _nextBiz();
+        n.touches = n.touches || [];
+        n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'THEY TEXTED R (inbound) - wants another time'});
+        n.replied = today(); n.status = n.status || 'Contacted';
+        n.nextStep = {date: nb.iso, what: 'They texted R - call to pick the new time'};
+        n.next = nb.iso;
+        touched = true; saveNotes(); queueSync();
+        b.textContent = '\u2713 flagged for ' + nb.say; b.disabled = true;
+        var rc = box.querySelector('.lkrc[data-c="' + c + '"]'); if(rc) rc.disabled = true;
+        toast('Flagged - call them to set the time; they jump the queue.');
       };
     });
     Array.prototype.forEach.call(box.querySelectorAll('.lkrep'), function(b){

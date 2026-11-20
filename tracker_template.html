@@ -6891,7 +6891,18 @@ function _textBodies(o) {
   var co = 'Biscayne Solutions Group';
   var nm = String(o.first || '').trim() || 'Current Resident';
   var st = String(o.stEN || o.stES || '').trim() || 'your property';
-  var dt = String(o.date || '').trim() || 'the scheduled date';
+  var dt = String(o.date || '').trim();
+  if(!dt){
+    /* No appointment field is wired yet (r.ad / r.at never arrive), so until one is, the text names
+       a REAL day: the next business day. "on the scheduled date at 9:00 am" read like a mail merge
+       with a hole in it (2026-11-20). Local to this function on purpose - the block must stay
+       self-contained (free_identifiers() empty) so the phone can run these bytes. */
+    var _d = new Date(Date.now() + 864e5);
+    while(_d.getDay() === 0 || _d.getDay() === 6) _d = new Date(_d.getTime() + 864e5);
+    dt = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_d.getDay()] + ', '
+       + ['January','February','March','April','May','June','July','August','September','October','November','December'][_d.getMonth()]
+       + ' ' + _d.getDate();
+  }
   var tm = String(o.time || '').trim() || '9:00 am';
   var en = 'FINAL NOTICE from ' + co + ': A priority FREE foreclosure-prevention consultation has been '
          + 'scheduled for ' + nm + ' at ' + st + ' on ' + dt + ' at ' + tm + '. '

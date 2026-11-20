@@ -28,6 +28,7 @@ WHAT THIS ASSERTS
 No browser and no built board, on purpose: node evaluates the extracted block directly, so this
 runs on any checkout rather than only on the armed machine.
 """
+import datetime as _dt
 import json
 import os
 import re
@@ -159,12 +160,19 @@ rec('a lis pendens is never urgent -- it has no sale date to be close to',
 rec('a far sale and a dateless lead both open cold',
     T['far'] == 'cold' and T['nodate'] == 'cold')
 
+# The default appointment day the copy names: the next business day, computed the same way the
+# page computes it (2026-11-20; around midnight this and the page may disagree for a moment).
+_nb = _dt.date.today() + _dt.timedelta(days=1)
+while _nb.weekday() >= 5:
+    _nb += _dt.timedelta(days=1)
+NEXT_BIZ = '%s, %s %d' % (_nb.strftime('%A'), _nb.strftime('%B'), _nb.day)
+
 # ──────────────────────────────────────────── 3. the words he approved
 # 2026-11-20 (later): FINAL NOTICE, English only, proper company caps, the prospect's own name.
 # Character for character -- this is homeowner-facing copy.
 APPROVED_EN = ("FINAL NOTICE from Biscayne Solutions Group: A priority FREE foreclosure-prevention "
-               "consultation has been scheduled for HILL at 1887 NW 44 ST on the "
-               "scheduled date at 9:00 am. This is our final attempt to reach you. "
+               "consultation has been scheduled for HILL at 1887 NW 44 ST on "
+               + NEXT_BIZ + " at 9:00 am. This is our final attempt to reach you. "
                "Text C to confirm or R to reschedule."
                " If now's not a good time, just let me know and I won't text you again."
                " Msg&data rates may apply.")
@@ -271,7 +279,7 @@ console.log(JSON.stringify(out));
 ''')
 _OPT_EN = " If now's not a good time, just let me know and I won't text you again."
 NOTICE_EN = ("FINAL NOTICE from Biscayne Solutions Group: A priority FREE foreclosure-prevention "
-             "consultation has been scheduled for Juan at 3461 NW 171 ST on the scheduled date at "
+             "consultation has been scheduled for Juan at 3461 NW 171 ST on " + NEXT_BIZ + " at "
              "9:00 am. This is our final attempt to reach you. Text C to confirm or R to reschedule."
              + _OPT_EN + " Msg&data rates may apply.")
 rec('phone first text is the notice, word for word', PH['cold'] == NOTICE_EN, PH['cold'][:160])

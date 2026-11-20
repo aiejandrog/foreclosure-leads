@@ -921,3 +921,6 @@ mail_sent.json.pending.jsonl
 mail_sent.json.tmp
 !_auditfix2test.py
 value_missing.json
+
+# DealFlow Today output: a rendered lead list, never for the public repo (leaked 11-20, removed from tip)
+/today.html
