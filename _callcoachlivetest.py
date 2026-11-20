@@ -34,8 +34,9 @@ html = open(PAGE, encoding='utf-8').read()
 
 # --- gate ----------------------------------------------------------------------------------
 chk('I record my calls so I keep your file straight. That okay with you?' in html, 'consent line on the gate')
-chk("I accept responsibility for consent on this line." in html, 'responsibility checkbox text')
-chk(re.search(r'<button[^>]*id="startbtn"[^>]*disabled', html) is not None, 'Start is disabled until the box is ticked')
+chk('wait for their yes before starting' in html, 'verbal consent remains the recording gate')
+chk('Start recording + share laptop audio' in html and 'id="ack"' not in html and 'id="sysaud"' not in html,
+    'one start action replaces the redundant acknowledgements')
 chk(not re.search(r'<script[^>]+src=', html), 'no external script')
 
 # --- audio upload order --------------------------------------------------------------------

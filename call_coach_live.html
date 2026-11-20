@@ -181,22 +181,11 @@ code{color:var(--accent)}
     </div>
 
     <p style="color:#8b98a6;font-size:13px;margin:0">
-      Read that out loud first. A <em>no</em> means <b style="color:#e6a23c">stop recording</b>, not hang up &mdash;
-      press the second button and the coach runs with no mic and nothing written to disk.
+      Say the line and wait for their yes before starting. If they decline, use Plain Call Mode. Start requests the mic and laptop audio together.
     </p>
 
-    <label class="ack">
-      <input type="checkbox" id="ack" onchange="document.getElementById('startbtn').disabled=!this.checked">
-      <span>I read that line and I'm recording this call. I accept responsibility for consent on this line.</span>
-    </label>
-
-    <label class="ack" title="For calls placed through Phone Link on this laptop. Chrome asks you to share a screen: pick Entire screen and switch on Also share system audio. Your mic becomes YOU and the laptop sound becomes THEM, exact from the first word. Needs the speed/speaker key.">
-      <input type="checkbox" id="sysaud" onchange="Coach.setSys(this.checked)">
-      <span>Phone Link call: also capture this laptop&rsquo;s sound, so their voice is its own channel.</span>
-    </label>
-
     <div class="row">
-      <button class="primary" id="startbtn" disabled onclick="Coach.start()">Start session</button>
+      <button class="primary" id="startbtn" onclick="Coach.start()">Start recording + share laptop audio</button>
       <button onclick="Coach.plain()">Plain Call Mode (no recording)</button>
       <a href="/calls" target="_blank" rel="noopener" style="display:inline-block;padding:9px 14px;border-radius:8px;text-decoration:none;background:#c6a14b;color:#14203a;border:1px solid #c6a14b;font-weight:700" title="Every recorded call: transcript, audio, outcome, and a button that opens the folder">&#128193; Call recordings</a>
       <button title="Optional: a Deepgram API key turns on true YOU/THEM speaker labels and ~300ms transcript latency (about 1 cent a minute). Stored only in this browser." onclick="Coach.setKey()">&#9881; speed/speaker key</button>
@@ -204,7 +193,7 @@ code{color:var(--accent)}
 
     <div class="err" id="gateerr"></div>
 
-    <p class="fine">
+    <details class="fine"><summary>Recording and transcript details</summary><p>
       <b>Audio</b> goes to <code>call_sessions/&lt;stamp&gt;_&lt;case&gt;/audio.webm</code> on this laptop, in
       five-second chunks, so a crash costs you five seconds. Nothing leaves this machine.<br><br>
       <b>Transcript</b> is Chrome's recognizer (audio <em>is</em> processed by Google's speech service) &mdash;
@@ -212,7 +201,7 @@ code{color:var(--accent)}
       <code>transcript.txt</code> when you stop.<br><br>
       <b>Speakerphone only.</b> Neither phone OS hands call audio to an app. Phone on speaker, laptop
       mic listening. Without a Deepgram key, YOU?/THEM? labels are a best guess by content.
-    </p>
+    </p></details>
   </div>
 </div>
 
@@ -1916,10 +1905,9 @@ function enterApp(){
   });
 }
 function start(){
-  if(!$('ack').checked) return;
   /* The screen-share prompt has to come straight from the click, so it goes first. Only the sound is
      used: the picture track is switched off at once and nothing of the screen is recorded or sent. */
-  var want=$('sysaud')&&$('sysaud').checked&&navigator.mediaDevices.getDisplayMedia;
+  var want=navigator.mediaDevices.getDisplayMedia;
   var sysP=want?navigator.mediaDevices.getDisplayMedia({video:true, audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}, systemAudio:'include'})
       .catch(function(){ return null; }):Promise.resolve(null);
   sysP.then(function(disp){
