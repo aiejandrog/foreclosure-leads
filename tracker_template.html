@@ -6875,35 +6875,31 @@ function _textTone(stage, days, isLP){
 }
 function _textBodies(o) {
   o = o || {};
-  /* 2026-11-20 (Alejandro): notice-style first text. His words, verbatim.
-     [Company Name] -> co, [Street Address] -> stEN/stES, [Date] -> o.date, [Time] -> o.time.
-     One notice for every tone: the days-to-sale ladder and the street title-casing retired
-     with the old copy. Self-contained on purpose -- no inEN/inES, nothing outside this scope,
-     so free_identifiers() stays empty and the phone can run these bytes.
+  /* 2026-11-20 (Alejandro): FINAL NOTICE. English only.
+     - Company name proper-cased: Biscayne Solutions Group.
+     - The prospect's own name where the old copy said "Current Resident".
+     - ONE language. Spanish comes back empty and the callers concat conditionally, so the
+       message that leaves the phone is English and nothing else.
+     - Final-notice urgency: FINAL NOTICE, "final attempt to reach you".
+     Self-contained on purpose -- no inEN/inES, nothing outside this scope, so
+     free_identifiers() stays empty and the phone can run these bytes.
 
-     The let-me-know sentence is the 2026-09-26 counsel line, copied byte for byte from
-     TEXT_OPTOUT. boardTextBody does not append it (only the balloon ladder does), so it has
-     to live here or the notice ships with no opt-out at all. */
+     The let-me-know sentence is the 2026-09-26 counsel line, byte for byte from TEXT_OPTOUT.
+     boardTextBody does not append it (only the balloon ladder does), so it has to live here. */
   var sN = String(o.sender || '').trim();
   var me = sN.split(' ')[0] || sN;
-  var co = 'biscayne solutions group';
-  var stEN = String(o.stEN || '').trim() || 'your property';
-  var stES = String(o.stES || '').trim() || 'su propiedad';
-  var dtEN = String(o.date || '').trim() || 'the scheduled date';
-  var dtES = String(o.date || '').trim() || 'programado';
-  var tmEN = String(o.time || '').trim() || '9:00 am';
-  var tmES = String(o.time || '').trim() || '9:00 am';
-  var en = 'Notice from ' + co + ': A priority FREE foreclosure-prevention consultation has been held '
-         + 'for Current Resident at ' + stEN + ' on ' + dtEN + ' at ' + tmEN + '. '
+  var co = 'Biscayne Solutions Group';
+  var nm = String(o.first || '').trim() || 'Current Resident';
+  var st = String(o.stEN || o.stES || '').trim() || 'your property';
+  var dt = String(o.date || '').trim() || 'the scheduled date';
+  var tm = String(o.time || '').trim() || '9:00 am';
+  var en = 'FINAL NOTICE from ' + co + ': A priority FREE foreclosure-prevention consultation has been '
+         + 'scheduled for ' + nm + ' at ' + st + ' on ' + dt + ' at ' + tm + '. '
+         + 'This is our final attempt to reach you. '
          + 'Text C to confirm or R to reschedule.'
-         + " if now's not a good time, just let me know and i won't text you again."
+         + " If now's not a good time, just let me know and I won't text you again."
          + ' Msg&data rates may apply.';
-  var es = 'Aviso de ' + co + ': Una consulta prioritaria GRATIS de prevencion de ejecucion hipotecaria '
-         + 'se ha programado para el residente actual en ' + stES + ' el dia ' + dtES + ' a las ' + tmES + '. '
-         + 'Responda C para confirmar o R para reprogramar.'
-         + ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
-         + ' Pueden aplicar tarifas de mensajes y datos.';
-  return {en: en, es: es};
+  return {en: en, es: ''};
 }
 function _smsHref(ph, msg){
   // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=

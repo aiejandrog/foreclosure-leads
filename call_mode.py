@@ -1789,7 +1789,11 @@ def extract_text_js(tracker_src):
     half-extracted block here is a text that goes out with a missing branch rather than a crash.
     """
     block = _region(tracker_src, _TEXTTPL_START, _TEXTTPL_END, 'textTemplates')
-    for need in ('function _textTone', 'function _textBodies', 'return {en: en, es: es};'):
+    # 2026-11-20 (later): the body returns {en: en, es: ''} -- English only, Spanish retired.
+    # The check still proves the block came across COMPLETE, it just accepts either return shape.
+    _ret = ('return {en: en, es: es};' if 'return {en: en, es: es};' in block
+            else "return {en: en, es: ''};")
+    for need in ('function _textTone', 'function _textBodies', _ret):
         if need not in block:
             raise CallModeError(
                 'call_mode: the extracted text-body block is missing %r. The phone composes its '
@@ -1801,14 +1805,18 @@ def extract_text_js(tracker_src):
     for tone in ("'urgent'", "'t3'", "'followup'"):
         if tone not in block:
             raise CallModeError('call_mode: tone %s has no body in the extracted text block' % tone)
-    # 2026-11-20: the notice-style body replaced the hi/hola ladder. Same purpose - prove BOTH
-    # languages came across and the company name still resolves - against the new words.
+    # 2026-11-20 (later): FINAL NOTICE, English only. The bilingual demand is retired with the
+    # Spanish body. What still has to be true: the final-notice opener came across, and the
+    # company name resolves proper-cased. Older fixtures carry the ladder or the bilingual
+    # notice, so accept any of the three shapes -- the point is the block is the real body.
     _blk = block.lower()
-    # 2026-11-20: the notice-style body replaced the hi/hola ladder in docs/index.html. Older
-    # fixtures (and any page not yet re-baked) still carry the ladder, so accept EITHER shape -
-    # the point of this check is that BOTH languages came across, not which words they use.
-    _greet = ('notice from', 'aviso de') if 'notice from' in _blk else ('hi', 'hola')
-    for need in _greet + ('biscayne solutions group',):
+    if 'final notice from' in _blk:
+        _need = ('final notice from', 'biscayne solutions group')
+    elif 'notice from' in _blk:
+        _need = ('notice from', 'aviso de', 'biscayne solutions group')
+    else:
+        _need = ('hi', 'hola', 'biscayne solutions group')
+    for need in _need:
         if need not in _blk:
             raise CallModeError('call_mode: the extracted text block has no %r — the Spanish and '
                                 'English bodies must both come across (Alejandro texts both).'
@@ -10274,7 +10282,8 @@ function boardTextBody(r){
     tone:   _textTone(textStage(r), dd, !!(r && (r.lp || r.st === 'LP')))
   });
   /* English first, Spanish below it, in ONE message: what the Morning Worker sends (smsMsg 'both'). */
-  return B.en + '\n\n' + B.es;
+  /* English only since 2026-11-20 (later). Conditional so an empty es never ships a blank line. */
+  return B.en + (B.es ? '\n\n' + B.es : '');
 }
 /* The label on the send button, and the label written into the touch log. Each was built inline in
    two places (the initial render and the chip handler), and adding a third script to choose from is

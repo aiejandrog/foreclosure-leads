@@ -11,10 +11,9 @@
   "when": "2026-09-03"
  },
  "2009-074573-CA-01": {
-  "folio": "0131270370020",
+  "miss": true,
   "county": "MIAMI-DADE",
-  "how": "owner-unique",
-  "when": "2026-08-27"
+  "when": "2026-11-19"
  },
  "2018-026274-CA-01": {
   "folio": "3530180310830",
@@ -303,7 +302,7 @@
  "2025-020180-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-022121-CA-01": {
   "folio": "3040120070800",
@@ -342,7 +341,7 @@
  "2025-009056-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-012212-CA-01": {
   "miss": true,
@@ -357,7 +356,7 @@
  "2023-026351-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2024-015227-CA-01": {
   "folio": "3049110380020",
@@ -368,7 +367,7 @@
  "2019-032802-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2022-008023-CA-01": {
   "folio": "3039520331150",
@@ -377,15 +376,14 @@
   "when": "2026-08-27"
  },
  "2023-004203-CA-01": {
-  "folio": "3122110690740",
+  "miss": true,
   "county": "MIAMI-DADE",
-  "how": "owner-unique",
-  "when": "2026-08-27"
+  "when": "2026-11-12"
  },
  "2023-020349-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2023-026944-CA-01": {
   "folio": "0242031990120",
@@ -402,7 +400,7 @@
  "2024-002768-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2024-011185-CA-01": {
   "folio": "3040050362630",
@@ -438,7 +436,7 @@
  "2025-022346-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-023051-CA-01": {
   "folio": "3059120190720",
@@ -535,7 +533,7 @@
  "2024-020977-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-011142-CA-01": {
   "miss": true,
@@ -585,7 +583,7 @@
  "2025-005697-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-007937-CA-01": {
   "folio": "3012310920040",
@@ -636,7 +634,7 @@
  "2025-018364-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-022393-CA-01": {
   "miss": true,
@@ -649,9 +647,11 @@
   "when": "2026-09-03"
  },
  "2024-023378-CA-01": {
-  "miss": true,
+  "folio": "3020360060610",
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "how": "owner-pair",
+  "rule": 2,
+  "when": "2026-11-12"
  },
  "2024-016217-CA-01": {
   "miss": true,
@@ -694,7 +694,7 @@
  "2026-007613-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-007261-CA-01": {
   "folio": "0141381070120",
@@ -705,7 +705,7 @@
  "2025-010654-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-014045-CA-01": {
   "miss": true,
@@ -741,12 +741,12 @@
  "2025-022794-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-18"
  },
  "2021-024188-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-19"
  },
  "2025-024737-CA-01": {
   "miss": true,
@@ -868,7 +868,7 @@
  "CACE-26-004123": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-08-27"
+  "when": "2026-11-12"
  },
  "CACE-22-017327": {
   "miss": true,
@@ -1014,7 +1014,8 @@
   "folio": "514013AD3720",
   "county": "BROWARD",
   "how": "owner-unique",
-  "when": "2026-09-03"
+  "rule": 2,
+  "when": "2026-11-12"
  },
  "CACE-22-015222": {
   "miss": true,
@@ -1029,7 +1030,7 @@
  "CACE-24-014862": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-12"
  },
  "CACE-25-012938": {
   "miss": true,
@@ -1059,7 +1060,7 @@
  "CACE-25-013905": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-18"
  },
  "CACE-26-002980": {
   "folio": "484318AH1250",
@@ -1096,7 +1097,7 @@
  "CACE-24-001280": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-12"
  },
  "CACE-25-011340": {
   "miss": true,
@@ -1156,7 +1157,7 @@
  "CACE-25-015034": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-12"
  },
  "CONO-26-040989": {
   "miss": true,
@@ -1392,7 +1393,7 @@
  "CACE-18-014899": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-04"
+  "when": "2026-11-12"
  },
  "CACE-25-006038": {
   "miss": true,
@@ -1479,7 +1480,7 @@
  "2025-012596-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-05"
+  "when": "2026-11-19"
  },
  "2025-017795-CA-01": {
   "miss": true,
@@ -1497,10 +1498,9 @@
   "when": "2026-09-05"
  },
  "2023-028915-CA-01": {
-  "folio": "0622300260290",
+  "miss": true,
   "county": "MIAMI-DADE",
-  "how": "owner-unique",
-  "when": "2026-08-29"
+  "when": "2026-11-12"
  },
  "CACE-25-016262": {
   "miss": true,
@@ -1681,7 +1681,7 @@
  "2021-005847-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-03"
+  "when": "2026-11-20"
  },
  "CACE-24-002257": {
   "miss": true,
@@ -1696,7 +1696,7 @@
  "CACE-25-006826": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-14"
  },
  "CACE-25-015407": {
   "miss": true,
@@ -1706,7 +1706,7 @@
  "CACE-18-025401": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-03"
+  "when": "2026-11-20"
  },
  "CACE-26-002040": {
   "miss": true,
@@ -1735,16 +1735,18 @@
   "when": "2026-09-04"
  },
  "2024-023701-CA-01": {
-  "folio": "0531200300690",
+  "folio": "3040080371270",
   "county": "MIAMI-DADE",
   "how": "owner-unique",
-  "when": "2026-09-04"
+  "rule": 2,
+  "when": "2026-11-12"
  },
  "2025-024503-CA-01": {
   "folio": "1079100170380",
   "county": "MIAMI-DADE",
   "how": "owner-unique",
-  "when": "2026-09-04"
+  "rule": 2,
+  "when": "2026-11-12"
  },
  "CACE-26-001498": {
   "miss": true,
@@ -1764,7 +1766,7 @@
  "CACE-25-015430": {
   "miss": true,
   "county": "BROWARD",
-  "when": "2026-09-04"
+  "when": "2026-11-12"
  },
  "CACE-26-000593": {
   "miss": true,
@@ -1862,7 +1864,7 @@
  "2026-000946-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-05"
+  "when": "2026-11-12"
  },
  "COCE-26-040278": {
   "folio": "494105CA0370",
@@ -1928,12 +1930,1729 @@
  "2025-021266-CA-01": {
   "miss": true,
   "county": "MIAMI-DADE",
-  "when": "2026-09-06"
+  "when": "2026-11-19"
  },
  "2026-004800-CA-01": {
   "folio": "3660080210410",
   "county": "MIAMI-DADE",
   "how": "owner+assoc-legal",
   "when": "2026-09-06"
+ },
+ "2023-016753-CA-01": {
+  "folio": "3122110171890",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2023-020600-CA-01": {
+  "folio": "3021070052250",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-011629-CA-01": {
+  "folio": "3069240010200",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-021064-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2025-016463-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2025-022711-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-001678-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-005458-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-005628-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-006613-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-007519-CA-01": {
+  "folio": "3022320531060",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-008631-CA-01": {
+  "folio": "3411360021260",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-009802-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-011062-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2025-017350-CA-01": {
+  "folio": "0821210023120",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-004414-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2024-003696-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2026-007738-CA-01": {
+  "folio": "1078110130150",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2018-008608-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2018-011148-CA-01": {
+  "folio": "3032050040150",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2019-014759-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2021-020161-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2022-024528-CA-01": {
+  "folio": "3421110111990",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2023-002984-CA-01": {
+  "folio": "0341180061390",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2023-027829-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-009868-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-010926-CA-01": {
+  "folio": "3020020210180",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-011100-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-015866-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-008183-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-012528-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-016827-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-018968-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-020082-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-022165-CA-01": {
+  "folio": "3021260070790",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-022462-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-023761-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-025118-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-025425-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-12"
+ },
+ "2016-014856-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2019-026253-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2020-003904-CA-01": {
+  "folio": "1222260480160",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2022-024126-CA-01": {
+  "folio": "2812350154960",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2022-024164-CA-01": {
+  "folio": "3350260010190",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2023-000295-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2023-016257-CA-01": {
+  "folio": "3031280110980",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-000848-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-001508-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-016349-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-016641-CA-01": {
+  "folio": "3022190250070",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-024235-CA-01": {
+  "folio": "3069340214330",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-006910-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-008518-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-008800-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-009465-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-011077-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-015976-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-016193-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-021728-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-022350-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-023788-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-025307-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-000625-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-001253-CA-01": {
+  "folio": "0821210041450",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-001743-CA-01": {
+  "folio": "1079210291430",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-002772-CA-01": {
+  "folio": "3421150032860",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-004197-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-004504-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-006945-CA-01": {
+  "folio": "3069230154320",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-007877-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-007919-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2019-034244-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-000879-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-016417-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-004166-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-005138-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-013672-CA-01": {
+  "folio": "0722160161360",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-019591-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-020088-CA-01": {
+  "folio": "0431080019250",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-022158-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-024447-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-025010-CA-01": {
+  "folio": "3040171130130",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-025266-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-001311-CA-01": {
+  "folio": "3059240150020",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2026-003171-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-003998-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-004391-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-005083-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-006620-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2022-017590-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2023-011716-CA-01": {
+  "folio": "0722080180040",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2024-019956-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-024487-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-001383-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-011062-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-012215-CA-01": {
+  "folio": "3031020180280",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "2025-013328-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2017-028758-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-005663-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-021539-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-002508-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-005127-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-005611-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-006988-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2026-007005-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2024-013777-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-008487-CA-01": {
+  "folio": "3069140160170",
+  "county": "MIAMI-DADE",
+  "how": "owner-pair",
+  "rule": 2,
+  "when": "2026-11-12"
+ },
+ "COCE-26-032375": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-004754": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-20-015630": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-21-007456": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-23-001459": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-24-015132": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-005443": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-012727": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-015952": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-016285": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-000036": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-001875": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-002775": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-003527": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-004597": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-007739": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-009212": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-08-031733": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-18-015526": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-017497": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-006673": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-18-012288": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-24-008433": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-007947": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-010256": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-015917": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-006476": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-007461": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-007847": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-20-003458": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-24-005623": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-24-016807": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-013415": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-018409": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-008091": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-009777": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-010296": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-25-012241": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-26-008370": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-12"
+ },
+ "CACE-24-005467": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-015205": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-005227": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-006245": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-007161": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-014046": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "COCE-25-015903": {
+  "folio": "494122280144",
+  "county": "BROWARD",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-19"
+ },
+ "COCE-26-011767": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-22-015767": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "COCE-25-073545": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-19-018570": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-003326": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-006576": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-018786": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-000186": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-001917": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-004690": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-008641": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-012451": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-017011": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-007885": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-014779": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-008736": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-012741": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-004922": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CONO-26-047034": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-003869": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-007858": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-001876": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-20-007118": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-011176": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-018041": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-017180": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-24-006273": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-014197": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-005330": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "COSO-26-051591": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-015046": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-007250": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-19-001804": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-23-016669": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-009599": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-25-019837": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "CACE-26-008174": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-19"
+ },
+ "502026CA005712XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA006956XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA007733XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502023CA013986XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502025CA009105XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA000967XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA001939XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA002164XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA003997XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA004011XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "502026CA005154XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA007050XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA013010XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA002782XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA003440XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA003610XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA006459XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA007754XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA007194XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA003660XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-12"
+ },
+ "2024-022582-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-013935-CA-01": {
+  "folio": "1678240070580",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2025-023996-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-025401-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-000043-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-002241-CA-01": {
+  "folio": "3069110160240",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2026-002659-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-006777-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-010724-CA-01": {
+  "folio": "3060300036080",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2026-012139-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2022-004470-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2023-028652-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2024-000787-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-020775-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-010566-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-011025-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2022-008147-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-013668-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-023678-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-024376-CA-01": {
+  "folio": "3411330120780",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2026-004275-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-011060-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2024-023854-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-014203-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-017342-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-017798-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-021506-CA-01": {
+  "folio": "1079170141100",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2025-022009-CA-01": {
+  "folio": "3220230050450",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-13"
+ },
+ "2025-022980-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2025-024403-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-012014-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-003033-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-004986-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "2026-005646-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-20"
+ },
+ "COCE-26-000972": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-20"
+ },
+ "COCE-26-063974": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-20"
+ },
+ "CACE-25-011730": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-20"
+ },
+ "CACE-26-006853": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-20"
+ },
+ "502023CA014746XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-13"
+ },
+ "502026CC008491XXXASB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-13"
+ },
+ "502025CA012530XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-13"
+ },
+ "2024-020387-CA-01": {
+  "folio": "1831120710050",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-14"
+ },
+ "2025-005725-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-14"
+ },
+ "CACE-25-000636": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-003690": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-011648": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-25-008672": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-25-011445": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-005019": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-000003": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-008186": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-25-013198": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "CACE-26-013343": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-14"
+ },
+ "502026CA004893XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-16"
+ },
+ "502026CA006788XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-16"
+ },
+ "2026-001879-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2026-007969-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2025-016153-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2016-024944-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2025-013102-CA-01": {
+  "folio": "0141390822190",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-17"
+ },
+ "2025-014725-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2026-001631-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2026-004426-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-17"
+ },
+ "2026-007425-CA-01": {
+  "folio": "2812340492140",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-17"
+ },
+ "CACE-26-010671": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-009676": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-24-015420": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-26-013594": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-24-015126": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-26-001264": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-24-011492": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-010782": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-011743": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-26-011492": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-19-025682": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-24-014942": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-006547": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-015487": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-25-005532": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-26-007597": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "CACE-26-011879": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-17"
+ },
+ "2022-022739-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-18"
+ },
+ "2025-025518-CA-01": {
+  "folio": "3040090051460",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "rule": 2,
+  "when": "2026-11-18"
+ },
+ "2026-003302-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-18"
+ },
+ "2026-004548-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-18"
+ },
+ "2024-024835-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-18"
+ },
+ "2025-021362-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-18"
+ },
+ "CACE-26-000233": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-010401": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-001737": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-003248": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-007574": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-008150": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-20-016936": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-24-004916": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-19-011232": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-25-012355": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-25-017182": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-25-019730": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "CACE-26-006588": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-11-18"
+ },
+ "502023CA015077XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "502024CA000122XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "502026CA003771XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "502026CA007010XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "502016CA010350XXXXMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "502025CA013416XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-18"
+ },
+ "2023-001718-CA-01": {
+  "folio": "3411350380700",
+  "county": "MIAMI-DADE",
+  "how": "owner+assoc-legal",
+  "rule": 2,
+  "when": "2026-11-19"
+ },
+ "2024-012989-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-015290-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "2025-018163-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-11-19"
+ },
+ "502021CA001151XXXXMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA000679XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA008553XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA013530XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502020CA007209XXXXMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502026CA002550XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-19"
+ },
+ "502025CA009185XXXAMB": {
+  "miss": true,
+  "county": "PALM BEACH",
+  "when": "2026-11-20"
  }
 }

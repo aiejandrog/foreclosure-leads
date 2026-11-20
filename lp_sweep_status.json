@@ -1,0 +1,108 @@
+{
+ "ran": "2026-11-20T07:13:55",
+ "days": 30,
+ "requested": "all",
+ "counties": {
+  "MIAMI-DADE": "ok",
+  "BROWARD": "ok",
+  "PALM BEACH": "ok"
+ },
+ "new_rows": 957,
+ "failed": [],
+ "partial": [],
+ "coverage": {
+  "MIAMI-DADE": {
+   "status": "ok",
+   "scope": "listed plaintiffs only (59 names), document type 'LIS PENDENS - LIS'",
+   "window": [
+    "2026-10-21",
+    "2026-11-20"
+   ],
+   "reported_total": null,
+   "retrieved": 209,
+   "kept": 220,
+   "pages": 59,
+   "failures": [],
+   "searched": 59,
+   "blocked": 0,
+   "capped": [],
+   "split_searches": 0,
+   "no_qs": {
+    "NATIONSTAR": "{'isValidSearch': False, 'qs': None}",
+    "PHH MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "RUSHMORE": "{'isValidSearch': False, 'qs': None}",
+    "SPECIALIZED LOAN": "{'isValidSearch': False, 'qs': None}",
+    "MTGLQ": "{'isValidSearch': False, 'qs': None}",
+    "FEDERAL NATIONAL MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "LOANCARE": "{'isValidSearch': False, 'qs': None}",
+    "TRUIST": "{'isValidSearch': False, 'qs': None}",
+    "FLAGSTAR": "{'isValidSearch': False, 'qs': None}",
+    "REVERSE MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "AJAX MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "FIRST CITIZENS BANK": "{'isValidSearch': False, 'qs': None}",
+    "FAY SERVICING": "{'isValidSearch': False, 'qs': None}",
+    "ONITY MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "LOANDEPOT": "{'isValidSearch': False, 'qs': None}",
+    "NEW AMERICAN FUNDING": "{'isValidSearch': False, 'qs': None}",
+    "PLAZA HOME MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "21ST MORTGAGE": "{'isValidSearch': False, 'qs': None}",
+    "ONSLOW BAY": "{'isValidSearch': False, 'qs': None}",
+    "LOAN FUNDER": "{'isValidSearch': False, 'qs': None}",
+    "TROPICAL FINANCIAL": "{'isValidSearch': False, 'qs': None}"
+   },
+   "attempts": {},
+   "no_match": [
+    "NATIONSTAR",
+    "PHH MORTGAGE",
+    "RUSHMORE",
+    "SPECIALIZED LOAN",
+    "MTGLQ",
+    "FEDERAL NATIONAL MORTGAGE",
+    "LOANCARE",
+    "TRUIST",
+    "FLAGSTAR",
+    "REVERSE MORTGAGE",
+    "AJAX MORTGAGE",
+    "FIRST CITIZENS BANK",
+    "FAY SERVICING",
+    "ONITY MORTGAGE",
+    "LOANDEPOT",
+    "NEW AMERICAN FUNDING",
+    "PLAZA HOME MORTGAGE",
+    "21ST MORTGAGE",
+    "ONSLOW BAY",
+    "LOAN FUNDER",
+    "TROPICAL FINANCIAL"
+   ],
+   "last_complete": "2026-11-20T07:13:55"
+  },
+  "BROWARD": {
+   "status": "ok",
+   "scope": "whole document type",
+   "window": [
+    "2026-10-21",
+    "2026-11-20"
+   ],
+   "reported_total": 408,
+   "retrieved": 408,
+   "kept": 406,
+   "pages": 2,
+   "failures": [],
+   "last_complete": "2026-11-20T07:13:55"
+  },
+  "PALM BEACH": {
+   "status": "ok",
+   "scope": "whole document type",
+   "window": [
+    "2026-10-21",
+    "2026-11-20"
+   ],
+   "reported_total": 396,
+   "retrieved": 396,
+   "kept": 331,
+   "pages": 3,
+   "failures": [],
+   "last_complete": "2026-11-20T07:13:55"
+  }
+ }
+}

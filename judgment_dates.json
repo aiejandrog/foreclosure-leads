@@ -6,6 +6,27 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2010-012099-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2012-08-31",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2011-023915-CC-23": {
+  "checked": "2026-11-13",
+  "d": "2013-01-17",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2011-030950-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2022-10-25",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2011-043379-CA-01": {
   "checked": "2026-08-04",
   "d": "2013-02-22",
@@ -34,6 +55,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2012-045335-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2014-04-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2013-020140-CA-01": {
   "checked": "2026-09-01",
   "d": "2014-08-07",
@@ -45,6 +73,13 @@
   "checked": "2026-08-15",
   "d": "2026-05-08",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2013-035743-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2016-10-14",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -69,6 +104,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2014-031949-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2015-11-24",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2015-011276-CA-01": {
   "checked": "2026-08-04",
   "d": "2017-01-27",
@@ -79,6 +121,20 @@
  "2016-002336-CA-01": {
   "checked": "2026-08-17",
   "d": "2016-12-30",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2016-002450-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2017-02-07",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2016-014856-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2019-07-19",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -94,6 +150,13 @@
   "checked": "2026-08-04",
   "d": "2017-07-07",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2016-024944-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2022-05-19",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -118,6 +181,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2017-026871-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2022-09-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2017-028758-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2019-06-04",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2018-004484-CA-01": {
   "checked": "2026-09-01",
   "d": "2022-10-26",
@@ -125,9 +202,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2018-006005-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-06-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2018-008608-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2019-01-28",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2018-010724-CA-01": {
   "checked": "2026-08-17",
   "d": "2023-07-21",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2018-010820-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -143,6 +241,13 @@
   "checked": "2026-09-01",
   "d": "2022-06-22",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2018-024418-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-08-01",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -167,6 +272,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2018-040770-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2019-000113-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-05-08",
@@ -177,6 +289,13 @@
  "2019-002201-CA-01": {
   "checked": "2026-08-04",
   "d": "2023-07-17",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2019-002437-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2019-11-20",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -195,6 +314,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2019-011071-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2019-08-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2019-013056-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-08",
@@ -209,9 +335,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2019-014759-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-03-14",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2019-021050-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2020-02-12",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2019-024859-CA-01": {
   "checked": "2026-09-03",
   "d": "2021-07-23",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2019-026253-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-04-03",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -230,9 +377,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2019-028750-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-09-12",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2019-032802-CA-01": {
   "checked": "2026-08-04",
   "d": "2025-12-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2019-034244-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2021-01-28",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -244,9 +405,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2020-000155-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2022-05-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2020-003623-CA-01": {
   "checked": "2026-08-04",
   "d": "2024-10-01",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2020-003904-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-04-11",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -255,6 +430,13 @@
   "checked": "2026-08-04",
   "d": "2024-05-31",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2020-006208-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -293,6 +475,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2021-020048-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-04-25",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2021-020161-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2022-04-29",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2021-020292-CA-01": {
   "checked": "2026-08-04",
   "d": "2022-03-23",
@@ -314,6 +510,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2021-023892-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-05-20",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2021-024047-CA-01": {
   "checked": "2026-09-05",
   "d": "2026-09-01",
@@ -324,6 +527,13 @@
  "2021-024188-CA-01": {
   "checked": "2026-08-04",
   "d": "2023-02-27",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2021-025370-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2022-07-13",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -342,9 +552,37 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2022-004470-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-08-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-005589-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-04-16",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-005703-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-09-14",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2022-008023-CA-01": {
   "checked": "2026-08-18",
   "d": "2023-04-25",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-008147-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -373,6 +611,13 @@
  "2022-017322-CA-01": {
   "checked": "2026-08-17",
   "d": "2025-01-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-017590-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-15",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -419,9 +664,44 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2022-023820-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-05-06",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-024126-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-08-09",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-024164-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-11",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2022-024443-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-03-17",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2022-024528-CA-01": {
   "checked": "2026-08-04",
   "d": "2024-04-16",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-000295-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-06-27",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -454,6 +734,27 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2023-001718-CA-01": {
+  "checked": "2026-11-19",
+  "d": "2026-10-14",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-002984-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-04-07",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-003770-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-01-15",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2023-004203-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-04-23",
@@ -465,6 +766,13 @@
   "checked": "2026-08-04",
   "d": "2023-10-05",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-011716-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -482,10 +790,52 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2023-016257-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-016753-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2023-12-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2023-017359-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-01-07",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-017462-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-017995-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-28",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-018671-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-01-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-019446-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-06-16",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -524,6 +874,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2023-020600-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-02-23",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2023-020664-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-29",
@@ -556,6 +913,13 @@
   "checked": "2026-08-04",
   "d": "2026-06-05",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-023260-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-04",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -598,6 +962,20 @@
   "checked": "2026-08-04",
   "d": "2024-12-05",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-025346-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-025618-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-04-30",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -657,6 +1035,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2023-027829-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-11-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2023-028512-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-04-23",
@@ -671,9 +1056,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2023-028622-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2023-028634-CA-01": {
   "checked": "2026-08-04",
   "d": "2024-07-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2023-028652-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-13",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -720,9 +1119,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-000409-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-01-31",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-000472-CA-01": {
   "checked": "2026-08-04",
   "d": "2024-04-24",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-000787-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-09-12",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -734,10 +1147,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-000879-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-000935-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-05-05",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-001508-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-03",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -755,9 +1182,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-002880-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-12-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-003125-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-12",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-003527-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-16",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-003556-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-06-18",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -779,6 +1227,13 @@
  "2024-004188-CA-01": {
   "checked": "2026-08-04",
   "d": "2025-01-23",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-004333-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-09-13",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -814,6 +1269,13 @@
  "2024-004748-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-16",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-004871-CA-01": {
+  "checked": "2026-11-19",
+  "d": "2026-07-17",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -856,6 +1318,13 @@
  "2024-008002-CA-01": {
   "checked": "2026-08-17",
   "d": "2025-08-28",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-008080-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-09-05",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -937,6 +1406,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-009868-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-12-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-009959-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-16",
@@ -947,6 +1423,13 @@
  "2024-010205-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-010246-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-03-19",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -972,6 +1455,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-010926-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-05-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-011001-CA-01": {
   "checked": "2026-09-01",
   "d": "2025-07-07",
@@ -986,6 +1476,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-011100-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-011180-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-04-06",
@@ -997,6 +1494,20 @@
   "checked": "2026-08-31",
   "d": "2026-02-18",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-011437-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-12-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-011629-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2024-11-13",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1021,6 +1532,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-012989-CA-01": {
+  "checked": "2026-11-19",
+  "d": "2025-12-11",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-013103-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-03-12",
@@ -1035,6 +1553,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-013420-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-07-11",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-013517-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-07-29",
@@ -1045,6 +1570,20 @@
  "2024-013556-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-013614-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-18",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-013777-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1105,6 +1644,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-015866-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-015967-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-04-15",
@@ -1126,6 +1672,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-016349-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-04-28",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-016417-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-03-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-016425-CA-01": {
   "checked": "2026-08-04",
   "d": "2025-10-01",
@@ -1143,6 +1703,13 @@
  "2024-016521-CA-01": {
   "checked": "2026-08-18",
   "d": "2026-08-13",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-016641-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-10-09",
   "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1179,6 +1746,13 @@
   "checked": "2026-08-15",
   "d": "2026-06-11",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-017375-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-07-10",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1308,6 +1882,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-019956-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-10-15",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-020387-CA-01": {
+  "checked": "2026-11-14",
+  "d": "2026-11-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-020611-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-03-10",
@@ -1318,6 +1906,13 @@
  "2024-020679-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-02-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-020757-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1406,6 +2001,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-022582-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-10-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-022762-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-04-07",
@@ -1438,6 +2040,20 @@
   "checked": "2026-08-04",
   "d": "2026-05-13",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-023827-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2024-023854-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1504,6 +2120,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2024-230285-CC-05": {
+  "checked": "2026-11-13",
+  "d": "2026-04-03",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2024-247756-CC-23": {
   "checked": "2026-08-04",
   "d": "2026-07-02",
@@ -1553,10 +2176,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-000918-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-001356-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-02-18",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-001383-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-07-21",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1658,6 +2295,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-003261-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-003400-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-22",
@@ -1697,6 +2341,13 @@
   "checked": "2026-08-04",
   "d": "2026-07-02",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-004166-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-28",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1756,6 +2407,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-004946-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-005138-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-13",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-005534-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-01",
@@ -1770,9 +2435,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-005663-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-28",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-005697-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-06-23",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-005725-CA-01": {
+  "checked": "2026-11-14",
+  "d": "2026-05-08",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1791,6 +2470,27 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-006330-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-006741-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-006910-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-007229-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-24",
@@ -1801,6 +2501,20 @@
  "2025-007261-CA-01": {
   "checked": "2026-08-18",
   "d": "2026-08-14",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-007310-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-09-16",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-007321-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-02",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1816,6 +2530,13 @@
   "checked": "2026-08-04",
   "d": "2026-04-06",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-007516-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1861,9 +2582,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-008183-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-008487-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-008491-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-03-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-008518-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-26",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -1886,6 +2628,13 @@
   "checked": "2026-08-17",
   "d": "2026-06-30",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-008675-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-09",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -1959,6 +2708,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-009465-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-009471-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-30",
@@ -2022,6 +2778,27 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-009981-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-010025-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-10-29",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-010043-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-010119-CA-01": {
   "checked": "2026-08-31",
   "d": "2026-07-30",
@@ -2043,10 +2820,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-010317-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-10-24",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-010400-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-21",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-010432-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-30",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2088,6 +2879,27 @@
  "2025-010938-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-05-20",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-011062-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-07-24",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-011077-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-011087-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-05-11",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2148,10 +2960,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-012215-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-17",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-012229-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-08-07",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-012238-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-12-18",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2162,9 +2988,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-012325-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-012528-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-31",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-012596-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-02",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-012674-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-22",
   "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2173,6 +3020,13 @@
   "checked": "2026-08-15",
   "d": "2026-06-30",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-012729-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-08",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2187,6 +3041,13 @@
   "checked": "2026-08-04",
   "d": "2026-01-22",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-013102-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-13",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2211,6 +3072,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-013328-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-23",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-013365-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-30",
@@ -2225,10 +3093,31 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-013584-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-09",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-013585-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-07",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-013668-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-013672-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-09",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2260,6 +3149,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-013935-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-013969-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-18",
@@ -2278,6 +3174,13 @@
   "checked": "2026-08-17",
   "d": "2026-07-27",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-014203-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-24",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2309,6 +3212,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-014425-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-04-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-014438-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-30",
@@ -2330,10 +3240,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-014725-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-14",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-014804-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-01-28",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-015089-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-16",
+  "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2358,9 +3282,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-015290-CA-01": {
+  "checked": "2026-11-19",
+  "d": "2026-03-26",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-015293-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-23",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-015323-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-24",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2376,6 +3314,13 @@
   "checked": "2026-08-04",
   "d": "2026-06-16",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-015976-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2400,10 +3345,45 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-016153-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-02-09",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016193-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-12",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016231-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016251-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-22",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-016285-CA-01": {
   "checked": "2026-08-31",
   "d": "2026-08-25",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016428-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2414,10 +3394,59 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-016451-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-02-18",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016463-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016486-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-016565-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-23",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016827-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2025-11-18",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016836-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016875-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-28",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-016935-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-14",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2442,10 +3471,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-017183-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-16",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-017186-CA-01": {
   "checked": "2026-08-19",
   "d": "2026-08-14",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-017206-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-13",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2463,6 +3506,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-017342-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-017350-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-09",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-017447-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-22",
@@ -2470,10 +3527,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-017505-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-017795-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-08-04",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-017798-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-12",
+  "label": "Final Judgment by Non Jury Trial",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2512,6 +3583,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-018163-CA-01": {
+  "checked": "2026-11-19",
+  "d": "2026-11-17",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-018229-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-20",
@@ -2522,6 +3600,13 @@
  "2025-018243-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-17",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-018253-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-01",
   "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2561,10 +3646,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-018833-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-04-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-018900-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-25",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-018968-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-20",
+  "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2575,9 +3674,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-019000-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-019128-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-06-04",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-019440-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-03-20",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-019591-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-04",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2638,9 +3758,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-020088-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-09",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-020180-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-08-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-020292-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2655,6 +3789,13 @@
  "2025-020414-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-07-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-020455-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2687,6 +3828,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-020775-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-020778-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-08-06",
@@ -2708,6 +3856,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-020936-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-020996-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-09",
@@ -2719,6 +3874,13 @@
   "checked": "2026-08-19",
   "d": "2026-08-17",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-021153-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-22",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2750,6 +3912,34 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-021362-CA-01": {
+  "checked": "2026-11-18",
+  "d": "2026-11-17",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-021425-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-021506-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-12",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-021539-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-28",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-021558-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-28",
@@ -2771,6 +3961,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-021728-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-021770-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-08-13",
@@ -2781,6 +3978,13 @@
  "2025-021836-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-02",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-021944-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-06",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2796,6 +4000,13 @@
   "checked": "2026-08-04",
   "d": "2026-07-02",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022009-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-04",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2824,6 +4035,20 @@
   "checked": "2026-08-04",
   "d": "2026-07-23",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022158-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022165-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-18",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2876,6 +4101,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-022350-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-01",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022362-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-022393-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-08-20",
@@ -2893,6 +4132,13 @@
  "2025-022433-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-03-20",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022462-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-07-16",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2932,6 +4178,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-022711-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-16",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-022794-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-08-24",
@@ -2939,9 +4192,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-022815-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-12",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022884-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-022885-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-07",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-022980-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-24",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -2960,10 +4234,38 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-023052-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-09",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-023088-CA-01": {
   "checked": "2026-09-02",
   "d": "2026-08-25",
   "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023132-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023311-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-02",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023363-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -2977,6 +4279,13 @@
  "2025-023462-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-23",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023481-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-29",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3002,9 +4311,44 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-023678-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-023730-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023761-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-24",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023788-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023890-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-09",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-023996-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3037,6 +4381,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-024205-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-04",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-024285-CA-01": {
   "checked": "2026-09-05",
   "d": "2026-08-31",
@@ -3044,10 +4395,38 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-024376-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-024399-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-07",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-024403-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-24",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-024447-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-024453-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3072,9 +4451,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-024532-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-14",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-024541-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-03-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-024655-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-08",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-024674-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-21",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3093,9 +4493,65 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-025010-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-04",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-025065-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-28",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025118-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025147-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025177-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-01",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025266-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025307-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025401-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-025425-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-23",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3111,6 +4567,13 @@
   "checked": "2026-08-15",
   "d": "2026-07-31",
   "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-027358-CC-23": {
+  "checked": "2026-11-13",
+  "d": "2026-06-16",
+  "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3135,6 +4598,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-094047-CC-25": {
+  "checked": "2026-11-13",
+  "d": "2026-11-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-099724-CC-05": {
   "checked": "2026-08-04",
   "d": "2026-06-24",
@@ -3146,6 +4616,20 @@
   "checked": "2026-08-04",
   "d": "2026-01-28",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-131643-CC-05": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-136719-CC-23": {
+  "checked": "2026-11-13",
+  "d": "2026-11-11",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3177,10 +4661,45 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2025-179352-CC-23": {
+  "checked": "2026-11-13",
+  "d": "2026-10-14",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-179532-CC-25": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2025-182073-CC-05": {
   "checked": "2026-09-03",
   "d": "2026-08-28",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-187473-CC-25": {
+  "checked": "2026-11-13",
+  "d": "2026-10-26",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2025-194314-CC-05": {
+  "checked": "2026-11-13",
+  "d": "2026-09-16",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-000043-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-24",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3212,6 +4731,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-000625-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-12",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-000691-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-10",
@@ -3240,6 +4766,27 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-001248-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-001253-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-001311-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-001351-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-24",
@@ -3254,9 +4801,30 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-001574-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-001631-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-12",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-001641-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-28",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-001678-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-28",
   "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3268,9 +4836,23 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-001743-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-001789-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-22",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-001879-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-12",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3279,6 +4861,13 @@
   "checked": "2026-08-17",
   "d": "2026-07-09",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-002018-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3292,6 +4881,13 @@
  "2026-002031-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-14",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-002241-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3324,9 +4920,44 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-002508-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-02",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-002659-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-002752-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-06-04",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-002772-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-002933-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-003033-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-09",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3345,10 +4976,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-003171-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-003300-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-08-07",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-003302-CA-01": {
+  "checked": "2026-11-18",
+  "d": "2026-11-16",
+  "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3373,10 +5018,38 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-003577-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-003631-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-07-22",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-003662-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-003721-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-003908-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3394,10 +5067,59 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-003998-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-004121-CA-01": {
   "checked": "2026-09-02",
   "d": "2026-04-21",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004197-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-08-25",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004209-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-21",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004275-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-30",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004282-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-27",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004391-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-02",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004414-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-22",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3415,6 +5137,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-004426-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-13",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004504-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-13",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-004507-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-06-30",
@@ -3429,6 +5165,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-004548-CA-01": {
+  "checked": "2026-11-18",
+  "d": "2026-10-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004772-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-21",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-004800-CA-01": {
   "checked": "2026-09-06",
   "d": "2026-08-27",
@@ -3436,10 +5186,24 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-004830-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-004920-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-06-11",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-004925-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3457,9 +5221,65 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-004986-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005083-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-23",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005127-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005227-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-01",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-005277-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-07-31",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005458-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005505-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-05",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005611-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005628-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-15",
   "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
@@ -3468,6 +5288,13 @@
   "checked": "2026-08-04",
   "d": "2026-06-30",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-005646-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3492,6 +5319,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-006405-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-20",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-006425-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-21",
@@ -3506,10 +5340,66 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-006551-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-15",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-006613-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-14",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-006620-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-19",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-006777-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-04",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-006945-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-20",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-006988-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007005-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-30",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-007090-CA-01": {
   "checked": "2026-08-04",
   "d": "2026-07-21",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007106-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-28",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3534,6 +5424,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-007425-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-13",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007519-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-26",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-007592-CC-25": {
   "checked": "2026-08-31",
   "d": "2026-07-28",
@@ -3545,6 +5449,13 @@
   "checked": "2026-08-17",
   "d": "2026-07-09",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007738-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3569,6 +5480,41 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-007877-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-01",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007919-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-10",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007969-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-12",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-007972-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-25",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-008387-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-19",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-008470-CA-01": {
   "checked": "2026-08-17",
   "d": "2026-08-13",
@@ -3576,10 +5522,38 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-008513-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-29",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-008524-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-08",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-008568-CA-01": {
   "checked": "2026-09-01",
   "d": "2026-07-22",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-008631-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-008734-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-04",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3618,6 +5592,20 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-009540-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-28",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-009802-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-009807-CA-01": {
   "checked": "2026-09-05",
   "d": "2026-09-03",
@@ -3632,10 +5620,66 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-010194-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-22",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-010195-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-05",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-010393-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-11",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-010566-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-17",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-010706-CA-01": {
   "checked": "2026-08-15",
   "d": "2026-07-30",
   "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-010724-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-06",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011025-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-29",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011060-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-09",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011062-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-29",
+  "label": "Summary Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
  },
@@ -3646,10 +5690,108 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2026-011210-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-01",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011453-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-02",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011512-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-23",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011965-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-22",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-011978-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-012014-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-03",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-012139-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-11-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-012381-CA-01": {
+  "checked": "2026-11-17",
+  "d": "2026-11-12",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-012446-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-07",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-012909-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-21",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-013187-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-09-10",
+  "label": "Final Judgment by Judge",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-014953-CC-23": {
+  "checked": "2026-11-13",
+  "d": "2026-09-15",
+  "label": "Summary Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-017805-CA-01": {
+  "checked": "2026-11-13",
+  "d": "2026-10-26",
+  "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2026-021475-CC-23": {
   "checked": "2026-08-04",
   "d": "2026-07-16",
   "label": "Default Final Judgment",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
+ "2026-039543-CC-05": {
+  "checked": "2026-11-13",
+  "d": "2026-09-01",
+  "label": "Final Judgment by Judge",
   "rate": null,
   "src": "mdc-ocs-docket"
  },

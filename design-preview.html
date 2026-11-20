@@ -2279,7 +2279,7 @@ body.docked #toTop{bottom:calc(var(--dockh,0px) + 10px)}
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <div id="rfstat" style="display:none"></div><script>(function(){
-var S={"baked":"2026-11-08T19:30","good":null,"rows":[],"last":null,"earlier":null};
+var S={"baked":"2026-11-18T16:12","good":"2026-11-18T04:30","rows":[["Broward",336],["Miami",360],["Palm Beach",446]],"last":{"at":"2026-11-18T04:30","rc":7,"why":"no new lis pendens filings pulled for Miami or Palm Beach; miami-dade case walk step did not run; Broward parcel match skipped","took":13131},"earlier":null};
 function dfRfs(S, el, live){
 if(!el) return;
 var W=(el.ownerDocument && el.ownerDocument.defaultView) || null;
@@ -2622,8 +2622,12 @@ function _expireReleases(rows){
     (rows||[]).forEach(r => {
       if(r && r.bkUntil && !r.saleBkAct && now > r.bkUntil){
         r.saleBkAct = true;
-        r.bkWhy = 'Bankruptcy check expired on this page (built ' + (typeof BUILTAT==='string' ? BUILTAT : '?') +
-                  '). Held until the board is rebuilt.';
+        /* bkExpired: the hold is this page's age, not a bankruptcy finding. Labels below say so
+           (2026-11-09: a stale board showed every released lead as "BK STAY" and it read as a
+           filed case). Blocking is identical to any other saleBkAct row. */
+        r.bkExpired = true;
+        r.bkWhy = 'Bankruptcy release expired, rebuild the board (not a stay finding). Page built ' +
+                  (typeof BUILTAT==='string' ? BUILTAT : '?') + '; a release lasts 48h. Held until the board is rebuilt.';
         delete r.saleLift;
       }
     });
@@ -2985,7 +2989,7 @@ function _workQueue(){
 // the suffix is still withheld, and entity_check.py for what lifts it.
 // True only when entity_check.py has a strict, exact, ACTIVE Sunbiz match for the configured
 // company. Injected at build time -- the board is JS and cannot ask Python at runtime.
-const ENTITY_VERIFIED = false;
+const ENTITY_VERIFIED = true;
 // SENDER IDENTITY IS NOT IN THIS FILE (2026-10-25). This page is published to a public repo, so the
 // operator's name, phone, email and address are never literals here. They live in the local,
 // untracked sender.json; the build seals them INSIDE the encrypted payload (side.sender) and
@@ -2993,7 +2997,7 @@ const ENTITY_VERIFIED = false;
 // which every "is the sender set up?" check below already treats as missing. The two tokens are
 // filled by foreclosure_leads.subst_build_facts(); the local Desktop twin (never published) gets the
 // real values written straight in by footprint.twin_identity().
-const SENDER_DEFAULTS = Object.assign({llc:'', web:'', partner:''}, {"name": "", "phone": "", "email": "", "addr": "", "title": ""});
+const SENDER_DEFAULTS = Object.assign({llc:'Biscayne Solutions Group LLC', web:'', partner:''}, {"name": "", "phone": "", "email": "", "addr": "", "title": ""});
 const _SENDER_PH = Object.assign({}, SENDER_DEFAULTS);   // a saved value equal to a default is "unset"
 let SENDER_RETIRED = {"email": [], "addr": []};                  // sealed: old defaults to heal off devices
 let sender = Object.assign({}, SENDER_DEFAULTS);
@@ -3082,6 +3086,27 @@ function _lpDebtEst(r){
   return +r.debtEst;
 }
 function _isLpEst(r){ return _lpDebtEst(r) > 0; }
+/* COPY-ALL OWED LINE (2026-11-16, Alex pasted a lis pendens card reading "Owed $0" while the
+   recorded chain held a $360k open mortgage and four open claims with no amount). No judgment and
+   no payoff is an UNKNOWN debt, never $0: say what the records search found instead. A recorded
+   amount is the face of the mortgage, not a payoff, and the line says so. */
+function _owedLine(r){
+  var f = (typeof fmtK === 'function') ? fmtK : function(v){ return '$' + Math.round(v); };
+  var po = _payoffOf(r);
+  if(po > 0) return 'Owed ' + f(po);
+  var parts = [];
+  var c = (r||{}).cmp;
+  if(c && +c.p > 0) parts.push('complaint claims ' + f(+c.p) + ' principal' + (c.dd ? ' (default ' + c.dd + ')' : ''));
+  else if(c && +c.o > 0) parts.push('complaint: original loan ' + f(+c.o) + (c.dd ? ' (default ' + c.dd + ')' : ''));
+  else if(c && +c.face > 0) parts.push('foreclosed mortgage recorded at ' + f(+c.face));
+  if(c && +c.jr > 0) parts.push(c.jr + ' other lienholder' + (c.jr === 1 ? '' : 's') + ' named in the complaint');
+  var face = +((r||{}).orestface) || 0, n = +((r||{}).orestn) || 0;
+  if(face > 0) parts.push('Recorded open mortgage' + (n > 1 ? 's (' + n + ')' : '') + ' ' + f(face)
+    + ((+r.orest > 0) ? ' (est. balance ' + f(+r.orest) + ')' : ''));
+  var oth = +((r||{}).eqoth) || 0;
+  if(oth > 0) parts.push(oth + ' open lien' + (oth === 1 ? '' : 's') + ' with no amount');
+  return parts.length ? 'Owed not posted: ' + parts.join(' + ') : 'Owed not posted (no judgment yet)';
+}
 function _debtOf(r){ return _payoffOf(r) || _lpDebtEst(r); }
 function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
 /* DEBT UNKNOWN (2026-09-30). A foreclosure whose judgment is not posted (r.ju) and every lis pendens
@@ -3106,6 +3131,9 @@ function _eqcChip(r, fmtFn){
   var q = c.may_quote === true && (st === 'clear' || st === 'priced');   // display only: never says quote on an unfactual state
   var txt = 'Equity: ' + _EQC_NAME[st] + ' &middot; ' + (q ? 'may quote' : 'do not quote');
   if(q && typeof c.net === 'number') txt += ' &middot; net ~' + esc(f(c.net));
+  // Recorded-debt tier (equity_state.card `recorded`, 2026-11-11): liens verified, no judgment yet. Worth a
+  // call, never a figure: the label says so and no dollar amount is printed.
+  else if(!q && c.recorded === true) txt += ' &middot; recorded debt only, no judgment yet';
   return '<div class="meta eqc eqc-' + st + (q ? ' eqc-ok' : '') + '" title="' + esc(c.why || c.label || '') + '">' + txt + '</div>';
 }
 /* One text for "net equity" wherever a dollar figure is printed. fmtFn formats dollars. */
@@ -3819,6 +3847,15 @@ function _boardMailHeld(r){
   if(_aucPassed(r)) return 'sale passed';
   return '';
 }
+/* Why the board will not offer a WRITTEN channel (Text, WhatsApp, a plain mailto: link) on this lead
+   for one of the holds the any-channel block does not already cover, or ''. It only reads
+   _boardMailHeld and keeps its four non-suppression answers (existing client, diligence hold, claimed
+   on another case, owner gone / transferred). It produces no verdict of its own. 'sale passed' and the
+   three suppression answers keep their existing handling. The Call button is not decided here. */
+function _boardWrittenHeld(r){
+  const h = _boardMailHeld(r);
+  return (h === 'existing client' || h === 'diligence hold' || h === 'claimed on another case' || h === 'owner gone') ? h : '';
+}
 /* Hand the address to Call Mode without putting it in the URL: same origin, so localStorage carries
    {c, to, ts} and the link carries only the case number. Call Mode drops a handoff older than 10
    minutes or for another case. Returns true so the link navigates. */
@@ -3863,7 +3900,7 @@ function _contactLineHtml(r, ph, opts){
   // 'wpm' (pasted from whitepages.com on a Call Mode card) is call-only too, until a call on it
   // reaches a person: same rule as a Whitepages likely-owner number (Alejandro, 2026-10-22).
   const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0; // 'wpm' removed 2026-11-02: pasted Whitepages numbers are textable
-  const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
+  const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r) && !_boardWrittenHeld(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
     : (isMob ? '' : ' <span class="cttag">landline</span>');
@@ -3941,7 +3978,9 @@ function _contactBlockHtml(r){
   let h = '';
   if(block==='wrong') return '<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
   if(block==='optout') return '<div class="csbad">⛔ OPTED OUT — all contact suppressed</div>';
-  if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
+  if(block==='bk') return r.bkExpired
+    ? '<div class="csbad">⏳ BK CHECK EXPIRED — rebuild board · no contact</div>'
+    : '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
   const lines = [];
   // NO slice(0,4) HERE. The build already caps the array (foreclosure_leads.MAX_PHONES) after
   // ranking it, so slicing again threw away numbers that had already survived that cut — and
@@ -3971,7 +4010,8 @@ function _contactBlockHtml(r){
   h += _messagesBarHtml(r);
   if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
-  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  // No plain mailto: link while the board holds the lead (client, diligence hold, claimed, owner gone).
+  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=> _boardWrittenHeld(r) ? esc(e) : '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
   // Addresses pasted from whitepages.com on a Call Mode card (notes.wpe, call_mode.py screenMail).
   // Shown as text, never as a mailto link and never fed to the worker's auto-send list.
   // Sending one is Call Mode's POST /send. A mailto here would leave from this browser's account.
@@ -5385,6 +5425,9 @@ function _callSheet(r){
     (r.hs?' <span class="cstag ok">HOMESTEAD</span>':'')+
     (_nameBroken(r)?' <span class="cstag warn">name incomplete</span>':'')+'</div>'+
     '<div class="cscase">Case '+esc(r.case)+' · '+esc(r.county||'MIAMI-DADE')+' · folio '+esc(r.folio||'—')+'</div>'+_csScout(r)+'</div>';
+  // F-site-08: the equity chip (state + may quote / do not quote) sits right under the address block,
+  // above every figure on the sheet. Same _eqcChip the mobile card uses; '' when the lead has no r.eqc.
+  who += _eqcChip(r);
   if(tt) who += '<div class="cstalk">🗣 <b>TALK TO '+esc(tt.name.toUpperCase())+'</b>'+(tt.rel?' — '+esc(tt.rel):'')+
     (tt.phone?' · <a href="'+esc(_telNum(tt.phone))+'">'+esc(tt.phone)+'</a>':'')+
     (tt.note?'<div class="cstn">'+esc(tt.note)+'</div>':'')+
@@ -5690,7 +5733,11 @@ function _csDiligence(r){
         // line rendered "− tax $0" — silently subtracting zero for delinquency. Treat both undefined
         // AND explicit false as "not pulled". Only when tax_checked is TRUE do we trust the number.
         ' − tax '+ (mm.tax_checked === true ? fm(mm.tax_certs) : '<i style="color:#8a1c1c">not pulled</i>')+
-        (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
+        // F-site-08: same figure, labelled. When the baked equity card says do not quote (r.eqc present and
+        // may_quote not true) the number is the MOST it can be, as _EQ_TIP_CEIL says on the row.
+        (mm.net_equity_est!=null?(r.eqc && r.eqc.may_quote !== true
+          ? ' → at most <b>'+fm(mm.net_equity_est)+'</b>, liens not verified'
+          : ' → net est <b>'+fm(mm.net_equity_est)+'</b>'):'')+
         (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
         (mm.value_source==='active_listing'?' <span class="dilg-tag">from active listing</span>':'')+
         (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
@@ -6948,7 +6995,7 @@ function _copyTextMsg(t, btn){
   else fallbackCopy(t,done);
 }
 function textCardHtml(r){
-  const hardBlock=_textContactBlocked(r);
+  const hardBlock=_textContactBlocked(r) || (_boardWrittenHeld(r) ? 'held' : '');
   const phones=hardBlock?[]:textablePhones(r);
   const owner=_ownerName((r.owners||'').split(';')[0].trim(), r);
   const msg=smsMsg(r, textLang, textTone);
@@ -6983,6 +7030,7 @@ function textCardHtml(r){
   if(hardBlock==='bk') gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text, copy, or WhatsApp.</div>';
   else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
   else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
+  else if(hardBlock==='held') gate='<div class="txblock">⛔ On hold: '+esc(_boardWrittenHeld(r))+'. Do not text.</div>';
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
   else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
@@ -11482,13 +11530,13 @@ function genDialReady(r){
   var ownerType = r.co ? 'company (ask for the manager)' : (r.hs ? 'homestead — family home' : 'owner-occupant unknown');
   var factsEN = ''
     + fact('Sale date', chip.t)
-    + fact('Value / Judgment', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact(r.st==='TD' ? 'Value / Opening bid' : 'Value / Judgment', (valFmt||'—')+' / '+(judgFmt||'—'))
     + fact('Surviving 1st mortgage', survFmt)
     + fact('Plaintiff', r.plaintiff)
     + fact('Signal on the owner', ownerType);
   var factsES = ''
     + fact('Fecha subasta', chip.t)
-    + fact('Valor / Sentencia', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact(r.st==='TD' ? 'Valor / Puja inicial' : 'Valor / Sentencia', (valFmt||'—')+' / '+(judgFmt||'—'))
     + fact('1ª hipoteca que sobrevive', survFmt)
     + fact('Demandante', r.plaintiff)
     + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
@@ -11864,7 +11912,8 @@ function genDealSnapshot(r){
   var owed = basis>0 ? Math.max(0, basis - spread) : 0;
   var flags = [];
   if(r.sibclaimed) flags.push({t:'CLAIMED — sibling case already sold', c:'#8a1c1c'});
-  if(r.saleBkAct) flags.push({t:'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
+  if(r.saleBkAct) flags.push({t: r.bkExpired ? 'BK CHECK EXPIRED — rebuild board, no contact until then'
+                                             : 'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
   if(r.mr && r.orconf!=='ok') flags.push({t:'Surviving 1st mortgage unverified', c:'#a35a10'});
   if(r.ju) flags.push({t:'Final judgment not posted — debt unknown', c:'#a35a10'});
   if(r.condo && !r._assessSet) flags.push({t:'Condo — pull the estoppel (special assessment risk)', c:'#a35a10'});
@@ -12566,6 +12615,10 @@ function genReplyInbox(){
     var r = x.r, rep = x.rep, chip = _urgencyChip(r.days);
     var ph = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); })[0] || '';
     var em = (r.emails||[])[0] || '';
+    // A STOP reply, or any lead the any-channel block closes, gets no Call and no mailto here; a lead the
+    // board holds for another reason (client, diligence hold, claimed, owner gone) keeps Call, loses mailto.
+    var noContact = !!rep.stop || !!_textContactBlocked(r);
+    var noMail = noContact || !!_boardWrittenHeld(r);
     return '<div class="rbcard'+(rep.stop?' stop':'')+'">'
       + (rep.stop ? '<div class="rbstop">&#9940; STOP REQUEST — this owner has been AUTO-SUPPRESSED (removed from every outreach queue). Nothing more to do. If this was a false alarm, open the lead and clear the opt-out.</div>' : '')
       + '<div class="rbtop">'
@@ -12576,8 +12629,8 @@ function genReplyInbox(){
       + '</div>'
       + (rep.note ? '<div class="rbnote">'+esc(String(rep.note).slice(0,200))+'</div>' : '')
       + '<div class="rbacts">'
-      +   (ph ? '<a class="rbbtn call" href="'+esc(_telNum(ph))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>')
-      +   (em ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
+      +   (noContact ? '' : (ph ? '<a class="rbbtn call" href="'+esc(_telNum(ph))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>'))
+      +   (em && !noMail ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
       +   '<a class="rbbtn" href="#case='+esc(r.case)+'" onclick="closeReplyInbox&&closeReplyInbox()">Open call sheet &rarr;</a>'
       + '</div></div>';
   }
@@ -14879,7 +14932,7 @@ function genMorningWorker(lane, autostart){
        plaintiff and the sale date were gone the instant the dialer opened, which is the half of
        the card an operator actually reads off while the homeowner is on the line. They are cheap
        to keep and they are what the call is about; the outcome buttons sit under them now. */
-    +     'var _pj = r.judg? "$"+Math.round(+r.judg).toLocaleString()+" judgment" : "";'
+    +     'var _pj = r.judg? "$"+Math.round(+r.judg).toLocaleString()+(r.st==="TD"?" opening bid":" judgment") : "";'
     +     'var _pd = [r.plaintiff||"", _pj, (r.saleDate? "sale "+r.saleDate : "")].filter(function(s){return s;}).join(" &middot; ");'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
     +       '+"<div class=\'h\'>&#128222; How did the call go?</div>"'
@@ -15321,7 +15374,7 @@ function genMorningWorker(lane, autostart){
     +         '+"<div><div class=\'k\'>"+(r.days==null?"Stage":"Sale date")+"</div><div class=\'v\'>"'
     +           '+(r.days==null?"Just filed — no auction set":esc(r.saleDate)+" ("+r.days+"d)")+"</div></div>"'
     +         '+"<div><div class=\'k\'>Plaintiff</div><div class=\'v\'>"+esc((r.plaintiff||"—").slice(0,40))+"</div></div>"'
-    +         '+"<div><div class=\'k\'>Judgment / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
+    +         '+"<div><div class=\'k\'>"+(r.st==="TD"?"Opening bid":"Judgment")+" / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
     +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
@@ -17671,8 +17724,17 @@ function exportDispoPack(caseId){
 const _MAIL_CO_RE = /\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|HOLDINGS|PROPERTY|PROPERTIES|REALTY|REAL ESTATE|INVESTMENTS?|CAPITAL|FUND|ENTERPRISES|GROUP|VENTURES|PARTNERS|SERVICING|MORTGAGE|REO|MANAGEMENT)\b/i;
 const _MAIL_COST = 0.92;   // ~ all-in first-class 1-page B&W; outreach_mail.py prints the same estimate
 function _mailAddrOK(r){ return /\b[A-Za-z]{2}\s+\d{5}(-\d{4})?\b/.test((r.mail||r.addr||'')); }
+/* VERIFIED EQUITY ONLY (2026-11-11, Alex: "the board mail batch is limited to verified equity leads, same as
+   call mode. the whole board follows the rule"). Same test as Call Mode's isEquity: the baked equity card
+   says a figure may be quoted and it is above zero. A lead with no card is not mailed from here. */
+function _mailEquityOK(r){ var c = r && r.eqc; return !!(c && typeof c === 'object' && c.may_quote === true && +c.net > 0); }
+/* Call Mode's mail list: an open n.route k 'mail' (a No answer routed it, or someone picked Mail a letter). */
+function _mailRouted(r){ var x = (notes[r.case]||{}).route; return !!(x && typeof x === 'object' && x.k === 'mail' && !x.done); }
+var _MAIL_ROUTE_ONLY = false;
 function mailableLeads(){
   return DATA.filter(function(r){
+    if(!_mailEquityOK(r)) return false;              // verified equity only, same rule as Call Mode
+    if(_MAIL_ROUTE_ONLY && !_mailRouted(r)) return false;
     const t=(r.tier||'').toUpperCase();
     if(t!=='A' && t!=='B') return false;             // homeowner-rescue tiers only
     if(r.vac) return false;                          // vacant land: no homeowner to help
@@ -17708,10 +17770,13 @@ function closeMailModal(){ const m=document.getElementById('mailmodal'); if(m) m
 function openMailModal(){
   const rows = mailableLeads();
   let h = '<div class="dm-title">&#9993; Mail batch &mdash; send letters as real mail via Lob</div>';
-  h += '<div style="font-size:12.5px;color:var(--muted);margin:6px 0 14px;line-height:1.5">These are the leads worth mailing right now: Tier A/B, a real owner (no LLC / vacant land), a deliverable address, an auction 5+ days out, and <b>not opted out</b>. Uncheck anyone to skip, then download the batch. Your Lob key stays on your machine &mdash; this page never sees it.</div>';
+  h += '<div style="font-size:12.5px;color:var(--muted);margin:6px 0 14px;line-height:1.5">These are the leads worth mailing right now: <b>verified equity</b>, Tier A/B, a real owner (no LLC / vacant land), a deliverable address, an auction 5+ days out, and <b>not opted out</b>. Uncheck anyone to skip, then download the batch. Your Lob key stays on your machine &mdash; this page never sees it.</div>';
+  h += '<label style="display:inline-flex;gap:6px;align-items:center;font-size:12.5px;margin:0 0 10px"><input type="checkbox" id="mailroute"' + (_MAIL_ROUTE_ONLY ? ' checked' : '') + '> Call Mode mail list only</label>';
   if(!rows.length){
     h += '<div style="padding:22px;text-align:center;color:var(--muted)">No mailable leads right now (check your opt-outs and auction dates).</div>';
     document.getElementById('mailbody').innerHTML = h;
+    const _mr0 = document.getElementById('mailroute');
+    if(_mr0) _mr0.addEventListener('change', function(){ _MAIL_ROUTE_ONLY = this.checked; openMailModal(); });
   } else {
     h += '<div id="mailstat" style="font-size:13px;margin-bottom:8px"></div>';
     h += '<div style="max-height:44vh;overflow:auto;border:1px solid var(--line);border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
@@ -17736,6 +17801,8 @@ function openMailModal(){
     });
     document.querySelectorAll('.mailck').forEach(c=>c.addEventListener('change', _mailUpdateStat));
     document.getElementById('maildl').addEventListener('click', downloadMailBatch);
+    const _mr1 = document.getElementById('mailroute');
+    if(_mr1) _mr1.addEventListener('change', function(){ _MAIL_ROUTE_ONLY = this.checked; openMailModal(); });
   }
   document.getElementById('mailmodal').classList.add('show'); document.body.classList.add('modal-open');
 }
@@ -18980,6 +19047,8 @@ function render(){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else if(_isWrongOwner(n)){
       gCall.push('<span class="phone dncgate" title="Someone on these numbers told us they do NOT own this property. Re-verify the owner on the county appraiser and the recorded deed before contacting anyone. The deal is still live — the contact info is not.">🚫 WRONG PERSON'+(n.wrongown?' · '+esc(n.wrongown):'')+' — numbers withheld</span>');
+    } else if(r.saleBkAct && r.bkExpired){
+      gCall.push('<span class="phone dncgate" title="Not a bankruptcy finding. This page is older than the 48h bankruptcy release, so the lead is held until the board is rebuilt and the check runs again.">⏳ BK CHECK EXPIRED — rebuild board</span>');
     } else if(r.saleBkAct){
       gCall.push('<span class="phone dncgate" title="Active bankruptcy stay — no call, text, or WhatsApp.">⛔ BK STAY — no contact</span>');
     } else {
@@ -19098,7 +19167,7 @@ function render(){
     gDo.push(_viewedBtn(r));
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
-      'Value '+fmtK(r.value)+' / Owed '+fmtK(_payoffOf(r))+(r.plaintiff?' / vs '+r.plaintiff:''),
+      'Value '+fmtK(r.value)+' / '+_owedLine(r)+(r.plaintiff?' / vs '+r.plaintiff:''),
       r.auc?'Verify sale: '+r.auc:'',
       r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
     ].filter(Boolean).join('\n');
@@ -19138,7 +19207,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
+    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + _eqcChip(r) + prof;   // F-site-08: same do-not-quote chip as the mobile card, above the figures. TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction || (r.st==='LP' ? 'not set' : '—'))+'</div>'+
       '<div class="submeta '+(_hasClock(r) && r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</div>'+
