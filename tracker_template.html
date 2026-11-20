@@ -6873,116 +6873,36 @@ function _textTone(stage, days, isLP){
   if(typeof days==='number' && days>=0 && days<=14 && !isLP) return 'urgent';
   return 'cold';                                             // touch 1
 }
-function _textBodies(o){
+function _textBodies(o) {
   o = o || {};
-  /* Clerk and appraiser records carry the street in capitals ("100 NW 1 ST"), which reads like a
-     form letter in a text. Title-case it ("100 NW 1 St"): directions and a few route prefixes stay
-     capitals, ordinals go lower ("1st"), a unit like "3B" is left alone. Anything that already has a
-     lower-case letter (a placeholder like "[street]", the "your property" fallback) passes through. */
-  const _streetCase = (s) => {
-    s = s || '';
-    if(/[a-z]/.test(s)) return s;
-    const KEEP = ['N','S','E','W','NE','NW','SE','SW','US','SR','CR','PO','II','III','IV'];
-    return s.split(' ').map((t) => {
-      if(KEEP.indexOf(t) >= 0) return t;
-      if(/^\d+(ST|ND|RD|TH)$/.test(t)) return t.toLowerCase();
-      if(/\d/.test(t)) return t;
-      return t.toLowerCase().replace(/(^|['\-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
-    }).join(' ');
-  };
-  /* 2026-10-22 (Alejandro: "lower caps non bothered is how i want our texts to be scripted and sent
-     out and templated", then "leave all of these ¿ and the weird shit in spanish make it like how i
-     text", "or english", "lowercaps unbothered", "human asf"). Every text is written the way a person
-     types on a phone: all lower case, no ¿ or ¡, no accent marks in the Spanish (ñ stays, "años"
-     without it is a different word). The owner's first name and the sender's name are lower-cased
-     here too, so a capitals record ("HILL") cannot shout in the middle of a casual text. The street
-     keeps _streetCase's casing so the address still reads as an address. */
-  const sN = String(o.sender || '').toLowerCase(), first = String(o.first || '').toLowerCase(), tone = o.tone || 'cold';
-  const stEN = _streetCase(o.stEN) || 'your property', stES = _streetCase(o.stES) || 'su propiedad';
-  const td = !!o.td, lp = !!o.lp;
-  /* Opt-out on every batch text (2026-09-26, attorney: not the carrier-keyword instruction). The owner is
-     told to say it is not a good time; inbound STOP / PARE / "not a good time" still opt out.
-     Same words as call_mode.TEXT_OPTOUT and outreach_copy.SMS_OPTOUT_EN, lower-cased on 2026-10-22
-     (and "dígamelo" without its accent): the attorney's words are unchanged, and
-     replies._OUR_OPTOUT_LINE matches either casing and either spelling, so an owner quoting it back
-     is still not a stop. */
-  const stopEN = " if now's not a good time, just let me know and i won't text you again.";
-  const stopES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.';
-  const hi = 'hi'+(first?' '+first:''), hola = 'hola'+(first?' '+first:'');
-  /* The real days to the sale, when the caller knows them and it is a sale (never a just-filed case).
-     "about" because a sale can be reset after the nightly read. Empty when unknown: the body then
-     says the date is set without counting. */
-  const d = (!lp && typeof o.days === 'number' && o.days >= 0 && o.days <= 365) ? Math.floor(o.days) : -1;
-  const inEN = d === 0 ? 'today' : d === 1 ? 'tomorrow' : d > 1 ? 'in about '+d+' days' : '';
-  const inES = d === 0 ? 'hoy' : d === 1 ? 'mañana' : d > 1 ? 'dentro de unos '+d+' dias' : '';
-  let en, es;
-  /* 2026-10-13 rewrite (Alejandro: the old bodies read "robotic, super scripted", then "i dont like
-     ... if you have a plan keep it, just get to the point like be urgent"). Written the way a person
-     texts: who I am, the real date, what is true about time running out, ONE question.
-     URGENCY HERE IS ONLY WHAT IS TRUE: the actual days to the sale and the fact that options narrow
-     as it nears and mostly end at it. No invented scarcity (spots, offers that expire), no threat,
-     no promise about the sale: those are what s. 501.1377, the MARS rule and FDUTPA read as
-     deceptive to a homeowner in distress. Unchanged rules: sender and company first, the attorney's
-     let-me-know line last, the first question is keep or sell (#57), no sale number, no fee claim
-     beyond "free" on the advisor call, no em dashes, and the word "foreclosure" stays out (a text
-     can be read by someone not on title). 2026-10-22: same facts, lower case, shorter, and the
-     just-filed body is his own sample, word for word. */
-  /* 2026-10-26 (Alejandro pasted a one-line lender text as the target: "sweet and short but
-     inciting", a name, a deadline, one call to action). Same facts as before, cut to three beats:
-     who, the one true dated fact, then ONE ask, call or text me back today. The ask is the reply
-     itself, so the phone the text leaves from is the callback and no number is typed into the
-     body. The sender signs with a first name only; the company still follows it. Still no invented
-     deadline, offer or approval: the only date is the real sale, and a case with no sale says only
-     that it was filed. Keep-or-sell (#57) is the first question on the call, not in the text. */
-  const me = sN.split(' ')[0] || sN;
-  const ask = ' call or text me back today', pide = ' llameme o escribame hoy';
-  if(tone==='urgent'){
-    en = hi+', '+me+' with biscayne solutions group. the court sale on '+stEN+' is '+(inEN||'coming up soon')+','
-       + ' after that most options are gone.'+ask+', our advisor walks you through it free.'+stopEN;
-    es = hola+', soy '+me+' de biscayne solutions group. la subasta de '+stES+' es '+(inES||'muy pronto')+','
-       + ' y despues casi todas las opciones se acaban.'+pide+', nuestro asesor se lo explica gratis.'+stopES;
-  } else if(tone==='t3'){
-    /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
-       TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
-       ever weakened, delete this body in the same commit. */
-    en = hi+', '+me+' with biscayne solutions group, last text from me about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+' and after it most options are gone.' : ' every week fewer options are left.')
-       + ' call or text me back here anytime, the call is free.'+stopEN;
-    es = hola+', soy '+me+' de biscayne solutions group, ultimo mensaje mio sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+' y despues casi todas las opciones se acaban.' : ' cada semana quedan menos opciones.')
-       + ' llameme o escribame aqui cuando quiera, la llamada es gratis.'+stopES;
-  } else if(tone==='followup'){
-    en = hi+', '+me+' again from biscayne solutions group about '+stEN+'.'
-       + (inEN ? ' the sale is '+inEN+' and options shrink every week.' : ' options shrink every week.')
-       + ask+", it's 5 minutes and free."+stopEN;
-    es = hola+', '+me+' otra vez de biscayne solutions group sobre '+stES+'.'
-       + (inES ? ' la subasta es '+inES+' y cada semana quedan menos opciones.' : ' cada semana quedan menos opciones.')
-       + pide+', son 5 minutos y es gratis.'+stopES;
-  } else if(td){
-    // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
-    // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
-    en = hi+', '+me+" with biscayne solutions group. there's a tax deed sale set for "+stEN+(inEN?' '+inEN:'')+'.'
-       + " paying the back taxes stops it, and if it sells for more than what's owed, the extra is yours."
-       + ask+'.'+stopEN;
-    es = hola+', soy '+me+' de biscayne solutions group. hay una subasta por impuestos sobre '+stES+(inES?' '+inES:'')+'.'
-       + ' pagar lo atrasado la detiene, y si se vende por mas de lo que se debe, lo extra es suyo.'
-       + pide+'.'+stopES;
-  } else if(lp){
-    // Just filed. No sale date exists yet; the true pressure is that options shrink as the case moves.
-    en = hi+', '+me+' with biscayne solutions group. a case was just filed at the courthouse on '+stEN+'.'
-       + ' you have the most options right now and they shrink every week.'
-       + ask+', our advisor goes over them free.'+stopEN;
-    es = hola+', soy '+me+' de biscayne solutions group. acaban de abrir un caso en la corte sobre '+stES+'.'
-       + ' ahora es cuando mas opciones tiene y cada semana quedan menos.'
-       + pide+', nuestro asesor se las explica gratis.'+stopES;
-  } else {
-    en = hi+', '+me+" with biscayne solutions group. there's a court sale set for "+stEN+(inEN?' '+inEN:'')
-       + " and your options shrink every week. we're not a lender."
-       + ask+', our advisor goes over them free.'+stopEN;
-    es = hola+', soy '+me+' de biscayne solutions group. hay fecha de subasta para '+stES+(inES?' '+inES:'')
-       + ' y cada semana quedan menos opciones. no somos prestamistas.'
-       + pide+', nuestro asesor se las explica gratis.'+stopES;
-  }
+  /* 2026-11-20 (Alejandro): notice-style first text. His words, verbatim.
+     [Company Name] -> co, [Street Address] -> stEN/stES, [Date] -> o.date, [Time] -> o.time.
+     One notice for every tone: the days-to-sale ladder and the street title-casing retired
+     with the old copy. Self-contained on purpose -- no inEN/inES, nothing outside this scope,
+     so free_identifiers() stays empty and the phone can run these bytes.
+
+     The let-me-know sentence is the 2026-09-26 counsel line, copied byte for byte from
+     TEXT_OPTOUT. boardTextBody does not append it (only the balloon ladder does), so it has
+     to live here or the notice ships with no opt-out at all. */
+  var sN = String(o.sender || '').trim();
+  var me = sN.split(' ')[0] || sN;
+  var co = 'biscayne solutions group';
+  var stEN = String(o.stEN || '').trim() || 'your property';
+  var stES = String(o.stES || '').trim() || 'su propiedad';
+  var dtEN = String(o.date || '').trim() || 'the scheduled date';
+  var dtES = String(o.date || '').trim() || 'programado';
+  var tmEN = String(o.time || '').trim() || '9:00 am';
+  var tmES = String(o.time || '').trim() || '9:00 am';
+  var en = 'Notice from ' + co + ': A priority FREE foreclosure-prevention consultation has been held '
+         + 'for Current Resident at ' + stEN + ' on ' + dtEN + ' at ' + tmEN + '. '
+         + 'Text C to confirm or R to reschedule.'
+         + " if now's not a good time, just let me know and i won't text you again."
+         + ' Msg&data rates may apply.';
+  var es = 'Aviso de ' + co + ': Una consulta prioritaria GRATIS de prevencion de ejecucion hipotecaria '
+         + 'se ha programado para el residente actual en ' + stES + ' el dia ' + dtES + ' a las ' + tmES + '. '
+         + 'Responda C para confirmar o R para reprogramar.'
+         + ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
+         + ' Pueden aplicar tarifas de mensajes y datos.';
   return {en: en, es: es};
 }
 function _smsHref(ph, msg){

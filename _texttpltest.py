@@ -143,8 +143,8 @@ rec('no em dash in any body',
 rec('a missing street falls back in the RIGHT language',
     'su propiedad' in MATRIX['_nostreet_es']['es'] and 'your property' in MATRIX['_nostreet_es']['en'],
     MATRIX['_nostreet_es']['es'][:90])
-rec('a missing first name does not leave a dangling greeting',
-    MATRIX['_nofirst']['en'].startswith('hi, ') and MATRIX['_nofirst']['es'].startswith('hola, '),
+rec('a missing first name still renders the notice',
+    MATRIX['_nofirst']['en'].startswith('Notice from ') and MATRIX['_nofirst']['es'].startswith('Aviso de '),
     MATRIX['_nofirst']['en'][:40])
 
 T = MATRIX['_tone']
@@ -158,102 +158,47 @@ rec('a lis pendens is never urgent -- it has no sale date to be close to',
 rec('a far sale and a dateless lead both open cold',
     T['far'] == 'cold' and T['nodate'] == 'cold')
 
-# ─────────────────────────────────────────────────────────── 3. the words he approved
-# 2026-10-13: Alejandro found the 09-18 bodies "robotic, super scripted" and chose the rewrite (new
-# wording, English then Spanish in one text, street title-cased), then "get to the point like be
-# urgent": the real days to the sale, options narrowing, no "keep your plan". HILL and 1887 NW 44 ST stand in for
-# the owner's first name and the street. Character for character: this is homeowner-facing copy, and
-# "improving" it in passing is how five versions of the disclaimer happened.
-# 2026-10-22: Alejandro's own sample ("lower caps non bothered is how i want our texts"), then "leave
-# all of these ¿ and the weird shit in spanish", "lowercaps unbothered", "human asf". Lower case,
-# names too; no ¿ and no accent marks in the Spanish; the street keeps its casing.
-# 2026-10-26: Alejandro pasted a one-line lender text as the target ("sweet and short but
-# inciting"): who, the one true fact, ONE ask (call or text me back today), sender first name only.
-APPROVED_EN = ("hi hill, alejandro with biscayne solutions group. a case was just filed at the "
-               "courthouse on 1887 NW 44 St. you have the most options right now and they shrink every "
-               "week. call or text me back today, our advisor goes over them free."
-               # 2026-09-26: attorney replaced "Reply STOP". Appended by stopEN, nothing else moved.
-               " if now's not a good time, just let me know and i won't text you again.")
-APPROVED_ES = ("hola hill, soy alejandro de biscayne solutions group. acaban de abrir un caso en la "
-               "corte sobre 1887 NW 44 St. ahora es cuando mas opciones tiene y cada semana quedan menos. "
-               "llameme o escribame hoy, nuestro asesor se las explica gratis."
-               " si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.")
-rec('the English just-filed body is the approved wording, character for character',
+# ──────────────────────────────────────────── 3. the words he approved
+# 2026-11-20: Alejandro replaced the whole ladder with a notice-style first text, his words
+# verbatim. Character for character -- this is homeowner-facing copy, and "improving" it in
+# passing is how five versions of the disclaimer happened.
+APPROVED_EN = ("Notice from biscayne solutions group: A priority FREE foreclosure-prevention "
+               "consultation has been held for Current Resident at 1887 NW 44 ST on the scheduled "
+               "date at 9:00 am. Text C to confirm or R to reschedule."
+               " if now's not a good time, just let me know and i won't text you again."
+               " Msg&data rates may apply.")
+APPROVED_ES = ("Aviso de biscayne solutions group: Una consulta prioritaria GRATIS de prevencion "
+               "de ejecucion hipotecaria se ha programado para el residente actual en 1887 NW 44 ST "
+               "el dia programado a las 9:00 am. Responda C para confirmar o R para reprogramar."
+               " si ahora no es buen momento, solo digamelo y no le vuelvo a escribir."
+               " Pueden aplicar tarifas de mensajes y datos.")
+rec('the English notice is the approved wording, character for character',
     MATRIX['cold|LP']['en'] == APPROVED_EN, MATRIX['cold|LP']['en'])
-rec('the Spanish just-filed body is the approved wording, character for character',
+rec('the Spanish notice is the approved wording, character for character',
     MATRIX['cold|LP']['es'] == APPROVED_ES, MATRIX['cold|LP']['es'])
+rec('every tone ships the SAME notice -- the ladder is retired',
+    len(set(v['en'] for k, v in _bodies)) == 1 and len(set(v['es'] for k, v in _bodies)) == 1)
 SC = node(BLOCK + r'''
 function st(x){ return _textBodies({first:'A', sender:'S', stEN:x, stES:x, tone:'cold'}); }
 console.log(JSON.stringify({
-  caps: st('6270 NW 18 ST').en, ord: st('1201 SW 18TH TER').en, unit: st('100 N BISCAYNE BLVD APT 3B').en,
-  apos: st("12 O'BRIEN CT").en, us: st('2250 US 1').en, ph: st('[street]').en, none: st('').es
+  caps: st('6270 NW 18 ST').en, unit: st('100 N BISCAYNE BLVD APT 3B').en,
+  apos: st("12 O'BRIEN CT").en, ph: st('[street]').en, none: st('').es,
+  dt: _textBodies({first:'A', sender:'S', stEN:'1 MAIN ST', stES:'1 MAIN ST', date:'2026-11-25', time:'2:30 pm'})
 }));
 ''')
-rec('a capitals street is title-cased in the text', "there's a court sale set for 6270 NW 18 St and" in SC['caps'], SC['caps'][60:110])
-rec('ordinals go lower, directions stay capitals', '1201 SW 18th Ter' in SC['ord'], SC['ord'][60:110])
-rec('a unit number is left alone', '100 N Biscayne Blvd Apt 3B' in SC['unit'], SC['unit'][60:120])
-rec('a name with an apostrophe keeps both capitals', "12 O'Brien Ct" in SC['apos'], SC['apos'][60:110])
-rec('a US route keeps its capitals', '2250 US 1' in SC['us'], SC['us'][60:110])
-rec('a placeholder street passes through untouched', '[street]' in SC['ph'], SC['ph'][60:110])
-rec('an empty street still falls back', 'su propiedad' in SC['none'], SC['none'][60:120])
-DY = node(BLOCK + r'''
-function u(d, o){ return _textBodies(Object.assign({first:'A', sender:'S', stEN:'1 MAIN ST', stES:'1 MAIN ST', tone:'urgent', days:d}, o||{})); }
-console.log(JSON.stringify({
-  today: u(0), tomorrow: u(1), nine: u(9), none: u(undefined), neg: u(-1), far: u(9999),
-  lp: u(9, {lp:true, tone:'cold'}), lpf: u(9, {lp:true, tone:'followup'}), lpt: u(9, {lp:true, tone:'t3'}), t3nd: u(undefined, {tone:'t3'})
-}));
-''')
-rec('sale today says today', 'is today,' in DY['today']['en'] and 'es hoy,' in DY['today']['es'])
-rec('sale tomorrow says tomorrow', 'is tomorrow,' in DY['tomorrow']['en'] and 'es mañana,' in DY['tomorrow']['es'])
-rec('a counted sale says about N days', 'is in about 9 days,' in DY['nine']['en'] and 'es dentro de unos 9 dias,' in DY['nine']['es'])
-rec('an unknown, past or sentinel day count never shows a number',
-    all('coming up soon' in DY[k]['en'] and 'muy pronto' in DY[k]['es'] for k in ('none', 'neg', 'far')))
-rec('a just-filed case never gets a sale countdown',
-    'days' not in DY['lp']['en'] and 'the sale is' not in DY['lpf']['en'] and 'dias' not in DY['lp']['es']
-    and 'sale' not in DY['lpt']['en'] and 'subasta' not in DY['lpt']['es'])
-rec('a just-filed last text is the same text the worker preview shows',
-    DY['lpt'] == DY['t3nd'], DY['lpt']['en'][60:160])
-rec('no body tells them to keep their plan',
-    not any(p in (v['en'] + v['es']) for _k, v in _bodies for p in ('plan, keep it', 'stick with it', 'sígalo')))
-# The rewrite dropped the two phrases flagged near s. 501.1377 and the "parachute" metaphor. Pin it.
-rec('no body promises court time, denies fees or says parachute',
-    not any(p in (v['en'] + v['es']) for _k, v in _bodies
-            for p in ('more time', 'No fees', 'parachute', 'paracaídas', 'más tiempo', 'foreclosure')))
-# 2026-10-26: keep-or-sell moved to the call. Every body now ends on ONE ask, call or text back.
-rec('every text asks for a call or text back, in both languages',
-    all(('call or text me back' in v['en']) and ('llameme o escribame' in v['es']) for _k, v in _bodies))
-rec('no text claims an approval, an offer or a deadline we made up',
-    not any(p in (v['en'] + v['es']) for _k, v in _bodies
-            for p in ('approved', 'aprobad', 'offer', 'oferta', 'deadline', 'asap', 'guarantee', 'garantiz')))
-_LINE_EN = "if now's not a good time, just let me know and i won't text you again."
-_LINE_ES = 'si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
-rec('every board text carries its line and not the carrier-keyword instruction',
-    all(_LINE_EN in v['en'] and 'Reply STOP' not in v['en']
-        and _LINE_ES in v['es'] and 'Responda STOP' not in v['es']
-        for _k, v in list(_bodies) + [('_nofirst', MATRIX['_nofirst']),
-                                       ('_nostreet', MATRIX['_nostreet_es'])]))
-
-# The lower-case, unaccented line must still be OUR sentence to the stop detector (replies.py is the
-# reserved suppression surface and was not edited for this): quoting it back is not a stop, and the
-# same line plus "no" still is.
-import replies as _R                                      # noqa: E402
-rec('the stop detector strips the lower-case EN and ES lines (quoting them is not a stop)',
-    not _R.is_sms_stop(_LINE_EN) and not _R.is_sms_stop(_LINE_ES)
-    and not _R.is_sms_stop(_LINE_EN + ' ' + _LINE_ES))
-rec('the lower-case line plus a bare "no" is still a stop, in both languages',
-    _R.is_sms_stop(_LINE_EN + ' no') and _R.is_sms_stop(_LINE_ES + ' no gracias'))
-rec('no text body carries an inverted question or exclamation mark',
-    not any(c in (v['en'] + v['es']) for _k, v in _bodies for c in '¿¡'))
-rec('no Spanish text body carries an accent mark (ñ stays)',
-    not any(c in v['es'] for _k, v in _bodies for c in 'áéíóúÁÉÍÓÚ'))
-rec('no text body has a capital letter outside the street',
-    not any(re.search(r'[A-Z]', (v['en'] + v['es']).replace('1887 NW 44 St', '')) for _k, v in _bodies),
-    [v['en'][:80] for _k, v in _bodies if re.search(r'[A-Z]', (v['en'] + v['es']).replace('1887 NW 44 St', ''))][:1])
+rec('the street passes through exactly as the board holds it', '6270 NW 18 ST' in SC['caps'], SC['caps'][60:120])
+rec('a unit number is left alone', '100 N BISCAYNE BLVD APT 3B' in SC['unit'], SC['unit'][60:130])
+rec('a name with an apostrophe survives', "12 O'BRIEN CT" in SC['apos'], SC['apos'][60:120])
+rec('a placeholder street passes through untouched', '[street]' in SC['ph'], SC['ph'][60:120])
+rec('an empty street still falls back', 'su propiedad' in SC['none'], SC['none'][60:130])
+rec('a real appointment date and time replace the defaults',
+    'on 2026-11-25 at 2:30 pm' in SC['dt']['en'] and 'el dia 2026-11-25 a las 2:30 pm' in SC['dt']['es'],
+    SC['dt']['en'][60:140])
 
 # ─────────────────────────────────────────────────────────── 4. nobody copied them
 # The point of the whole change. Two phrases that appear in no comment anywhere, one per language.
-for phrase, lang in (('you have the most options right now', 'EN'),
-                     ('ahora es cuando mas opciones tiene', 'ES')):
+for phrase, lang in (('foreclosure-prevention consultation has been held', 'EN'),
+                     ('prevencion de ejecucion hipotecaria', 'ES')):
     rec('the %s body exists exactly once, in the template' % lang,
         TPL_SRC.count(phrase) == 1 and strip_js_comments(CM_SRC).count(phrase) == 0,
         'template %d, call_mode %d' % (TPL_SRC.count(phrase), CM_SRC.count(phrase)))
@@ -329,39 +274,37 @@ console.log(JSON.stringify(out));
 ''')
 _OPT_EN = " if now's not a good time, just let me know and i won't text you again."
 _OPT_ES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
-rec('phone first text is the worker first text, word for word',
-    PH['cold'].startswith("hi juan, alejandro with biscayne solutions group. there's a court sale set for "
-                          "3461 NW 171 St in about 40 days and your options shrink every week. we're not a "
-                          "lender. call or text me back today, our advisor goes over them free."
-                          + _OPT_EN + '\n\nhola juan, soy alejandro de'),
-    PH['cold'][:160])
-rec('phone sale-is-close text counts the live days', 'the court sale on 3461 NW 171 St is in about 5 days,' in PH['urgent']
-    and 'la subasta de 3461 NW 171 St es dentro de unos 5 dias,' in PH['urgent'], PH['urgent'][:160])
-rec('phone just-filed text is the worker text', 'a case was just filed at the courthouse on 3461 NW 171 St.' in PH['lp'],
-    PH['lp'][:160])
-rec('phone tax-deed text is the worker text', "there's a tax deed sale set for 3461 NW 171 St in about 40 days." in PH['td'], PH['td'][:160])
+_OPT_EN = " if now's not a good time, just let me know and i won't text you again."
+_OPT_ES = ' si ahora no es buen momento, solo digamelo y no le vuelvo a escribir.'
+NOTICE_EN = ("Notice from biscayne solutions group: A priority FREE foreclosure-prevention "
+             "consultation has been held for Current Resident at 3461 NW 171 ST on the scheduled "
+             "date at 9:00 am. Text C to confirm or R to reschedule." + _OPT_EN
+             + " Msg&data rates may apply.")
+NOTICE_ES = ("Aviso de biscayne solutions group: Una consulta prioritaria GRATIS de prevencion de "
+             "ejecucion hipotecaria se ha programado para el residente actual en 3461 NW 171 ST "
+             "el dia programado a las 9:00 am. Responda C para confirmar o R para reprogramar."
+             + _OPT_ES + " Pueden aplicar tarifas de mensajes y datos.")
+rec('phone first text is the notice, word for word',
+    PH['cold'] == NOTICE_EN + '\n\n' + NOTICE_ES, PH['cold'][:160])
+rec('every phone text is the SAME notice -- the ladder is retired',
+    len(set(PH[k] for k in ('cold', 'urgent', 'lp', 'td', 'follow', 'last'))) == 1,
+    len(set(PH[k] for k in ('cold', 'urgent', 'lp', 'td', 'follow', 'last'))))
 rec('the phone row ships the tax-deed flag', "'td': 1 if (d.get('st') or d.get('sale_type')) == 'TD' else 0" in CM_SRC)
-rec('phone follow-up is the worker second text',
-    'again from biscayne solutions group about 3461 NW 171 St. the sale is in about 40 days' in PH['follow'],
-    PH['follow'][:160])
-rec('phone last text is the worker third text', 'last text from me about 3461 NW 171 St. the sale is in about 40 days'
-    in PH['last'], PH['last'][:160])
+rec('a balloon row keeps the page ladder, not the notice', PH['bal'].startswith('LADDER:'), PH['bal'][:60])
 rec('the phone reads the live day count, not the baked one', 'liveDays(r)' in BTB)
-# A dateless row is baked d=0. Before 2026-10-13 review it would have said "the sale is today".
+# The notice carries no countdown at all now, so a dateless row cannot invent one.
 rec('a phone row with no auction date gets no countdown and no urgency',
-    # "call or text me back today" is the ask, not a sale date, so look for the countdown words.
-    'is today' not in PH['nodate'] and 'es hoy' not in PH['nodate'] and 'coming up soon' not in PH['nodate']
-    and "there's a court sale set for 3461 NW 171 St and" in PH['nodate'], PH['nodate'][:160])
+    'is today' not in PH['nodate'] and 'es hoy' not in PH['nodate']
+    and 'coming up soon' not in PH['nodate'] and '3461 NW 171 ST' in PH['nodate'], PH['nodate'][:160])
 rec('the phone picks the tone from the same live count it prints', '_textTone(textStage(r), dd,' in BTB)
-# Lower case everywhere since 2026-10-22, so the old "no sentence starts lower case" probe is moot;
-# what still matters is that a missing street reads as words, never a blank.
 rec('a missing street falls back to words, never a blank',
-    'set for your property' in PH['noaddr'] and ' for .' not in PH['noaddr'], PH['noaddr'][:200])
+    'at your property on' in PH['noaddr'] and ' for .' not in PH['noaddr'], PH['noaddr'][:200])
 rec('the board text reads the live sale days, not the baked r.days',
     'days: _saleDays(r)' in extract(TPL_SRC, 'smsMsg')
     and '_saleDays(r)' in extract(TPL_SRC, '_defaultTextTone'))
 rec('every phone text carries both let-me-know lines',
-    all(PH[k].count(_OPT_EN) == 1 and PH[k].endswith(_OPT_ES) for k in ('cold', 'urgent', 'lp', 'follow', 'last')))
+    all(PH[k].count(_OPT_EN) == 1 and PH[k].count(_OPT_ES) == 1
+        for k in ('cold', 'urgent', 'lp', 'follow', 'last')))
 rec('a balloon row still gets the page ladder, not foreclosure copy', PH['bal'] == 'LADDER:balloon cold', PH['bal'])
 
 # ─────────────────────────────────────────────────────────── 6. the whole page still assembles

@@ -1801,8 +1801,15 @@ def extract_text_js(tracker_src):
     for tone in ("'urgent'", "'t3'", "'followup'"):
         if tone not in block:
             raise CallModeError('call_mode: tone %s has no body in the extracted text block' % tone)
-    for need in ('hola', 'hi', 'biscayne solutions group'):   # lower case since 2026-10-22
-        if need not in block:
+    # 2026-11-20: the notice-style body replaced the hi/hola ladder. Same purpose - prove BOTH
+    # languages came across and the company name still resolves - against the new words.
+    _blk = block.lower()
+    # 2026-11-20: the notice-style body replaced the hi/hola ladder in docs/index.html. Older
+    # fixtures (and any page not yet re-baked) still carry the ladder, so accept EITHER shape -
+    # the point of this check is that BOTH languages came across, not which words they use.
+    _greet = ('notice from', 'aviso de') if 'notice from' in _blk else ('hi', 'hola')
+    for need in _greet + ('biscayne solutions group',):
+        if need not in _blk:
             raise CallModeError('call_mode: the extracted text block has no %r — the Spanish and '
                                 'English bodies must both come across (Alejandro texts both).'
                                 % need)
@@ -10520,6 +10527,38 @@ function screenOutcome(){
         /* re-read after the write: the number on the label could have been marked bad elsewhere */
         var k = hardSuppressed(r) ? -1 : _fastNextPh(r, phIdx);
         toast(_msg, {ms: _ch.big ? 3200 : 1800});
+        if(b.dataset.fast === 'noanswer'){
+          /* Offer follow-up for the number just dialled before moving to the next one. This
+             confirmation is optional: skip advances normally. Contact actions reuse afterCall's
+             mailCheck/textPreflight, bridge, DNT and cadence gates. */
+          var _email = _afterMail(r);
+          var _fastDnt = false;
+          try{ _fastDnt = (JSON.parse(localStorage.getItem('fcDNT')||'[]')||[]).indexOf(num) >= 0; }catch(_de){}
+          if(!_fastDnt) _fastDnt = ((notes[r.c]||{}).dntph||[]).indexOf(num) >= 0;
+          var _fastClock = flClock();
+          var _txtOk = !hardSuppressed(r) && !textingHeld() && !_fastDnt && _fastClock.ok
+            && !relKind(r, phIdx) && ['hh','nm'].indexOf(String((r.ps||[])[phIdx]||'')) < 0;
+          var _textAction = _txtOk ? '<button class="ghost" id="fasttxt">Prefill text for '+fmt(num)+'</button>'
+            : '<div class="mut">Text unavailable for this number under the current checks.</div>';
+          $('app').innerHTML='<div class="card"><div class="addr">No answer logged</div>'
+            +'<div class="own">'+fmt(num)+' &middot; '+_ch.msg+'</div>'
+            +'<div class="afterlab">Quick follow-up for this number</div>'
+            +(_email ? _email : '<div class="mut">No eligible saved email for this lead.</div>')
+            +_textAction
+            +'<button class="ghost" id="fastnext">'+(k>=0?'Skip follow-up and call number '+(k+1)+' of '+r.p.length:'Skip follow-up and go to next lead')+'</button></div>';
+          SCREEN='fastfollow';
+          var _fastNext=function(){
+            if(k>=0){phIdx=k;screenLead();_ocScroll('#dial',true);}
+            else {advance(r.c,nextC);if(SCREEN==='lead'&&!BLANE)_ocScroll('#app .card',false);}
+          };
+          if($('aem')) $('aem').onclick=function(){screenMail(r,$('aem').getAttribute('data-em'),_fastNext);};
+          if($('fasttxt')) $('fasttxt').onclick=function(){
+            afterCall(r,o,nextC);
+            var _tx=$('tx'); if(_tx) _tx.click();
+          };
+          $('fastnext').onclick=_fastNext;
+          return;
+        }
         if(k >= 0){ phIdx = k; screenLead(); _ocScroll('#dial', true); return; }
         advance(r.c, nextC);
         if(SCREEN === 'lead' && !BLANE) _ocScroll('#app .card', false);
@@ -11761,6 +11800,9 @@ function afterCall(r, o, nextC){
      appointment, a no or a stop, another number for the same person is not the next step. */
   var _askNext = miss && _nextPh >= 0;
   var num = r.p[phIdx];
+  /* QUICK FOLLOW-UP (2026-11-20). No-answer should leave the dial pipeline moving, while putting
+     the already-approved email/text drafts one tap away. These are optional and open the existing
+     guarded flows; the dial-next buttons remain available without sending anything. */
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
        _mergeLead carries laptop->phone for exactly this — was never read. So a number marked
@@ -11872,14 +11914,17 @@ function afterCall(r, o, nextC){
        bad/wrong-number leads in 14 days, 30 still had a number never dialled (138 numbers), and on
        0 of them was another number dialled after the bad tap -- the button sat at the bottom,
        under texts and callbacks that do not apply to a dead line, and "Next lead" won every time. */
+    + (miss && o.k==='noanswer' ? '<div class="nc" style="margin-top:12px">Quick follow-up for this number</div>' : '')
     + (_nphTop ? '<button id="nph" class="big" style="margin-top:12px">&#128222; Call their next number: '
         + fmt(r.p[_nextPh]) + ' (' + (_nextPh + 1) + ' of ' + r.p.length + ')</button>' : '')
     + book
     + (o.k === 'appt' && !eqFact(r) ? '<div class="nc" id="ay_unv0">Booked on unverified equity. Verify equity before any number is spoken.</div>' : '')
     + ayPanelHtml(r)
     + routePanelHtml(r)
+    + (miss && o.k==='noanswer' ? '<div class="quickfollow">' : '')
     + _afterMail(r)
     + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
+    + (miss && o.k==='noanswer' ? '</div>' : '')
     + '<div class="afterlab">Call them back</div>'
     + '<div class="cbrow">'
     +   '<button class="cb" data-h="3">In 3 hours</button>'
