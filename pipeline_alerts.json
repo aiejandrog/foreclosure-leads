@@ -1,54 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-20T11:22:02-05:00",
+   "at": "2026-11-20T21:10:01-05:00",
    "key": "bounce-rate",
    "severity": "fail",
-   "text": "Trailing 7-day lower bound 13.7% (raw 19.7%, 25 of 127) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
+   "text": "Trailing 7-day lower bound 13.8% (raw 19.7%, 26 of 132) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-20T11:22:02-05:00",
+   "at": "2026-11-20T21:10:01-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-20T11:22:02-05:00",
+   "at": "2026-11-20T21:10:01-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-19 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-20 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-20T11:22:02-05:00",
+   "at": "2026-11-20T21:10:01-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-20T11:22:02-05:00",
+ "published_at": "2026-11-20T21:10:01-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 0,
+   "errors": 7,
    "filings": 3400,
-   "holds": 923,
+   "holds": 957,
    "last_http_status": 0,
-   "leads_checked": 7,
-   "match_s": 3,
+   "leads_checked": 35,
+   "match_s": 1,
    "needing_search": 4132,
    "provider": "courtlistener",
-   "pull_age_h": 2.05,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 117,
-   "searched_this_run": 7,
+   "reason": "time_budget",
+   "requests_used": 69,
+   "searched_this_run": 35,
    "starved_runs": 0,
-   "truncated": 0
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -59,7 +59,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 25,
+   "dead": 26,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -71,20 +71,20 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.13704040055668698,
-   "mailed": 127,
+   "lb": 0.13811119929839352,
+   "mailed": 132,
    "measured_day_blocked": false,
    "measured_post_trailing_blocked": true,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 25,
-   "post_lb": 0.13704040055668698,
-   "post_mailed": 127,
-   "post_rate": 0.1968503937007874,
+   "post_dead": 26,
+   "post_lb": 0.13811119929839352,
+   "post_mailed": 132,
+   "post_rate": 0.19696969696969696,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.1968503937007874,
+   "rate": 0.19696969696969696,
    "readable": true,
    "trailing_blocked": true,
    "window": 7
@@ -163,7 +163,7 @@
    "spent": 3.6492
   },
   "readiness": {
-   "at": "2026-11-19T21:10:39-05:00",
+   "at": "2026-11-20T21:10:01-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
