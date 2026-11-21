@@ -1,54 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-20T21:10:01-05:00",
+   "at": "2026-11-21T12:36:10-05:00",
    "key": "bounce-rate",
    "severity": "fail",
-   "text": "Trailing 7-day lower bound 13.8% (raw 19.7%, 26 of 132) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
+   "text": "Trailing 7-day lower bound 13.0% (raw 18.2%, 29 of 159) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-20T21:10:01-05:00",
+   "at": "2026-11-21T12:36:10-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-20T21:10:01-05:00",
+   "at": "2026-11-21T12:36:10-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
    "text": "Laptop readiness (checked 11-20 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-20T21:10:01-05:00",
+   "at": "2026-11-21T12:36:10-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-20T21:10:01-05:00",
+ "published_at": "2026-11-21T12:36:10-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 7,
-   "filings": 3400,
-   "holds": 957,
+   "errors": 0,
+   "filings": 3471,
+   "holds": 989,
    "last_http_status": 0,
-   "leads_checked": 35,
-   "match_s": 1,
-   "needing_search": 4132,
+   "leads_checked": 25,
+   "match_s": 4,
+   "needing_search": 4335,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 2.71,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 69,
-   "searched_this_run": 35,
+   "requests_used": 100,
+   "searched_this_run": 25,
    "starved_runs": 0,
-   "truncated": 1
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -59,7 +59,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 26,
+   "dead": 29,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -71,26 +71,26 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.13811119929839352,
-   "mailed": 132,
+   "lb": 0.13009869371732086,
+   "mailed": 159,
    "measured_day_blocked": false,
    "measured_post_trailing_blocked": true,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 26,
-   "post_lb": 0.13811119929839352,
-   "post_mailed": 132,
-   "post_rate": 0.19696969696969696,
+   "post_dead": 29,
+   "post_lb": 0.13009869371732086,
+   "post_mailed": 159,
+   "post_rate": 0.18238993710691823,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.19696969696969696,
+   "rate": 0.18238993710691823,
    "readable": true,
    "trailing_blocked": true,
    "window": 7
   },
   "captcha": {
-   "usd": 9.55383
+   "usd": 9.03537
   },
   "clerk_bk": {
    "readable": false
@@ -110,8 +110,8 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-20",
-   "eligible": 30,
+   "date": "2026-11-21",
+   "eligible": 31,
    "judged": true,
    "paused": false,
    "readable": true,
@@ -122,24 +122,24 @@
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "no_email": 7,
+     "no_email": 4,
      "open_requested": 1,
      "run_end": 1,
-     "send_answer": 45,
+     "send_answer": 32,
      "task_open": 1,
      "worker_loaded": 1
     },
     "no_email": {
-     "none": 7
+     "none": 4
     },
-    "queued": 5,
+    "queued": 4,
     "readable": true,
     "refused": {
-     "http_409": 1,
-     "merge_fields": 16,
-     "stay_unverified": 6
+     "merge_fields": 6,
+     "stay_unverified": 5,
+     "unverified_first_touch": 1
     },
-    "rows": 58,
+    "rows": 42,
     "skipped": {}
    }
   },
@@ -148,19 +148,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-20",
+   "date": "2026-11-21",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1795176904,
+   "started_at": 1795263304,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 11.34,
    "month": "2026-11",
    "readable": true,
-   "spent": 3.6492
+   "spent": 4.7949
   },
   "readiness": {
    "at": "2026-11-20T21:10:01-05:00",
