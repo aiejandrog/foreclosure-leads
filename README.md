@@ -4,6 +4,10 @@ Pending-foreclosure lead tracker for Miami-Dade County. Data: RealForeclose auct
 
 Live tracker: https://aiejandrog.github.io/dealflow-board/
 
+Agent work starts with [DEALFLOW-PLAYBOOKS.md](DEALFLOW-PLAYBOOKS.md). It routes board, Call Mode,
+and Call Coach tasks through one workflow and defines the evidence required before reporting that a
+job is complete.
+
 Call Mode (the phone page) is built once per caller, each with its own half of the dialable
 list — the split is fixed at build time in `call_mode.CALL_SEATS`, so the same homeowner is
 never on two phones:

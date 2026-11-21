@@ -4,6 +4,11 @@
 desktop (DESKTOP-35NNMFL), and GitHub Actions. Git carries code and the published site; it does
 **not** carry data, secrets, or worker state.
 
+**Route every job through [DEALFLOW-PLAYBOOKS.md](DEALFLOW-PLAYBOOKS.md).** It defines the single-agent
+workflow for the board, Call Mode, and Call Coach, including the proof required before reporting a
+result. This file and `MACHINE-HANDOFF.md` remain authoritative for safety, ownership, and machine
+state.
+
 ## Before doing anything
 
 1. `git pull` — another machine or the cloud runner may have pushed since this checkout.
