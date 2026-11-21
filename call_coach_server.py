@@ -560,6 +560,7 @@ PB_GROUPS = (
     (r"paying a law firm", ("attorney", "pay", "money", "think")),
     (r"handing them the decision", ("think", "decide", "no", "notint", "spouse")),
     (r"a money problem", ("bankruptcy", "bank", "fear")),
+    (r"^the protector", ("handled", "money", "spouse", "scam", "others", "notint")),
     (r"^after the yes", ("yes", "time")),
 )
 # The code-side rule blocks that are situational too, and the topics that bring each one.
