@@ -2187,7 +2187,9 @@ def calls_page():
         dur = ("%d:%02d" % divmod(int(c["dur"]), 60)) if isinstance(c["dur"], (int, float)) else ""
         lead = (e(c["case"]) + ("<br><span class='dim'>" + e(c["address"]) + "</span>" if c["address"] else "")) or "<span class='dim'>no prospect</span>"
         tr = ("<a class='b' target='_blank' href='/calls/%s/transcript'>Transcript</a>" % e(c["sid"])) if c["transcript"] else "<span class='dim'>no transcript</span>"
-        au = ("<audio preload='none' controls src='/calls/%s/audio'></audio>" % e(c["sid"])) if c["audio"] else ""
+        au = ("<audio preload='none' controls src='/calls/%s/audio'></audio> <a class='b' download='%s.webm' "
+              "href='/calls/%s/audio' title='Saves as a .webm file any player opens'>&#8595;</a>"
+              % (e(c["sid"]), e(c["sid"]), e(c["sid"]))) if c["audio"] else ""
         rows.append("<tr data-q='%s'><td>%s<br><span class='dim'>%s UTC</span></td><td>%s</td><td>%s</td><td class='oc %s'>%s</td>"
                     "<td class='note'>%s%s</td><td>%s<br>%s</td></tr>" % (
                         e((c["case"] + " " + c["address"] + " " + c["owners"] + " " + c["note"] + " " + c["sid"]).lower()),
@@ -2452,9 +2454,23 @@ class Handler(BaseHTTPRequestHandler):
             if _seg[2] == "audio":
                 try:
                     with open(os.path.join(_d, "audio.webm"), "rb") as f:
-                        return self._send(200, f.read(), "audio/webm", private=True)
+                        body = f.read()
                 except OSError:
                     return self._send(404, {"error": "no audio"}, private=True)
+                # A download from the player saved as "audio.weba", which Windows cannot open
+                # (2026-11-20). Name the file after the call and keep the extension players know.
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/webm")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition", 'inline; filename="%s.webm"' % _seg[1])
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                if self.command != "HEAD":
+                    try:
+                        self.wfile.write(body)
+                    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                        self.close_connection = True
+                return
             return self._send(404, {"error": "not found"}, private=True)
 
         if p == "/api/sessions":
