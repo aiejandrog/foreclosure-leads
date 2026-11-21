@@ -2007,7 +2007,7 @@ def lead_card(r):
     """The fields the coach actually shows on a call."""
     return {
         "case": r.get("Case #"),
-        "address": r.get("Address"),
+        "address": re.sub(r"\bFL-\s*", "FL ", str(r.get("Address") or "")) or None,
         "owners": r.get("owners"),
         "first": greet_first(r.get("owner_clean"), r.get("owners"), "MIAMI-DADE", r.get("Case #")),
         "auction": r.get("AuctionDate"),
@@ -2181,12 +2181,52 @@ CALLS_PAGE_CSS = (
     "table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-bottom:1px solid #1b2733;vertical-align:top;text-align:left}"
     "th{color:#8b98a6;font-weight:600;font-size:12px;position:sticky;top:58px;background:#0e1216}"
     "tr:hover td{background:#111c27}.oc{font-weight:700}.oc.appointment{color:#5fd38d}.oc.talked{color:#ffd479}"
-    ".note{color:#bcdcff;font-size:12.5px;max-width:520px}.dim{color:#5e6b78}audio{height:30px;width:220px}"
+    ".note{color:#bcdcff;font-size:12.5px;min-width:240px;max-width:520px}.dim{color:#5e6b78}"
+    "td.when,td.len{white-space:nowrap}td.who{min-width:150px;overflow-wrap:anywhere}td.files{min-width:260px}"
+    "td.files audio{height:32px;width:min(240px,100%);vertical-align:middle}table{table-layout:auto}"
     "pre{white-space:pre-wrap;background:#0b1520;border:1px solid #1d4468;border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,Consolas,monospace}"
 )
 
 
-def calls_index(limit=300):
+def _local_stamp(started, sid):
+    """(sort_key, 'Nov 20 8:05 PM') in the LOCAL timezone. The folder stamp is local time and the
+    meta stamp is UTC: showing one and sorting by the other put 23:56 under 01:05 (stress test #4)."""
+    try:
+        t = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        t = t.astimezone()
+        return t.timestamp(), t.strftime("%b %d, %I:%M %p").replace(" 0", " ")
+    except (ValueError, TypeError):
+        try:
+            t = datetime.strptime(sid[:15], "%Y-%m-%d_%H%M%S")
+            return t.timestamp(), t.strftime("%b %d, %I:%M %p").replace(" 0", " ")
+        except ValueError:
+            return 0.0, ""
+
+
+def _dur_text(m, d):
+    """Length of a call: the saved figure, else ended-minus-started, else the transcript's last stamp."""
+    v = m.get("duration_s")
+    if not isinstance(v, (int, float)):
+        try:
+            a = datetime.fromisoformat(str(m.get("started_utc")).replace("Z", "+00:00"))
+            b = datetime.fromisoformat(str(m.get("ended_utc") or m.get("checkpoint_utc")).replace("Z", "+00:00"))
+            v = (b - a).total_seconds()
+        except (ValueError, TypeError):
+            v = None
+    if not isinstance(v, (int, float)):
+        try:
+            with open(os.path.join(d, "transcript.txt"), "r", encoding="utf-8") as f:
+                last = [ln for ln in f if ln.startswith("[")][-1]
+            mm = re.match(r"\[(\d+):(\d+)\]", last)
+            v = int(mm.group(1)) * 60 + int(mm.group(2)) if mm else None
+        except (OSError, IndexError):
+            v = None
+    return ("%d:%02d" % divmod(int(v), 60)) if isinstance(v, (int, float)) and v >= 0 else ""
+
+
+def calls_index(limit=300, show_all=False):
     """Every recorded call, newest first: when, how long, which lead, what happened, and what is on disk."""
     out = []
     try:
@@ -2202,8 +2242,12 @@ def calls_index(limit=300):
             m = {}
         w = m.get("wrapup") or {}
         ai = w.get("ai") if isinstance(w, dict) else {}
+        if not show_all and re.match(r"(?i)test[-_]", str(m.get("case") or "") or sid.split("_", 2)[-1]):
+            continue                      # leftover test rows are not calls (stress test #17)
+        _key, _when = _local_stamp(m.get("started_utc"), sid)
         out.append({
             "sid": sid, "started": m.get("started_utc") or "", "dur": m.get("duration_s"),
+            "key": _key, "when": _when, "length": _dur_text(m, d),
             "case": m.get("case") or "", "address": m.get("address") or "", "owners": m.get("owners") or "",
             "caller": m.get("caller") or "",
             "outcome": m.get("outcome") or (w.get("picked") if isinstance(w, dict) else "") or "",
@@ -2213,6 +2257,7 @@ def calls_index(limit=300):
             "transcript": os.path.isfile(os.path.join(d, "transcript.txt")),
             "coach_lines": len(m.get("coach_fires") or []),
         })
+    out.sort(key=lambda c: (c["key"], c["sid"]), reverse=True)
     return out
 
 
@@ -2221,29 +2266,46 @@ def calls_page():
     the folder in Explorer. Local only (127.0.0.1), the same machine the recordings are on."""
     import html as _h
     e = lambda v: _h.escape(str(v or ""), quote=True)
-    rows = []
+    rows, empty = [], 0
     for c in calls_index():
-        t = c["started"].replace("T", " ")[:16]
-        dur = ("%d:%02d" % divmod(int(c["dur"]), 60)) if isinstance(c["dur"], (int, float)) else ""
+        if not c["audio"] and not c["transcript"]:
+            empty += 1
+            hide = " class='emptyrow' style='display:none'"
+        else:
+            hide = ""
         lead = (e(c["case"]) + ("<br><span class='dim'>" + e(c["address"]) + "</span>" if c["address"] else "")) or "<span class='dim'>no prospect</span>"
-        tr = ("<a class='b' target='_blank' href='/calls/%s/transcript'>Transcript</a>" % e(c["sid"])) if c["transcript"] else "<span class='dim'>no transcript</span>"
-        au = ("<audio preload='none' controls src='/calls/%s/audio'></audio> <a class='b' download='%s.webm' "
+        tr = ("<a class='b' target='_blank' href='/calls/%s/transcript'>Transcript</a>" % e(c["sid"])) if c["transcript"] else ""
+        au = ("<audio preload='metadata' controls src='/calls/%s/audio'></audio> <a class='b' download='%s.webm' "
               "href='/calls/%s/audio' title='Saves as a .webm file any player opens'>&#8595;</a>"
               % (e(c["sid"]), e(c["sid"]), e(c["sid"]))) if c["audio"] else ""
-        rows.append("<tr data-q='%s'><td>%s<br><span class='dim'>%s UTC</span></td><td>%s</td><td>%s</td><td class='oc %s'>%s</td>"
-                    "<td class='note'>%s%s</td><td>%s<br>%s</td></tr>" % (
-                        e((c["case"] + " " + c["address"] + " " + c["owners"] + " " + c["note"] + " " + c["sid"]).lower()),
-                        e(c["sid"][:10]), e(t[11:]), dur, lead, e(c["outcome"]), e(c["outcome"] or "-"),
+        files = (tr + ("<div style='margin-top:12px;clear:both'>" + au + "</div>" if au else "")) or "<span class='dim'>nothing recorded</span>"
+        rows.append("<tr%s data-q='%s'><td class='when'>%s</td><td class='len'>%s</td><td class='who'>%s</td><td class='oc %s'>%s</td>"
+                    "<td class='note'>%s%s</td><td class='files'>%s</td></tr>" % (
+                        hide, e((c["case"] + " " + c["address"] + " " + c["owners"] + " " + c["note"] + " " + c["sid"]).lower()),
+                        e(c["when"]), e(c["length"]), lead, e(c["outcome"]), e(c["outcome"] or "-"),
                         e(c["note"][:400]), ("<br><span class='dim'>Objection: " + e(c["objection"]) + "</span>") if c["objection"] else "",
-                        tr, au))
+                        files))
+    shown = len(rows) - empty
     return ("<!doctype html><html><head><meta charset='utf-8'><title>Call recordings</title>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'><style>__CSS__</style></head><body>"
             "<header><h1>&#128193; Call recordings &middot; __N__</h1>"
             "<button class='big' onclick=\"fetch('/api/open_sessions',{method:'POST'}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Could not open the folder')})\">Open the folder</button>"
-            "<input id='f' placeholder='Filter: case, street, name, outcome' oninput=\"var q=this.value.toLowerCase();document.querySelectorAll('tbody tr').forEach(function(r){r.style.display=r.dataset.q.indexOf(q)>=0?'':'none'})\">"
-            "<a class='b' href='/'>&larr; Back to the coach</a><span class='path'>__DIR__</span></header>"
+            "<input id='f' placeholder='Filter: case, street, name, outcome'>"
+            "<a class='b' href='/'>&larr; Back to the coach</a>__EMPTYBTN__<span class='path' title='__DIR__'>call_sessions folder on this laptop</span></header>"
             "<table><thead><tr><th>Date</th><th>Length</th><th>Prospect</th><th>Outcome</th><th>Note</th><th>Files</th></tr></thead><tbody>__ROWS__</tbody></table>"
-            "</body></html>").replace("__CSS__", CALLS_PAGE_CSS).replace("__N__", str(len(rows))).replace("__DIR__", e(SESSIONS)).replace(
+            "<script>(function(){var f=document.getElementById('f');"
+            "function apply(){var q=(f.value||'').toLowerCase(),all=document.getElementById('showempty')&&document.getElementById('showempty').dataset.on==='1';"
+            "document.querySelectorAll('tbody tr').forEach(function(r){var em=r.classList.contains('emptyrow');"
+            "r.style.display=((em&&!all)||(q&&r.dataset.q.indexOf(q)<0))?'none':'';});}"
+            "f.addEventListener('input',apply);window.addEventListener('pageshow',apply);apply();"
+            "var se=document.getElementById('showempty');if(se)se.onclick=function(){this.dataset.on=this.dataset.on==='1'?'0':'1';"
+            "this.textContent=this.dataset.on==='1'?'Hide empty':'Show empty (__EMPTYN__)';apply();};"
+            "document.querySelectorAll('audio').forEach(function(a){a.addEventListener('loadedmetadata',function(){"
+            "if(a.duration===Infinity||isNaN(a.duration)){a.currentTime=1e101;a.addEventListener('timeupdate',function fix(){"
+            "a.removeEventListener('timeupdate',fix);a.currentTime=0;});}});});})();</script>"
+            "</body></html>").replace("__CSS__", CALLS_PAGE_CSS).replace("__N__", str(shown)).replace("__DIR__", e(SESSIONS)).replace(
+                "__EMPTYBTN__", ("<button id='showempty' data-on='0' style='margin-left:6px'>Show empty (%d)</button>" % empty) if empty else "").replace(
+                "__EMPTYN__", str(empty)).replace(
                 "__ROWS__", "".join(rows) or "<tr><td colspan=6 class='dim'>No calls recorded yet.</td></tr>")
 
 
@@ -2483,11 +2545,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "no such call"}, private=True)
             if _seg[2] == "transcript":
                 try:
+                    _tags = {"you": "YOU", "you?": "YOU?", "them": "THEM", "them?": "THEM?"}
+                    _txt = None
+                    try:
+                        with open(os.path.join(_d, "transcript.json"), "r", encoding="utf-8") as jf:
+                            _lines = (json.load(jf) or {}).get("lines") or []
+                        if _lines:
+                            _txt = "\n".join("[%s] %s%s" % (l.get("t", ""), (_tags.get(str(l.get("spk") or ""), "") + ": ") if _tags.get(str(l.get("spk") or "")) else "", l.get("text", "")) for l in _lines)
+                    except (OSError, ValueError, AttributeError):
+                        _txt = None
                     with open(os.path.join(_d, "transcript.txt"), "r", encoding="utf-8") as f:
+                        _plain = f.read()
                         import html as _h
                         return self._send(200, "<!doctype html><meta charset='utf-8'><title>%s</title><style>%s</style><body style='padding:18px'>"
                                           "<a class='b' href='/calls'>&larr; All calls</a><h1 style='margin:14px 0'>%s</h1><pre>%s</pre></body>" % (
-                                              _h.escape(_seg[1]), CALLS_PAGE_CSS, _h.escape(_seg[1]), _h.escape(f.read())),
+                                              _h.escape(_seg[1]), CALLS_PAGE_CSS, _h.escape(_seg[1]), _h.escape(_txt if _txt else _plain)),
                                           "text/html; charset=utf-8", private=True)
                 except OSError:
                     return self._send(404, {"error": "no transcript"}, private=True)

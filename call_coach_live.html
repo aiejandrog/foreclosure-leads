@@ -45,7 +45,7 @@ code{color:var(--accent)}
 .ack input{width:auto;margin-top:3px}
 
 /* ---------------- app ---------------- */
-#app{display:none;height:100%;grid-template-rows:auto auto 1fr;grid-template-columns:1fr 1fr}
+#app{display:none;height:100%;grid-template-rows:auto auto 1fr;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 #app.on{display:grid}
 #bar{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
 #bar .t{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px} #bar .sp{flex:1}
@@ -106,7 +106,11 @@ code{color:var(--accent)}
 .probe{display:block;width:100%;text-align:left;margin-bottom:6px;font-size:14px;color:#c9d4e0;background:#14181d}
 
 .nav{display:flex;gap:8px;margin-top:18px} .nav button{flex:1}
-.fill{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.fill{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+.fill input{width:100%;box-sizing:border-box;min-width:0}
+#right{min-width:0;overflow-x:hidden}
+#leadbox>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+#leadbox .v{overflow-wrap:anywhere;min-width:0}
 .fill label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:3px}
 .err{background:#3a0d0d;border:1px solid #5c1f1f;color:#ffb3b3;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;display:none}
 .err.on{display:block}
@@ -143,7 +147,7 @@ code{color:var(--accent)}
 #coach .cbtn button{padding:5px 11px;font-size:12px}
 #clisten{display:none;font-size:12px;color:var(--dim);margin:0 0 10px;font-style:italic}
 #clisten.on{display:block}
-#leadbox .src{font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:8px}
+#leadbox .src{font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:0;white-space:nowrap;display:inline-block}
 #leadbox .src.ok{background:#0d2b1a;color:#5fd99a;border:1px solid #1d5c38}
 #leadbox .src.no{background:#2b1d0d;color:#e6b35c;border:1px solid #5c4410}
 #leadbox .hold{color:#ffb3b3;font-weight:700}
@@ -193,9 +197,16 @@ code{color:var(--accent)}
 
     <div class="err" id="gateerr"></div>
 
+    <div id="recentbox" style="text-align:left;margin-top:14px;display:none">
+      <div style="color:#8b98a6;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Recent cases</div>
+      <div id="recentcases" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+      <div style="color:#8b98a6;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Recent calls</div>
+      <div id="recentcalls" style="font-size:13px;line-height:1.7"></div>
+    </div>
+
     <details class="fine"><summary>Recording and transcript details</summary><p>
       <b>Audio</b> goes to <code>call_sessions/&lt;stamp&gt;_&lt;case&gt;/audio.webm</code> on this laptop, in
-      five-second chunks, so a crash costs you five seconds. Nothing leaves this machine.<br><br>
+      five-second chunks, so a crash costs you five seconds. The audio file never leaves this laptop; the live words do (see below).<br><br>
       <b>Transcript</b> is Chrome's recognizer (audio <em>is</em> processed by Google's speech service) &mdash;
       or Deepgram when a key is saved, which adds real speaker labels. The text lands in
       <code>transcript.txt</code> when you stop.<br><br>
@@ -220,14 +231,14 @@ code{color:var(--accent)}
       <option value="es-US">Espa&ntilde;ol</option>
     </select>
     <span class="sp"></span>
-    <input id="q2" placeholder="Switch lead: case, address or name" title="Type a case number, street or name and press Enter: the call on screen is saved and this lead loads" style="width:230px;padding:5px 8px;border-radius:6px;border:1px solid #2a3a4a;background:#0d1520;color:#e6edf3;font:inherit" onkeydown="if(event.key==='Enter') Coach.switchTo()">
+    <input id="q2" placeholder="Switch lead…" title="Switch lead: type a case number, street or name and press Enter. The call on screen is saved and this lead loads" style="width:230px;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid #2a3a4a;background:#0d1520;color:#e6edf3;font:inherit" onkeydown="if(event.key==='Enter') Coach.switchTo()">
     <a href="/calls" target="_blank" rel="noopener" title="Every recorded call: transcript, audio, outcome, and a button that opens the folder" style="padding:5px 10px;border-radius:6px;text-decoration:none;background:#c6a14b;color:#14203a;border:1px solid #c6a14b;font-weight:700">&#128193; Recordings</a>
     <button title="Save what is on screen and start a clean call on the same lead (R)" style="border-color:#4aa3ff;color:#bfe0ff" onclick="Coach.newCall()">New call (R)</button>
     <button id="pausebtn" title="Hide the coach card and stop new prompts (P)" onclick="Coach.pauseCoach()">Pause coach (P)</button>
     <button title="The last things they said (C)" onclick="Coach.catchUp()">Catch me up (C)</button>
     <button onclick="Coach.back()">&larr; Back (B)</button>
     <button onclick="Coach.next()">Next stage (N)</button>
-    <button style="border-color:var(--hot);color:#ffb3b3" onclick="Coach.stop()">Stop &amp; save (Esc)</button>
+    <button id="stopbtn" style="border-color:var(--hot);color:#ffb3b3" onclick="Coach.stop()">Stop &amp; save (Esc)</button>
   </div>
 
   <div id="redflag"><span id="rfphrase"></span><span class="why" id="rfwhy"></span></div>
@@ -245,8 +256,8 @@ code{color:var(--accent)}
     <div id="leadbox"></div>
 
     <div class="fill">
-      <div><label>First name</label><input id="f_first" placeholder="Maria" oninput="Coach.fill()"></div>
-      <div><label>Street</label><input id="f_st1" placeholder="NW 12th Ave" oninput="Coach.fill()"></div>
+      <div><label>First name</label><input id="f_first" placeholder="their first name" oninput="Coach.fill()"></div>
+      <div><label>Street</label><input id="f_st1" placeholder="street" oninput="Coach.fill()"></div>
       <div><label>Sale date</label><input id="f_date" placeholder="the 18th" oninput="Coach.fill()"></div>
       <div><label>Your name</label><input id="f_sender" value="Alejandro" oninput="try{localStorage.setItem('coachCaller',this.value)}catch(e){};Coach.fill()"></div>
     </div>
@@ -320,7 +331,7 @@ code{color:var(--accent)}
     <div id="wrap">
       <div class="wl" id="wraphead">AI wrap-up &middot; reading the call&hellip;</div>
       <div class="wf" id="wrapfacts"></div>
-      <textarea id="wrapnote" rows="3" placeholder="Note for the log (edit freely)"></textarea>
+      <textarea id="wrapnote" rows="3" placeholder="Note for the log (edit freely)" oninput="Coach.userNote()"></textarea>
     </div>
     <!-- Call Mode's own outcome codes (call_mode.CALL_OUTCOMES), so the coach and Call Mode name a call
          the same way. Docked, the pick only LIGHTS that button on Call Mode's outcome screen: the call
@@ -1072,12 +1083,13 @@ function merged(t){
   var first=$('f_first').value.trim(), st1=$('f_st1').value.trim()||'your property',
       date=$('f_date').value.trim(), sender=$('f_sender').value.trim()||'Alejandro';
   return String(t)
-    .split('{first}').join(first||'there')
+    .split('{first}').join(first||'')
     .split('{st1}').join(st1)
     .split('{date}').join(date?(', with the sale set for '+date):'')
     .split('{sender}').join(sender)
     .split('{county}').join('South Florida');
 }
+function mergedN(t){ var m=merged(t); return (($('f_first')&&$('f_first').value.trim())?m:_noName(m)); }
 
 /* ============================== STAGES UI ============================== */
 function renderChips(){
@@ -1086,16 +1098,26 @@ function renderChips(){
     h+='<span class="stagechip'+(i===S.stage?' now':'')+'" onclick="Coach.jump('+i+')">'+i+' · '+esc(STAGES[i].name)+'</span>';
   $('chips').innerHTML=h;
 }
+/* With no first name the script must not say "Hi, there?" (its own tip says never; stress test #10). */
+function _noName(t){
+  return String(t)
+    .replace(/Hi, ? ?\? Can you hear me\?/g, 'Hi, can you hear me?')
+    .replace(/Hi,\s*\?/g, 'Hi,')
+    .replace(/looking for \. Do I have/g, 'looking for the owner. Do I have')
+    .replace(/(Hey|Hi) ,/g, '$1,')
+    .replace(/^\s*!\s*/g, '')
+    .replace(/(^|[\s…])!(?=\s*(…|It’s|it’s|$))/g, '$1');
+}
 function renderStage(){
   var st=STAGES[S.stage];
   $('nowstage').textContent='Stage '+S.stage+' — '+st.name;
-  $('saytext').textContent=merged(st.say);
+  $('saytext').textContent=mergedN(st.say);
   $('saytag').textContent='say this';
-  $('saynote').textContent=st.note?merged(st.note):'';
+  $('saynote').textContent=st.note?mergedN(st.note):'';
   var pl=$('probelist'); pl.innerHTML='';
   (st.probes||[]).forEach(function(p){
-    var b=document.createElement('button'); b.className='probe'; b.textContent=merged(p);
-    b.onclick=function(){ $('saytext').textContent=merged(p); $('saytag').textContent='variant — '+st.name; };
+    var b=document.createElement('button'); b.className='probe'; b.textContent=mergedN(p);
+    b.onclick=function(){ $('saytext').textContent=mergedN(p); $('saytag').textContent='variant — '+st.name; };
     pl.appendChild(b);
   });
   $('probes').className=(st.probes&&st.probes.length)?'on':'';
@@ -1104,7 +1126,11 @@ function renderStage(){
 }
 function jump(i){ if(i>=0&&i<STAGES.length){ S.stage=i; renderStage(); } }
 function next(){ jump(Math.min(S.stage+1,STAGES.length-1)); }
-function back(){ jump(Math.max(S.stage-1,0)); }
+function back(){
+  /* Plain mode has nothing to save: Back at the first stage leaves the screen (stress test #3). */
+  if(S.plain&&S.stage<=1){ location.reload(); return; }
+  jump(Math.max(S.stage-1,0));
+}
 function fill(){ renderStage(); }
 
 /* ============================ LEAD LOOKUP ============================ */
@@ -1307,13 +1333,17 @@ function coachHide(){ if(S.fc.card){ S.fc.card.hidden=true; fcRender(false); } }
 function pauseCoach(){
   S.fc.paused=!S.fc.paused;
   $('pausebtn').textContent=S.fc.paused?'Resume coach (P)':'Pause coach (P)';
+  $('pausebtn').title=S.fc.paused?'Show the coach card again and resume prompts (P)':'Hide the coach card and stop new prompts (P)';
   if(S.fc.paused){ $('objection').className=''; fcListen(false); }
   fcRender(false);
 }
 /* The last things said that were not clearly you, word for word as transcribed. */
 function catchUp(){
   var L=S.lines.filter(function(l){ return l.spk!=='you'&&l.spk!=='you?'; }).slice(-3);
-  if(!L.length) return;
+  if(!L.length){
+    S.fc.card={id:'recap', kind:'recap', at:now(), heard:'', label:'catch me up', say:'Nothing has been heard from them yet.', ask:[], act:'', newer:0, hidden:false};
+    fcRender(true); return;
+  }
   S.fc.card={id:'recap', kind:'recap', at:now(), heard:'', label:'last '+L.length+' line'+(L.length===1?'':'s')+' heard, as transcribed',
              say:L.map(function(l){ return '['+l.t+'] '+l.text; }).join('\n'), ask:[], act:'', newer:0, hidden:false};
   fcRender(true);
@@ -1802,10 +1832,36 @@ function dgKeyAny(){
     .then(function(j){ S.dgKeyMem=(j&&j.key)||''; return S.dgKeyMem; }).catch(function(){ return ''; });
 }
 function setKey(){
-  var k=prompt('Deepgram API key (blank to clear). Turns on real YOU/THEM labels + ~300ms latency, about 1 cent a minute. Stored only in this browser.');
-  if(k===null) return;
-  try{ k.trim()?localStorage.setItem('coachDgKey',k.trim()):localStorage.removeItem('coachDgKey'); }catch(e){}
-  alert(k.trim()?'Saved. Next session uses Deepgram.':'Cleared. Next session uses Chrome.');
+  /* An in-page dialog (2026-11-20 stress test: the native prompt() froze the whole tab for 5+ minutes).
+     Nothing here blocks: Save, Clear and Cancel are ordinary buttons; Esc closes it. */
+  var old=document.getElementById('keydlg'); if(old) old.parentNode.removeChild(old);
+  var has=false; try{ has=!!localStorage.getItem('coachDgKey'); }catch(e){}
+  var o=document.createElement('div'); o.id='keydlg';
+  o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;display:flex;align-items:center;justify-content:center';
+  o.innerHTML='<div style="background:#101a24;border:1px solid #2a3f6b;border-radius:12px;padding:18px;width:min(460px,92vw)">'
+    +'<div style="font-weight:700;margin-bottom:6px">Deepgram key (speed + speaker labels)</div>'
+    +'<div style="color:#8b98a6;font-size:13px;margin-bottom:10px">Turns on real YOU/THEM labels and about 300 ms transcript latency, about 1 cent a minute. Stored only in this browser. '
+    +(has?'A key is saved now.':'No key is saved.')+'</div>'
+    +'<input id="keyin" type="password" autocomplete="off" placeholder="paste key" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid #2a3f6b;background:#0b1520;color:#e6edf3">'
+    +'<div id="keymsg" style="min-height:18px;color:#5fd99a;font-size:12px;margin:6px 0"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end"><button id="keyclr">Clear key</button><button id="keycan">Cancel</button><button id="keysav" class="primary">Save</button></div></div>';
+  document.body.appendChild(o);
+  var close=function(){ if(o.parentNode) o.parentNode.removeChild(o); document.removeEventListener('keydown',esc); };
+  var esc=function(ev){ if(ev.key==='Escape') close(); };
+  document.addEventListener('keydown',esc);
+  var inp=o.querySelector('#keyin'); setTimeout(function(){ try{ inp.focus(); }catch(e){} },30);
+  o.querySelector('#keycan').onclick=close;
+  o.onclick=function(ev){ if(ev.target===o) close(); };
+  o.querySelector('#keysav').onclick=function(){
+    var v=(inp.value||'').trim();
+    if(!v){ o.querySelector('#keymsg').textContent='Paste a key first, or press Clear key.'; return; }
+    try{ localStorage.setItem('coachDgKey',v); }catch(e){}
+    o.querySelector('#keymsg').textContent='Saved. The next session uses Deepgram.'; setTimeout(close,900);
+  };
+  o.querySelector('#keyclr').onclick=function(){
+    try{ localStorage.removeItem('coachDgKey'); }catch(e){}
+    o.querySelector('#keymsg').textContent='Cleared. The next session uses Chrome.'; setTimeout(close,900);
+  };
 }
 /* One Deepgram result on ONE microphone. Deepgram is used for the words only. Its speaker numbers
    are not: on four test calls (11-15 22:00, 23:25, 23:41 and 11-16 09:56) it put both people on
@@ -1963,6 +2019,24 @@ function keepGoing(){ S.lastSpeech=now(); S.idleCounting=false; $('idlewarn').cl
 
 /* ========================== START / STOP ========================== */
 function gateErr(msg){ var e=$('gateerr'); e.textContent=msg; e.className='err on'; }
+/* RECENT CASES / CALLS on the start screen (stress test #2: they showed for a while and were gone). Read
+   from the server's own call list, so they cannot vanish with the page: one link per case that was on a
+   call (opens the coach on that lead), and the last five calls with a transcript link. */
+function loadRecent(){
+  fetch('/api/calls').then(function(r){ return r.ok?r.json():{calls:[]}; }).then(function(j){
+    var calls=(j&&j.calls)||[], seen={}, cs='', cc='', n=0;
+    calls.forEach(function(c){
+      if(c.case&&!seen[c.case]&&n<8){ seen[c.case]=1; n++;
+        cs+='<a href="/?case='+encodeURIComponent(c.case)+'" style="padding:5px 10px;border-radius:8px;border:1px solid #2a3f6b;background:#132244;color:#e6edf3;text-decoration:none;font-size:12px" title="'+esc(c.address||'')+'">'+esc(c.case)+'</a>'; }
+    });
+    calls.slice(0,5).forEach(function(c){
+      cc+='<div><span style="color:#8b98a6">'+esc(c.when||'')+'</span> &middot; '+esc(c.length||'')+' &middot; '+esc(c.case||'no prospect')
+        +' &middot; '+esc(c.outcome||'-')+(c.transcript?' &middot; <a href="/calls/'+encodeURIComponent(c.sid)+'/transcript" target="_blank" style="color:#bfe0ff">transcript</a>':'')+'</div>';
+    });
+    if(cs||cc){ $('recentcases').innerHTML=cs||'<span style="color:#5e6b78">none yet</span>'; $('recentcalls').innerHTML=cc; $('recentbox').style.display='block'; }
+  }).catch(function(){});
+}
+try{ loadRecent(); }catch(e){}
 function enterApp(){
   $('gate').style.display='none';
   $('app').className='on';
@@ -2022,6 +2096,8 @@ function start(){
 function plain(){
   S.plain=true; S.sid=null;
   $('dot').textContent='PLAIN · no mic, nothing saved'; $('dot').className='plain';
+  var sb=$('stopbtn'); if(sb){ sb.textContent='Leave (nothing saved)'; sb.title='Plain mode records nothing: this just closes the screen (Esc)'; }
+  var lg=$('lang'); if(lg){ lg.disabled=true; lg.title='The language switch only changes the speech recognizer, and Plain mode has none. The scripts are English.'; }
   enterApp();   // no mic, no recorder, no SR, no session folder
 }
 function stop(){
@@ -2042,6 +2118,9 @@ var OC_OLD={appointment:'appt', not_interested:'notint', bad_number:'badnum'};
 function ocCode(x){ x=String(x||''); if(OC_OLD[x]) return OC_OLD[x]; return OC_CODES.indexOf(x)>=0?x:''; }
 function wrapAsk(){
   S.wrap=null; S.wrapPending=true;
+  /* The box kept the PREVIOUS call's draft (11-20: the Michael call logged a 22-second stub from
+     the call before it). Fresh per wrap-up unless he has typed in it during this one. */
+  if(!S.wrapUser&&$('wrapnote')) $('wrapnote').value='';
   $('wraphead').textContent='AI wrap-up \u00b7 reading the call\u2026'; $('wrapfacts').textContent='';
   var btns=$('outcome').querySelectorAll?$('outcome').querySelectorAll('.grid button'):[];
   for(var i=0;i<btns.length;i++) btns[i].className='';
@@ -2055,7 +2134,7 @@ function wrapAsk(){
     var bits=[]; if(j.when) bits.push('Time: '+j.when); if(j.want) bits.push('Wants to '+j.want);
     if(j.objection) bits.push('Pushback: '+j.objection);
     $('wrapfacts').textContent=bits.join('  \u00b7  ');
-    if(!$('wrapnote').value) $('wrapnote').value=j.note||'';
+    if(!$('wrapnote').value||!S.wrapUser) $('wrapnote').value=j.note||'';
     var k=ocCode(j.outcome);
     for(var b=0;b<btns.length;b++) if(k&&btns[b].getAttribute('data-oc')===k) btns[b].className='ai';
   }).catch(function(){ S.wrapPending=false; $('wraphead').textContent='AI wrap-up \u00b7 not available, pick the outcome yourself'; });
@@ -2099,6 +2178,7 @@ function finish(outcome){
   }
   $('outcome').className='overlay';
   handoff(outcome);
+  S.wrapUser=false; if($('wrapnote')) $('wrapnote').value='';
   /* Saved in the background and straight on to the next call. The 90-second silence stop still shuts
      the microphone and the page down the old way. */
   if(outcome!=='auto_silence'&&rollCall(outcome)) return;
@@ -2282,7 +2362,8 @@ if(window.addEventListener) window.addEventListener('message', function(ev){
 });
 
 /* test hook: drive the exact final-line pipeline without a mic (headless verification) */
-var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
+function userNote(){ S.wrapUser=true; }
+var _test={ wrapAsk:function(){ wrapAsk(); }, setLines:function(l){ S.lines=l; }, wrapUser:function(){ return S.wrapUser; }, reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.seen={}; S.fc.said=[]; },
             cool:function(){ S.fc.cool={}; }, dg:function(j){ dgMessage(j); }, 
             echo:function(a,b){ return fcEcho(a,b); }, readBack:function(a,b){ return fcReadBack(a,b); }, keepLine:function(c,j){ return fcKeepLine(c,j); }, leadMsg:function(d){ return fcLeadMsg(d); }, ocCode:function(x){ return ocCode(x); }, handoffMsg:function(o){ return handoffMsg(o); }, resetCall:function(){ resetCall(); return {lines:S.lines.length, ai:S.ai.line, hist:S.ai.hist.length, box:$('ailine').className, fires:S.fc.fires.length}; }, tone:function(l,t,s){ return fcTone(l,t,s); }, toneSvg:function(g){ return toneSvg(g); }, fresh:function(a,n){ return aiFresh(a,n); }, whenAt:function(s,ms){ return fcWhenAt(fcWhen(norm(s)), ms); }, aiShow:function(j,heard){ $('aiprev').textContent=S.ai.line?('before: '+S.ai.line):''; S.ai.line=j.line; aiTone(j); aiHeard(j,heard||''); aiSteps(j); aiFocus('ai'); }, dgTwo:function(on){ S.dgTwo=!!on; S.dgThem=[]; S.dgOpen=null; }, dgReset:function(){ S.dgTwo=false; S.dgOpen=null; }, lines:function(){ return S.lines; },
             say:function(t){ pushFinal(t,''); }, interim:function(t){ S.interim=t; fcHear(t,false,''); },
@@ -2295,7 +2376,7 @@ var _test={ reset:function(){ S.fc.cool={}; S.fc.cbArm=0; S.fc.card=null; S.fc.s
 return {newCall:newCall,switchTo:switchTo,choose:choose,dropLead:dropLead,start:start,setSys:setSys,plain:plain,stop:stop,finish:finish,next:next,back:back,jump:jump,fill:fill,
         lookup:lookup,debounceLookup:debounceLookup,pick:pick,
         dismissObjection:dismissObjection,manualCard:manualCard,setLang:setLang,
-        setKey:setKey,keepGoing:keepGoing,
+        setKey:setKey,keepGoing:keepGoing,userNote:userNote,
         coachMore:coachMore,coachHide:coachHide,pauseCoach:pauseCoach,catchUp:catchUp,retryAI:retryAI,useMicCoach:useMicCoach,_test:_test};
 })();
 /* "Your name" is remembered on this computer: Carlos types it once and every coach line says his name. */
