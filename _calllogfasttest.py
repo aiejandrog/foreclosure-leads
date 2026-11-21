@@ -122,7 +122,22 @@ HELP = """
     document.getElementById('dial').scrollIntoView({block: 'center'});
     document.getElementById('dial').click(); await __w(40); };
   window.__fast = async k => { window._tapShieldUntil = 0;
-    document.querySelector('[data-fast="' + k + '"]').click(); await __w(60); };
+    document.querySelector('[data-fast="' + k + '"]').click(); await __w(60);
+    /* 2026-11-20: No answer first shows the quick-follow-up card (email / prefill text / skip).
+       The pipeline must not break there: a throw lands in fcErrLog and this helper fails loud,
+       the exact "Error logging that" field report ("num is not defined", 2 of 2 taps). Skipping
+       is the old behavior, so every older pin below still holds. */
+    if (k === 'noanswer') {
+      const el = JSON.parse(localStorage.getItem('fcErrLog') || '[]').filter(x => String(x.w).indexOf('outcome-fast') === 0);
+      if (el.length) throw new Error('fast tap threw: ' + JSON.stringify(el.slice(-1)));
+      if (SCREEN !== 'fastfollow') {
+        if (window.__fastExpectHeld) { window.__fastExpectHeld = false; return; }   /* DNC mid-call: no card, old path */
+        throw new Error('no quick-follow-up card after No answer (SCREEN=' + SCREEN + ')');
+      }
+      window.__followText = document.getElementById('app').textContent.replace(/\s+/g, ' ');
+      window._tapShieldUntil = 0;
+      document.getElementById('fastnext').click(); await __w(80);
+    } };
   window.__strip = n => JSON.stringify({dials: (n.dials || []).map(x => [x.oc, x.ph4, x.by || '']),
     touches: (n.touches || []).map(x => [x.ch, x.out]), cd: n.cooldownH, st: n.status || ''});
 """
@@ -207,6 +222,7 @@ with sync_playwright() as p:
     r4 = pg.evaluate("""async () => {
       const c = __first(2); __open(c); phIdx = 0; screenLead(); await __dial();
       notes[c].status = 'DO NOT CONTACT'; notes[c].optout = today();
+      window.__fastExpectHeld = true;    /* a held lead gets no follow-up card */
       await __fast('noanswer');
       return {screen: SCREEN, c: cur && cur.c, was: c, inPool: pool().some(r => r.c === c)}; }""")
     rec('marked do-not-contact during the call: not sent on to its next number', r4['c'] != r4['was'] and not r4['inPool'], r4)

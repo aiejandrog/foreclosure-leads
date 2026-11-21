@@ -10584,7 +10584,12 @@ function screenOutcome(){
         /* re-read after the write: the number on the label could have been marked bad elsewhere */
         var k = hardSuppressed(r) ? -1 : _fastNextPh(r, phIdx);
         toast(_msg, {ms: _ch.big ? 3200 : 1800});
-        if(b.dataset.fast === 'noanswer'){
+        if(b.dataset.fast === 'noanswer' && !hardSuppressed(r)){
+          /* A held lead (do-not-contact landed mid-call) gets NO follow-up card: nothing on it may
+             be texted or emailed, so the old path runs and the queue moves on (pin in _calllogfasttest).
+             The dialled number is `d` on this screen; `num` never existed here, so every No answer
+             tap threw "num is not defined" into the catch below (field report 2026-11-20, 2 of 2). */
+          var num = d;
           /* Offer follow-up for the number just dialled before moving to the next one. This
              confirmation is optional: skip advances normally. Contact actions reuse afterCall's
              mailCheck/textPreflight, bridge, DNT and cadence gates. */
