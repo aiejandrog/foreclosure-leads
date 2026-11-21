@@ -1333,6 +1333,7 @@ function fcMeter(stream){
     var ctx=new AC(), an=ctx.createAnalyser();
     an.fftSize=512; ctx.createMediaStreamSource(stream).connect(an);
     S.fc.an=an; S.fc.ctx=ctx;
+    vidTap(stream);                                        /* voice-ID rides the same mic */
     var buf=new Uint8Array(an.fftSize);
     S.fc.anT=setInterval(function(){
       an.getByteTimeDomainData(buf);
@@ -1412,6 +1413,71 @@ function scanFlags(txt){
   }
 }
 
+/* ======================= VOICE-ID (one mic) =======================
+   Physics beats guessing: THEIR voice arrives through the phone's speaker after a telephony
+   codec, so its energy above ~5 kHz is essentially gone; YOUR live voice in the room carries
+   sibilants at 6-11 kHz a phone speaker cannot produce. One number per utterance - the share
+   of spectral energy above 5 kHz (hb) - separates the two. Calibration is free: lines the text
+   matcher already knows you are reading (script overlap / "biscayne solutions") are guaranteed
+   YOU audio, so the session learns YOUR hb in YOUR room, then labels everything else.
+   The core below is pure (no audio objects) so _voiceidtest runs it in node. */
+/* ===== VOICE-ID CORE ===== */
+var VID_HARD_YOU=0.22;    /* this much high band cannot come out of a phone speaker */
+var VID_LOW=0.045;        /* telephony-flat ceiling */
+function vidNew(){ return {you:[], them:[], fr:[], last:''}; }
+function _vidMed(a){ if(!a.length) return null; var b=a.slice().sort(function(x,y){return x-y;}); return b[Math.floor(b.length/2)]; }
+function vidFrame(V,t,hb){ V.fr.push({t:t,hb:hb}); while(V.fr.length&&t-V.fr[0].t>30000) V.fr.shift(); }
+function vidUtter(V,t0,t1){
+  var h=[]; for(var i=0;i<V.fr.length;i++){ var f=V.fr[i]; if(f.t>=t0&&f.t<=t1) h.push(f.hb); }
+  return h.length>=3?_vidMed(h):null;
+}
+function vidLearn(V,who,hb){
+  if(hb==null) return;
+  if(who==='you'&&hb<VID_LOW) return;      /* a "you" sample with no high band is mislabeled text, not a fingerprint */
+  if(who==='them'&&hb>VID_HARD_YOU) return;
+  var a=who==='you'?V.you:V.them; a.push(hb); if(a.length>12) a.shift();
+}
+function vidLabel(V,hb){
+  if(hb==null) return '';
+  if(hb>=VID_HARD_YOU) return 'you';                       /* physics: no calibration needed */
+  var my=_vidMed(V.you);
+  if(my==null||V.you.length<3) return '';                  /* not calibrated yet */
+  if(hb<=VID_LOW&&my>=3*VID_LOW) return 'them';            /* flat spectrum vs a bright caller */
+  var mt=_vidMed(V.them);
+  var cut=mt==null?my*0.45:Math.sqrt(my*mt);               /* geometric midpoint once both sides are known */
+  if(hb>cut*1.2) return 'you';
+  if(hb<cut*0.8) return 'them';
+  return V.last||'';                                       /* the gray zone keeps the last verdict (hysteresis) */
+}
+/* ===== /VOICE-ID CORE ===== */
+function vidTap(stream){
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    var ctx=S.fc.ctx||new AC(), an=ctx.createAnalyser();
+    an.fftSize=2048; an.smoothingTimeConstant=0.4;
+    ctx.createMediaStreamSource(stream).connect(an);
+    S.vidAn=an; S.vid=vidNew();
+    var bins=an.frequencyBinCount, buf=new Uint8Array(bins), hz=(ctx.sampleRate||48000)/an.fftSize;
+    var lo=Math.max(2,Math.round(200/hz)), hi=Math.round(5000/hz);
+    if(hi>=bins) return;                                   /* a mic clocked too low to see the high band */
+    S.vidT=setInterval(function(){
+      an.getByteFrequencyData(buf);
+      var all=0,high=0,v;
+      for(var i=lo;i<bins;i++){ v=buf[i]/255; v=v*v; all+=v; if(i>=hi) high+=v; }
+      if(all>0.35) vidFrame(S.vid,now(),high/all);         /* voiced frames only */
+    },100);
+  }catch(e){}
+}
+function vidStop(){ if(S.vidT){ clearInterval(S.vidT); S.vidT=null; } }
+/* The utterance window for a final that just landed: speech ended about now; scale by length. */
+function vidTag(text){
+  if(!S.vid) return '';
+  var t1=now(), t0=t1-Math.min(9000,Math.max(1200,String(text||'').length*55));
+  var hb=vidUtter(S.vid,t0,t1), tag=vidLabel(S.vid,hb);
+  if(tag) S.vid.last=tag;
+  S.vidHB=hb;
+  return tag;
+}
 /* ======================= SPEAKER BEST-GUESS =======================
    Free path (one mic): content heuristic. A line whose words mostly appear in the text YOU are
    supposed to be reading (current stage line + probes + the open rebuttal) is tagged YOU?; a line
@@ -1449,6 +1515,20 @@ function pushFinal(text,spk,dgSpk,canJoin){
   if(!text) return;
   var nline=norm(text);
   var tag=spk||guessSpeaker(nline);
+  /* VOICE-ID: exact channel labels (two-channel mode) teach it for free; on one mic the audio
+     verdict fills blanks and overrides the weaker text guesses - the text matcher stays boss
+     only for script read-backs, which are its guaranteed-true case. */
+  if(S.vid&&!S.plain){
+    var _ahb=vidTag(text), _atag=S.vid?vidLabel(S.vid,S.vidHB):'';
+    if(spk==='you'||spk==='them'){ vidLearn(S.vid,spk,S.vidHB); }
+    else {
+      if(tag==='you?'&&fcVoice(nline,fcRef()).all==='you') vidLearn(S.vid,'you',S.vidHB);
+      if(_atag&&(!tag||tag==='')) tag=_atag+'?';
+      else if(_atag==='them'&&tag==='you?'&&fcVoice(nline,fcRef()).all!=='you') tag='them?';
+      else if(_atag==='you'&&tag==='them?'&&!lineHitsTrigger(nline)) tag='you?';
+      if(_atag) vidLearn(S.vid,_atag,S.vidHB);
+    }
+  }
   // Before the line joins S.finals, so it is still "the newest words". Usually the card is
   // already up from the partial; this catches what only the final wording matched.
   var fired=fcHear(text,true,tag);
