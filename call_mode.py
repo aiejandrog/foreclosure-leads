@@ -314,9 +314,10 @@ GREET_EN = "Hi, {first}? Can you hear me?"
 GREET_ES = "Hola, ¿{first}? ¿Me escucha?"
 INTRO_EN = "It's {sender} with Biscayne Solutions Group."
 INTRO_ES = "Le habla {sender}, de Biscayne Solutions Group."
-# No usable name: still assume. Say who we are, then assume they own the place and let them correct it.
-GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. You're the owner over on {st1}, right?"
-GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Usted es el dueño de {st1}, ¿verdad?"
+# No usable human name. This path also covers companies and trusts, so never address the legal
+# entity as if it answered the phone or claim that the person who answered is the owner.
+GREET_ANON_EN = "Hey, it's {sender} with Biscayne Solutions Group. I'm calling about the property at {st1}. Are you the person who handles it?"
+GREET_ANON_ES = "Hola, le habla {sender}, de Biscayne Solutions Group. Llamo por la propiedad en {st1}. ¿Usted es la persona que la maneja?"
 # The cue is the identity check: only the person answering to the name goes on to the question.
 WAIT_EN = "[Wait. If it's not them, they'll say so.]"
 WAIT_ES = "[Espere. Si no es la persona, se lo va a decir.]"
@@ -7067,8 +7068,8 @@ function lookupList(){
   var all = lkSorted();
   /* "Has equity" (2026-10-26, Alex: "i need their information ... for them to have equity"): only
      rows with a known, positive equity figure. Unknown equity is not zero, so the default shows all. */
-  var nEq = all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }).length;
-  var rows = LKEQ ? all.filter(function(r){ return typeof r.e === 'number' && r.e > 0; }) : all;
+  var nEq = all.filter(isEquity).length;
+  var rows = LKEQ ? all.filter(isEquity) : all;
   var head_ = '<div class="card"><b>&#128269; Find a number &middot; ' + all.length + '</b>'
             + '<div class="sub">Look up the owner on Whitepages and enter a number you trust. '
             + 'Recent filings can appear before a sale date or verified equity is available.</div>'

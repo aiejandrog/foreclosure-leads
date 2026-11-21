@@ -2673,7 +2673,7 @@ function _applyServerDeadNotes(){
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false, mlOnly = false;
+let weekOnly = false, hideDead = false, hideViewed = false, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false, mlOnly = false;
 // NEW SINCE LAST VISIT. The other filters answer "which of these leads matter"; this one answers
 // "which of these did I never even see before?". A fresh scrape drops 20 new cases into the middle
 // of a 700-row board — without a delta you re-scan the whole list to find them. Storage: a growing
@@ -2802,6 +2802,9 @@ function netEqPct(r){
   // helpers the row itself renders, so the filter and the number can never disagree again.
   const basis = _basisOf(r);
   if(!basis) return 0;                                   // no trustworthy worth -> make no claim
+  // A ceiling is useful for diligence but it is not equity. Returning zero keeps unverified rows
+  // out of equity ranking, scoring and filters while the row still displays the ceiling as such.
+  if(r.st !== 'TD' && (_debtUnknown(r) || !_liensVerified(r))) return 0;
   return Math.round((_netEqOf(r) / basis) * 100);
 }
 // ===================== CLOSERS COCKPIT (2026-07-20) =====================
@@ -11442,14 +11445,14 @@ function genDialReady(r){
   var beatsEN = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
         ? '“Hi, <b>'+esc(drFirst)+'</b>? Can you hear me?” <span class="drwait">WAIT</span> “It’s '+drName+' with Biscayne Solutions Group.”'
-        : '“Hey, it’s '+drName+' with Biscayne Solutions Group. You’re the owner over on <b>'+esc(street)+'</b>, right?”')
+        : '“Hey, it’s '+drName+' with Biscayne Solutions Group. I’m calling about the property at <b>'+esc(street)+'</b>. Are you the person who handles it?”')
     + ' <span class="drwait">WAIT</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. I’m not the bank, not a lawyer — I’m with Biscayne Solutions Group. Got <b>60 seconds</b>?”</div>';
   var beatsES = ''
     + '<div class="drbeat"><span class="drn">1</span>'+(drFirst
         ? '“Hola, ¿<b>'+esc(drFirst)+'</b>? ¿Me escucha?” <span class="drwait">ESPERE</span> “Le habla '+drName+', de Biscayne Solutions Group.”'
-        : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Usted es el dueño de <b>'+esc(street)+'</b>, ¿verdad?”')
+        : '“Hola, le habla '+drName+', de Biscayne Solutions Group. Llamo por la propiedad en <b>'+esc(street)+'</b>. ¿Usted es la persona que la maneja?”')
     + ' <span class="drwait">ESPERE</span></div>'
     + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
     + '<div class="drbeat"><span class="drn">3</span>“Le hablo claro — su caso salió en los registros del condado, con fecha <b>'+_dfHtml(f.saleDate)+'</b>. No soy el banco ni abogado — comprador local. ¿Me da <b>60 segundos</b>?”</div>';
@@ -18758,9 +18761,9 @@ function view(){
     if(sortK==='_fresh') return _firstMoverScore(r);
     if(sortK==='next'){ const nx=(notes[r.case]||{}).next; return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; no follow-up sinks
     if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
-    // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
-    // ~98% equity is pure noise -> sink it (keeps real high-equity leads like San Pedro rankable).
-    if(sortK==='eq' && r.eqfake && r.value>0 && (r.judg||0)/r.value < 0.08) return -1;
+    // Equity sort uses the same verified number as the equity filter and row math. A ceiling or
+    // unknown debt returns zero from netEqPct and cannot outrank a verified lead.
+    if(sortK==='eq') return netEqPct(r);
     const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
   };
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
