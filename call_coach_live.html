@@ -545,7 +545,9 @@ var FLAGS = [
  {re:/100\s?percent/i,                                why:'Absolute claim — never certainty.'},
  {re:/i promise/i,                                    why:'Absolute claim — never a promise.'},
  {re:/we place loans?/i,                              why:'Licensed lenders lend; we INTRODUCE an advisor.'},
- {re:/no risk at all/i,                               why:'Absolute claim — say “free consult, no commitment.”'}
+ {re:/no risk at all/i,                               why:'Absolute claim — say “free consult, no commitment.”'},
+ {re:/(don'?t|do not|no) need (a|an|your|the|one)? ?(lawyer|attorney)|need (a|your)? ?(lawyer|attorney)\? ?no\b|do you need (one|him|her)\? ?no\b/i,
+                                                      why:'NEVER question their lawyer — “keep him” is the only stance (11-20 call).'}
 ];
 
 /* ============================== STATE ============================== */

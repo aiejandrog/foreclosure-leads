@@ -762,6 +762,13 @@ NEVER_RULES = (
     ("promise", re.compile(r"\b(?:we|he|our (?:senior )?advisor)\s+(?:stop|save|cancel|halt)s?\s+" + _OBJ + r"\b", re.I), False,
      "it promises an outcome (we stop the sale). Offer options, never an outcome."),
     ("guarantee", re.compile(r"\bguarantee", re.I), True, "it says guarantee. Nothing is guaranteed; offer options."),
+    # "Do you need one? No." about his lawyer, ad-libbed on the 11-20 call. Keep-him is the ONLY stance.
+    ("lawyer_needed", re.compile(r"(?:do(?:n'?t)?|not|no)\s+need\s+(?:a|an|your|the|one)?\s*(?:lawyer|attorney)\b"
+                                 r"|(?:lawyer|attorney)\??\s*no\b|\bneed\s+(?:a|your)?\s*(?:lawyer|attorney)\s*\?\s*no\b"
+                                 r"|do you need (?:one|him|her)\s*\?\s*no\b"
+                                 r"|(?:fire|drop|dump|get rid of)\s+(?:your|the|that)\s+(?:lawyer|attorney)", re.I), False,
+     "it questions whether they need their lawyer, or suggests dropping him. The only stance is KEEP HIM: "
+     "the lawyer works the court side, the advisor works the money side."),
     # "nobody's accusing you of a crime" (live call 2026-11-19): the word plants the fear it denies. neg=False
     # on purpose: the reassuring, negated form is exactly the one to block.
     ("crime", re.compile(r"\b(crimes?|criminal|police|jail|prison|arrest(?:ed)?)\b", re.I), False,
@@ -934,6 +941,32 @@ def fact_check(line, days=None, lane="", eq="", convo=""):
         return "equity", ("it says or implies they have equity, which nobody has verified. Say 'whatever you've got in the "
                           "place' or 'if there's equity in it, he'll tell you'.")
     return "", ""
+
+
+_CLOSE_RX = re.compile(r"(later today|first thing tomorrow|what time (tomorrow |today )?works?( best)?|"
+                       r"time (are you|you'?re) available|works best for you)", re.I)
+_YES_RX = re.compile(r"\b(yes|yeah|yep|sure|okay|ok|fine|alright|sounds good|that works|tomorrow|today|tonight|"
+                     r"morning|afternoon|evening|o'?clock|\d{1,2}\s*(am|pm))\b", re.I)
+
+
+def close_cap(line, asked, convo):
+    """The 11-20 call: the card ended in the same would-later-today-or-tomorrow close TEN times in six
+    minutes, and the man said "I would like to hang up" in the middle of them. Two asks is the number:
+    after the close has been offered twice with no yes and no time from them, it is RETIRED for the
+    call - the sentence carrying it is cut, and what remains (the answer part) is shown alone. A line
+    that was ONLY the close becomes the walk-away, which leaves the door open instead of pushing."""
+    if not line or not _CLOSE_RX.search(line):
+        return line
+    prior = sum(1 for a in (asked or []) if _CLOSE_RX.search(str(a)))
+    if prior < 2:
+        return line
+    them = [c.split(": ", 1)[1] for c in (convo or []) if str(c).startswith("THEM")]
+    if them and _YES_RX.search(them[-1]):
+        return line                                     # they finally gave a yes or a time: close away
+    kept = [t for t in re.split(r"(?<=[.?!])\s+", line.strip()) if t and not _CLOSE_RX.search(t)]
+    out = " ".join(kept).strip()
+    return out or ("I'll leave you alone. Save my number, and the day the plan slips even one day, "
+                   "that's the day you call me. Fair enough?")
 
 
 def one_question(line):
@@ -1683,6 +1716,12 @@ def ai_line(lines, lang="", shown="", asked=None, days=None, lane="", eq="", sta
     # ONE QUESTION (11-19). The time-before-the-advisor rule is in the prompt only: a re-ask here cost a model call.
     if res and res.get("line"):
         res["line"] = one_question(res["line"])
+    # THE CLOSE IS ASKED TWICE, THEN RETIRED (11-20). Code, not prompt: the model kept appending it.
+    if res and res.get("line"):
+        _capped = close_cap(res["line"], asked, _convo)
+        if _capped != res["line"]:
+            res["line"] = _capped
+            st["closecap"] = 1
     # TOO LONG. His target is forty-five words for an objection answer. One that runs past fifty-five is
     # asked for again, shorter; the shorter of the two is shown. The pay answer is long on purpose. With no
     # time left to ask again, the line is cut to whole sentences in code.
