@@ -2308,9 +2308,17 @@ def calls_page():
             "f.addEventListener('input',apply);window.addEventListener('pageshow',apply);apply();"
             "var se=document.getElementById('showempty');if(se)se.onclick=function(){this.dataset.on=this.dataset.on==='1'?'0':'1';"
             "this.textContent=this.dataset.on==='1'?'Hide empty':'Show empty (__EMPTYN__)';apply();};"
-            "document.querySelectorAll('audio').forEach(function(a){a.addEventListener('loadedmetadata',function(){"
-            "if(a.duration===Infinity||isNaN(a.duration)){a.currentTime=1e101;a.addEventListener('timeupdate',function fix(){"
-            "a.removeEventListener('timeupdate',fix);a.currentTime=0;});}});});})();</script>"
+            "document.querySelectorAll('audio').forEach(function(a){"
+            "function fixDur(done){if(isFinite(a.duration)){if(done)done();return;}a.currentTime=1e101;"
+            "a.addEventListener('timeupdate',function fx(){a.removeEventListener('timeupdate',fx);a.currentTime=0;if(done)done();});}"
+            "a.addEventListener('loadedmetadata',function(){if(a.dataset.blob)return;fixDur();});"
+            # MediaRecorder webm has no duration and no cues, so a streamed player shows a length at best and
+            # cannot seek (checked in Chrome 11-21: dur 402 s, seekable [0,0], currentTime snaps back to 0).
+            # On first Play the file is fetched whole and played from a blob: seekable [0,duration].
+            "a.addEventListener('play',function(){if(a.dataset.blob)return;a.dataset.blob='1';a.pause();var t=a.currentTime||0;"
+            "fetch(a.getAttribute('src')).then(function(r){return r.blob();}).then(function(b){"
+            "a.addEventListener('loadedmetadata',function(){fixDur(function(){a.currentTime=t;a.play();});},{once:true});"
+            "a.src=URL.createObjectURL(b);a.load();}).catch(function(){a.dataset.blob='';a.play();});});});})();</script>"
             "</body></html>").replace("__CSS__", CALLS_PAGE_CSS).replace("__N__", str(shown)).replace("__DIR__", e(SESSIONS)).replace(
                 "__EMPTYBTN__", ("<button id='showempty' data-on='0' style='margin-left:6px'>Show empty (%d)</button>" % empty) if empty else "").replace(
                 "__EMPTYN__", str(empty)).replace(

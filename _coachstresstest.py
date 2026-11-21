@@ -200,7 +200,7 @@ with sync_playwright() as pw:
     rec('8: empty sessions are hidden behind a toggle', c1['visible'] == c1['rows'] - 1, c1)
     rp.evaluate("document.getElementById('showempty').click()"); rp.wait_for_timeout(100)
     rec('8: ...and the toggle shows them', rp.evaluate("Array.from(document.querySelectorAll('tbody tr')).every(r => r.style.display !== 'none')"))
-    rec('7: the Infinity-duration workaround is wired on every player', 'Infinity' in rp.content() and 'currentTime=1e101' in rp.content())
+    rec('7: the Infinity-duration workaround is wired on every player', 'currentTime=1e101' in rp.content() and 'createObjectURL' in rp.content())
     # 9: the filter survives Back
     rp.evaluate("document.getElementById('f').value='CACE-26-000002'; document.getElementById('f').dispatchEvent(new Event('input'))")
     vis1 = rp.evaluate("Array.from(document.querySelectorAll('tbody tr')).filter(r => r.style.display !== 'none').length")
