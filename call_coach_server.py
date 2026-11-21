@@ -2223,7 +2223,15 @@ def _dur_text(m, d):
             v = int(mm.group(1)) * 60 + int(mm.group(2)) if mm else None
         except (OSError, IndexError):
             v = None
-    return ("%d:%02d" % divmod(int(v), 60)) if isinstance(v, (int, float)) and v >= 0 else ""
+    if isinstance(v, (int, float)) and v >= 0:
+        return "%d:%02d" % divmod(int(v), 60)
+    # Last resort, marked as an estimate: this recorder writes about 16 KB of webm per second
+    # (checked against 1.25 MB / 78 s, 6.2 MB / 383 s and 12.7 MB / 788 s from real calls).
+    try:
+        n = os.path.getsize(os.path.join(d, "audio.webm"))
+        return "~%d:%02d" % divmod(int(n / 16100), 60) if n > 20000 else ""
+    except OSError:
+        return ""
 
 
 def calls_index(limit=300, show_all=False):
