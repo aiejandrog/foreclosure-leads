@@ -1,52 +1,52 @@
 {
  "alerts": [
   {
-   "at": "2026-11-22T11:49:25-05:00",
+   "at": "2026-11-22T21:10:46-05:00",
    "key": "bounce-rate",
    "severity": "fail",
    "text": "Trailing 7-day lower bound 13.1% (raw 18.1%, 31 of 171) on mail sent after the verified-send cutoff. Ceiling 10%. Post-cutoff first touches: 0 sent, 0 bounced. Rule: slow_restart."
   },
   {
-   "at": "2026-11-22T11:49:25-05:00",
+   "at": "2026-11-22T21:10:46-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-22T11:49:25-05:00",
+   "at": "2026-11-22T21:10:46-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-21 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-22 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-22T11:49:25-05:00",
+   "at": "2026-11-22T21:10:46-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-22T11:49:25-05:00",
+ "published_at": "2026-11-22T21:10:46-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 6,
+   "errors": 1,
    "filings": 3476,
-   "holds": 1018,
+   "holds": 1039,
    "last_http_status": 0,
-   "leads_checked": 6,
-   "match_s": 3,
-   "needing_search": 4384,
+   "leads_checked": 25,
+   "match_s": 1,
+   "needing_search": 4373,
    "provider": "courtlistener",
-   "pull_age_h": 2.09,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "searched_this_run": 6,
+   "reason": "time_budget",
+   "requests_used": 65,
+   "searched_this_run": 25,
    "starved_runs": 0,
    "truncated": 1
   },
@@ -164,7 +164,7 @@
    "spent": 5.8401
   },
   "readiness": {
-   "at": "2026-11-21T21:10:22-05:00",
+   "at": "2026-11-22T21:10:46-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
