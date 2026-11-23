@@ -141,12 +141,12 @@ rec('no body renders the word undefined',
 # machine-written. Worth a check because the bodies are edited by hand.
 rec('no em dash in any body',
     not any('—' in (v['en'] + v['es']) for k, v in _bodies))
-rec('a missing street falls back to words, never a blank',
-    'at your property on' in MATRIX['_nostreet_es']['en'],
-    MATRIX['_nostreet_es']['en'][:120])
+rec('a missing street drops the clause, never a blank and never "at your property"',
+    'at your property' not in MATRIX['_nostreet_es']['en'] and ' for Juan on ' in MATRIX['_nostreet_es']['en'].replace('for HILL', 'for Juan').replace('for Current Resident', 'for Juan') or ('scheduled for ' in MATRIX['_nostreet_es']['en'] and 'at your property' not in MATRIX['_nostreet_es']['en'] and ' at .' not in MATRIX['_nostreet_es']['en']),
+    MATRIX['_nostreet_es']['en'][:140])
 rec('a missing first name still renders the notice',
     MATRIX['_nofirst']['en'].startswith('FINAL NOTICE from Biscayne Solutions Group: ')
-    and 'for Current Resident at' in MATRIX['_nofirst']['en'],
+    and 'for Current Resident' in MATRIX['_nofirst']['en'] and 'at your property' not in MATRIX['_nofirst']['en'],
     MATRIX['_nofirst']['en'][:80])
 
 T = MATRIX['_tone']
@@ -195,7 +195,7 @@ rec('the street passes through exactly as the board holds it', '6270 NW 18 ST' i
 rec('a unit number is left alone', '100 N BISCAYNE BLVD APT 3B' in SC['unit'], SC['unit'][60:130])
 rec('a name with an apostrophe survives', "12 O'BRIEN CT" in SC['apos'], SC['apos'][60:120])
 rec('a placeholder street passes through untouched', '[street]' in SC['ph'], SC['ph'][60:120])
-rec('an empty street still falls back', 'at your property on' in SC['none'], SC['none'][60:130])
+rec('an empty street drops the clause (11-22: never "at your property")', 'at your property' not in SC['none'] and ' on ' in SC['none'] and ' at .' not in SC['none'], SC['none'][60:130])
 rec('a real appointment date and time replace the defaults',
     'on 2026-11-25 at 2:30 pm' in SC['dt']['en'], SC['dt']['en'][60:140])
 rec('the prospect name replaces Current Resident', 'scheduled for Juan at' in SC['caps'], SC['caps'][:120])
@@ -294,8 +294,8 @@ rec('a phone row with no auction date gets no countdown and no urgency',
     'is today' not in PH['nodate'] and 'es hoy' not in PH['nodate']
     and '3461 NW 171 ST' in PH['nodate'], PH['nodate'][:160])
 rec('the phone picks the tone from the same live count it prints', '_textTone(textStage(r), dd,' in BTB)
-rec('a missing street falls back to words, never a blank',
-    'at your property on' in PH['noaddr'] and ' for .' not in PH['noaddr'], PH['noaddr'][:200])
+rec('a missing street drops the clause, never a blank and never "at your property"',
+    'at your property' not in PH['noaddr'] and ' for .' not in PH['noaddr'] and ' at .' not in PH['noaddr'] and 'scheduled for ' in PH['noaddr'], PH['noaddr'][:200])
 rec('the notice carries the let-me-know line', PH['cold'].count(_OPT_EN) == 1)
 rec('the board text reads the live sale days, not the baked r.days',
     'days: _saleDays(r)' in extract(TPL_SRC, 'smsMsg')

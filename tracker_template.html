@@ -6904,8 +6904,9 @@ function _textBodies(o) {
        + ' ' + _d.getDate();
   }
   var tm = String(o.time || '').trim() || '9:00 am';
+  var hasSt = !!String(o.stEN || o.stES || '').trim();
   var en = 'FINAL NOTICE from ' + co + ': A priority FREE foreclosure-prevention consultation has been '
-         + 'scheduled for ' + nm + ' at ' + st + ' on ' + dt + ' at ' + tm + '. '
+         + 'scheduled for ' + nm + (hasSt ? ' at ' + st : '') + ' on ' + dt + ' at ' + tm + '. '
          + 'This is our final attempt to reach you. '
          + 'Text C to confirm or R to reschedule.'
          + " If now's not a good time, just let me know and I won't text you again."
@@ -13338,6 +13339,12 @@ function _cardMail(r){
        card carries no payload and the worker goes straight to the phone path instead of making a
        refused send, logging a skip and moving on without ever parking the lead for a call. */
     if(r.fth){            var E3={gurl:'',to:'',subj:'',body:'',mailWhy:'fth'};     return E3; }
+    /* NO STREET, NO EMAIL (2026-11-22 Morning Worker: 20 of 34 email attempts were refused by the
+       bridge's mail_guard - 'the subject names the fallback "your property" instead of a street' -
+       because the lead has an address on file for the owner but none for the PROPERTY). Every such
+       lead failed again every morning and never reached the text/call queue. The card now says so up
+       front and the channel ladder moves it on. A portfolio card keeps its own streets. */
+    if(!String(r.addr||'').split(',')[0].trim() && !((r.portfolio||[]).length)){ var E4={gurl:'',to:'',subj:'',body:'',mailWhy:'nostreet'}; return E4; }
     /* A BALLOON ROW NEVER TAKES THE PORTFOLIO COMPOSER. genEmail() branches BAL rows to
        genBalloonEmail (the Refi Lane investor pitch, signed by the advisor via
        sender.balloon_signer) -- but genPortfolioEmail has NO such branch, and _workerQueue groups
@@ -14271,7 +14278,7 @@ function genMorningWorker(lane, autostart){
     // conversation — never template it; "done" = 3 sends out, the final note promised no more
     // emails and the code keeps the promise. step.why makes attempt() log it and fall through
     // to the phone path using machinery that already exists.
-    +     'out.push({k:"email", why: r.mailWhy==="replied" ? "owner REPLIED — live conversation, no templates. Call them." : r.mailWhy==="done" ? "3 emails sent, final note promised no more — phone/text only now" : r.mailWhy==="fth" ? "no address the send bridge will accept yet — phone/text only" : (r.emails&&r.emails.length)?null:"no email address on file"});'
+    +     'out.push({k:"email", why: r.mailWhy==="replied" ? "owner REPLIED — live conversation, no templates. Call them." : r.mailWhy==="done" ? "3 emails sent, final note promised no more — phone/text only now" : r.mailWhy==="fth" ? "no address the send bridge will accept yet — phone/text only" : r.mailWhy==="nostreet" ? "no street address on this lead, so there is nothing true to put in the subject - phone/text only" : (r.emails&&r.emails.length)?null:"no email address on file"});'
     +     'out.push({k:"callq", why:(r.phones&&r.phones.length)?null:"no phone on file"});'
     +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
     +     'return out;'
@@ -14310,6 +14317,14 @@ function genMorningWorker(lane, autostart){
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
+    /* ONE TEXT PER PERSON (2026-11-22: one owner with two cases was queued twice in one run, so one
+       phone would have been handed two pre-filled texts). The same phone, or a sibling case in either
+       direction (pcs = the same person's other cases), is the same person. */
+    +     'var _pd=String((r.phones&&r.phones[0])||"").replace(/\\D/g,"").slice(-10);'
+    +     'if(TEXTQ.some(function(x){ var xd=String(x.phone||"").replace(/\\D/g,"").slice(-10); return (_pd && xd===_pd) || (r.pcs||[]).indexOf(x.c)>=0 || (x.pcs||[]).indexOf(r.c)>=0; })){'
+    +       'addLog("next", r.first||r.owner, "same person is already in the text batch under another case \u2014 one text per person");'
+    +       'return;'
+    +     '}'
     +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", tpl:r.smsTpl||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||"", pcs:(r.pcs||[])});'
     +     'renderTextQ();'
     +   '}'
@@ -14628,6 +14643,7 @@ function genMorningWorker(lane, autostart){
                               "I sent it" confirm card. Nothing counts until the operator says so.
          bridge error/cap  -> resolve explicitly (pause or advance) — never dead-end the run. */
     +   'function doSend(r){'
+    +     'var fall = arguments[1];'
     +     'if(BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); pause(); return; }'
     // Subject/body are BAKED ONTO THE CARD by _cardMail on the board. They cannot be rebuilt in
     // here: this tab is a Blob document where DATA and genEmail simply do not exist. The original
@@ -14750,6 +14766,22 @@ function genMorningWorker(lane, autostart){
     // anywhere of why it keeps not going out. That is the same shape as the composer-open bug —
     // send_server's own words for the rule are "the attempt stops being invisible without becoming
     // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
+    +           'var _e=String(x.j.err||"");'
+    /* DATA REFUSALS ARE NOT FAILURES (11-22). The bridge refusing a message that would say "your
+       property" / a bare "Hi,", and the HELD "every address on file is dead" answer, are statements
+       about the LEAD. In auto-run they take the next channel (text batch / call list) instead of
+       logging FAIL (!) and burning the lead's morning. The stay-cache lag (a brand-new case the
+       nightly has not read yet) is a HOLD that clears itself: said as a hold, not an error. */
+    +           'if(typeof fall==="function" && _mv && /refusing to send to .*(your property|greeting is only)|every address on file for this owner is known dead/i.test(_e)){'
+    +             'post("skip", {qc:qc, why:"unsendable-ladder", err:_e.slice(0,120), st:x.status});'
+    +             'fall(/known dead/i.test(_e) ? "every address on file is known dead (bounced before)" : "the lead has no street, so the bridge will not send a message that says your property");'
+    +             'return;'
+    +           '}'
+    +           'if(/has no entry in sale_history_cache/i.test(_e)){'
+    +             'addLog("skip", r.first||r.owner, "held — the \u00a7362 stay check has not read this case\u2019s docket yet (brand-new filing). Stays queued; it can go the day after the nightly reads it.", "warn");'
+    +             'post("skip", {qc:qc, why:"stay-cache-lag", st:x.status});'
+    +             'if(_mv) advance(1400); return;'
+    +           '}'
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
     +           'post("skip", {qc:qc, why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
     +           'if(_mv) advance(1400);'
@@ -14967,7 +14999,20 @@ function genMorningWorker(lane, autostart){
     // never actually deliver: the bridge existed but the headline feature could not reach it.
     // doSend owns its own advancement (send -> advance, cap/auth -> pause, offline -> confirm),
     // so there is deliberately no startPace() here.
-    +     'if(step.k==="email"){ return doSend(r); }'
+    +     'if(step.k==="email"){'
+    /* A card with no subject/body/to used to reach doSend, which logged "no email to send" and
+       advanced - the lead never got parked in the text/call queue (5 of them on 11-22). The same
+       ladder step the "no email on file" case already takes. */
+    +       'if(!(r.mailSubj && r.mailBody && r.mailTo)){'
+    +         'runlog("no_email", {why:String(r.mailWhy||"none"), lane:lane});'
+    +         'addLog("next", r.first||r.owner, "no EMAIL: no address the send bridge will accept for this lead \u2192 trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"));'
+    +         'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900); return;'
+    +       '}'
+    +       'return doSend(r, function(why){'
+    +         'addLog("next", r.first||r.owner, "no EMAIL: "+why+" \u2192 trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"));'
+    +         'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900);'
+    +       '});'
+    +     '}'
     // people-search opens from THIS tab; the log says WHERE it opened rather than implying here.
     +     'if(step.k==="wp"){'
     // AUTO-RUN never begs for a tap here. A machine-triggered window.open is popup-blocked by
