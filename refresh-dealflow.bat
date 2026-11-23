@@ -241,6 +241,19 @@ if errorlevel 1 echo     ^!^! Broward OR fetch errored - refresh continues. See 
 python -u broward_or_feed.py >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! Broward OR feed errored - refresh continues. See leads-run.log.>> "%LOG%"
 
+rem  PRIME THE STAY CHECK FOR TODAY'S NEW CASES (2026-11-22). sale_history.py used to run only at
+rem  [3b], hours into this run -- so a case scraped at 5:30 AM had no sale_history_cache entry when
+rem  the 8:00 Morning Worker asked the bridge to email it, and the bridge (correctly, fail-closed)
+rem  refused: "no entry in sale_history_cache.json". Seven leads burned that way on 11-22 alone,
+rem  every one a brand-new filing -- the exact leads worth reaching first. sale_history orders
+rem  never-read cases first, so a small budget here covers everything new today in a few minutes;
+rem  the [3b] --limit 200 pass later still does the re-reads. Free public API, no captcha, and
+rem  NEVER a gate: a clerk outage costs the prime, not the run.
+python -u refresh_progress.py step 1f
+echo [1f/5] Priming sale-history for today's new cases (so the 8 AM worker can email them)...
+python -u sale_history.py --limit 80 >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! sale-history prime errored - refresh continues; [3b] retries later. See leads-run.log.>> "%LOG%"
+
 python -u refresh_progress.py step 2
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python -u gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
