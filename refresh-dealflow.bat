@@ -310,7 +310,13 @@ rem  solve ALSO checks the shared monthly paid-reads cap (paid_reads.py: default
 rem  DEALFLOW_PAID_MONTHLY_CAP) and stops paying, logged, once this month's ledger reaches it - as do
 rem  gen_records_qs, the lis pendens sweep and the document stage. No --spend-ledger on purpose: that
 rem  would make $0.50 a total for all time, not a nightly cap.
-python -u records_liens.py --all --limit 120 --retries 80 --max-spend 0.50 >> "%LOG%" 2>&1
+rem  DRAIN THE BACKLOG (2026-11-24, Alejandro: "have the nightly scraper do everything that's doable").
+rem  The equity queue held 498 Miami-Dade leads the earlier 120-a-night, $0.50 runs never reached. At the
+rem  measured ~$0.0033 a solve the whole 498 is ~$1.65, and every solve still passes the shared monthly
+rem  paid-reads ledger (paid_reads.json cap = the 2Captcha balance), so this cannot overspend: --limit
+rem  120 -> 400 and --max-spend 0.50 -> 2.00. Camoufox tokens stay free and are tried first. --all skips
+rem  traced cases, so a lead is paid for once. Wall clock: ~6 s a paid solve, about 40 minutes worst case.
+python -u records_liens.py --all --limit 400 --retries 80 --max-spend 2.00 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist "%TEMP%\dealflow_broward_retry.flag" del "%TEMP%\dealflow_broward_retry.flag"
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
@@ -338,7 +344,10 @@ rem  --workers 6 -> 1, --deadline 720 -> 1500 (2026-11-18, measured with paid so
 rem  mints tokens ahead and they go stale before use - two runs stopped after 10 and 11 leads on
 rem  refused tokens (13 minted, 3 discarded stale). One solver traced 25 of 25 with 0 refused, about
 rem  one solve per 5 leads, in about 20 minutes.
-if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 1 --deadline 1500 >> "%LOG%" 2>&1
+rem  2026-11-24: --limit 60 -> 150 and --deadline 1500 -> 2700. One solver traced 25 of 25 leads in about
+rem  20 minutes (11-18), so 45 minutes is ~50-60 leads a night instead of ~25 against a 700-lead Palm
+rem  Beach backlog. Still one worker, still serial at the county, still stopped by the paid-reads ledger.
+if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 150 --workers 1 --deadline 2700 >> "%LOG%" 2>&1
 
 python -u refresh_progress.py step 2e
 echo [2e/5] Title discovery + owner tokens - off unless DEALFLOW_TITLE=1
