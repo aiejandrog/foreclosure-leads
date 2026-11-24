@@ -452,20 +452,21 @@ def mark_human(county='', case='', why=''):
     """Palm Beach showed its checkbox: the waiting leads become needs_human_captcha. Never a miss,
     never 'no liens'. -> how many were marked."""
     Q = _Q()
-    q = Q._read(Q.qpath(), None)
-    if not q:
-        return 0
-    n = 0
-    for it in q['items']:
-        if it.get('status') != 'pending' or not handled(it):
-            continue
-        if case and it['case'] != case:
-            continue
-        if not case and norm(it.get('county')) != norm(county or PB):
-            continue
-        it['status'] = HUMAN
-        it['why'] = str(why or 'the county showed a verification checkbox')[:160]
-        n += 1
-    if n:
-        Q._write(Q.qpath(), q)
-    return n
+    with Q._QLock():
+        q = Q._read(Q.qpath(), None)
+        if not q:
+            return 0
+        n = 0
+        for it in q['items']:
+            if it.get('status') != 'pending' or not handled(it):
+                continue
+            if case and it['case'] != case:
+                continue
+            if not case and norm(it.get('county')) != norm(county or PB):
+                continue
+            it['status'] = HUMAN
+            it['why'] = str(why or 'the county showed a verification checkbox')[:160]
+            n += 1
+        if n:
+            Q._write(Q.qpath(), q)
+        return n

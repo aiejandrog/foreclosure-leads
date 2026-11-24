@@ -95,10 +95,56 @@ def _q(default):
 
 
 def _write(path, obj):
-    tmp = path + '.tmp'
+    # A temp name of its own per process and thread. Two writers shared "<file>.tmp" on 2026-11-24
+    # (equity_inbox.py accepting a search while a CLI `miss` wrote the same queue) and the file ended
+    # as a complete object plus 7 stray bytes: unreadable, status 0 of 0. os.replace stays atomic.
+    import threading
+    tmp = '%s.%d.%d.tmp' % (path, os.getpid(), threading.get_ident())
     with open(tmp, 'w', encoding='utf-8') as fh:
         json.dump(obj, fh, indent=1)
+    for _try in range(8):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:          # Windows: another process has it open for a moment
+            time.sleep(0.15 * (_try + 1))
     os.replace(tmp, path)
+
+
+class _QLock:
+    """One writer at a time ACROSS processes: the receiver, the CLI and finish all read-modify-write
+    the same queue file, and a last-writer-wins race loses the other's update. Lock file, created
+    exclusively, with a staleness limit so a crash cannot wedge the queue."""
+    def __init__(self, wait=30.0, stale=60.0):
+        self.path = os.path.join(qdir(), '.queue.lock')
+        self.wait, self.stale, self.held = wait, stale, False
+
+    def __enter__(self):
+        t0 = time.time()
+        while True:
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                self.held = True
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(self.path) > self.stale:
+                        os.remove(self.path)
+                        continue
+                except OSError:
+                    pass
+                if time.time() - t0 > self.wait:
+                    return self          # never block a caller forever: proceed unlocked
+                time.sleep(0.05)
+
+    def __exit__(self, *a):
+        if self.held:
+            try:
+                os.remove(self.path)
+            except OSError:
+                pass
 
 
 def _log(event, **counts):
@@ -234,6 +280,8 @@ def flush():
         if not _PENDING:
             clean()
             return 0
+        _lk = _QLock()
+        _lk.__enter__()                          # released in the finally below; never raises
         tried = _read(os.path.join(qdir(), 'tried.json'), {})
         q = _q(None) or {'date': _today(), 'source': 'records_liens.py', 'items': []}
         have = {it['case']: it for it in q['items']}
@@ -249,26 +297,32 @@ def flush():
             added += 1
         q['built_at'] = dt.datetime.now().isoformat(timespec='seconds')
         _write(qpath(), q)
+        _lk.__exit__()
         del _PENDING[:]
         clean()
         _log('scraper_flush', added=added, skipped_recent_miss=skipped, **_counts(q))
         _desktop_note(q)
         return added
     except Exception as e:                      # the queue must never fail the lien run
+        try:
+            _lk.__exit__()
+        except Exception:
+            pass
         print('  equity queue: could not write (%s)' % str(e)[:100])
         return 0
 
 
 # ---- worker side ------------------------------------------------------------------------------
 def _set(case, **kw):
-    q = _q(None)
-    if not q:
-        return None
-    for it in q['items']:
-        if it['case'] == case:
-            it.update(kw)
-            _write(qpath(), q)
-            return it
+    with _QLock():
+        q = _q(None)
+        if not q:
+            return None
+        for it in q['items']:
+            if it['case'] == case:
+                it.update(kw)
+                _write(qpath(), q)
+                return it
     return None
 
 
