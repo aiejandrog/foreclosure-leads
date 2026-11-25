@@ -147,6 +147,39 @@ if sync_playwright:
     rec('the lead leaves the lookup list', out.get('left') == 0, out.get('left'))
     rec('a tax deed keeps st=TD on its dial row (tax-deed text), other kinds do not ship st', out.get('td'), out)
 
+print('\nPAGE: VERIFIED EQUITY IGNORES THE SEAT SPLIT (Chromium)')
+# 2026-11-25: 8 of the 11 leads the equity worker verified on 11-24 sat on the other phone's half.
+if sync_playwright:
+    base = byc[NOPH['case']]
+    MINE = dict(base, c='SEAT-MINE-1', sb=0)
+    OTHER = dict(base, c='SEAT-OTHER-1', sb=1)
+    OTHER_EQ = dict(base, c='SEAT-OTHEREQ-1', sb=1,
+                    eqc={'st': 'priced', 'f': 1, 'q': 0, 'r': 1, 'rn': 50000.0})
+    with sync_playwright() as p:
+        b = p.chromium.launch(executable_path=os.environ.get('PW_CHROMIUM') or None)
+        pg = b.new_page()
+        serrs = []
+        pg.on('pageerror', lambda e: serrs.append(str(e)))
+        pg.goto('file://' + path)
+        pg.wait_for_timeout(500)
+        so = pg.evaluate("""(cov) => {
+          try { localStorage.clear(); localStorage.setItem('fcSeat', JSON.stringify({n: 2, i: 0, w: 'A'})); } catch(e) {}
+          notes = {}; ROWS = []; COV = cov; LKDONE = {};
+          start();
+          const o = {listed: lkRows().map(r => r.c)};
+          notes[cov[2].c] = {phone: '3055550188'};
+          promoteLookups();
+          const row = ROWS.filter(r => r.c === cov[2].c)[0];
+          o.promoted = !!row; o.sb = row ? row.sb : null; o.mine = row ? _seatMine(row) : null;
+          return o;
+        }""", [MINE, OTHER, OTHER_EQ])
+        b.close()
+    rec('seat page loads without a script error', not serrs, serrs[:2])
+    rec("my seat's lead and the other seat's Has equity lead are listed; the other seat's plain lead is not",
+        sorted(so.get('listed') or []) == sorted([MINE['c'], OTHER_EQ['c']]), so)
+    rec("a typed number on the other seat's Has equity lead joins THIS phone's dial queue",
+        so.get('promoted') and so.get('sb') == 0 and so.get('mine') is True, so)
+
 print('\nMORNING WORKER: FIND A NUMBER PANEL (Chromium)')
 if sync_playwright:
     import _balloonlanetest as BL

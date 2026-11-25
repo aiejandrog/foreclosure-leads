@@ -7348,8 +7348,15 @@ function lkAsDial(r, num){
   if(o.st !== 'BAL' && o.st !== 'TD') delete o.st;
   return o;
 }
+/* VERIFIED EQUITY IS ON BOTH PHONES (2026-11-25, Alejandro: "im not seeing any new verified leads
+   showing up there"). The seat split sent 108 of the 201 no-number Has equity leads, and 8 of the 11
+   the equity worker verified on 11-24, to the other phone, where nobody on this one could see them.
+   They are the scarcest leads on the book, so a Has equity lead ignores the seat split here and when
+   its typed number becomes a dial row. A live claim (_clmOwner) still keeps two people off one lead,
+   and every touch syncs, so the cooldowns hold across both phones. Everything else stays split. */
+function _lkSeatOk(r){ return _seatMine(r) || isEquity(r); }
 function _lkOk(r){
-  if(!r || !r.lk || LKDONE[r.c] || !_seatMine(r) || _clmOwner(r.c)) return false;
+  if(!r || !r.lk || LKDONE[r.c] || !_lkSeatOk(r) || _clmOwner(r.c)) return false;
   return !hardSuppressed(lkAsDial(r, ''));
 }
 /* SET ASIDE FROM THE LIST (2026-11-19, Alejandro). Two things stop a lookup before it starts, and
@@ -7415,6 +7422,8 @@ function promoteLookups(){
     if(!num) return;
     if(ROWS.some(function(x){ return x.c === r.c; })){ LKDONE[r.c] = 1; return; }
     var row = lkAsDial(r, num);
+    /* a Has equity lead from the other seat's half joins THIS phone's dial queue (see _lkSeatOk) */
+    if(!_seatMine(r) && isEquity(r)){ var _ms = _seat(); if(_ms) row.sb = _ms.i; }
     if(hardSuppressed(row)) return;
     if(wpmNums(r.c).indexOf(num) >= 0) row.ps = ['wpm'];
     ROWS.push(row); LKDONE[r.c] = 1; n++;
