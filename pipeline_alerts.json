@@ -1,54 +1,48 @@
 {
  "alerts": [
   {
-   "at": "2026-11-24T21:12:18-05:00",
+   "at": "2026-11-25T18:30:27-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage, upstream sources, lead data freshness."
+   "text": "healthcheck FAIL stages: enriched (has value), skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-24T21:12:18-05:00",
+   "at": "2026-11-25T18:30:27-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-24 21:12): on battery; battery 27% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 2 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync, DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Evening readiness check last ran 21h ago."
   },
   {
-   "at": "2026-11-24T21:12:18-05:00",
-   "key": "optout-sync",
-   "severity": "fail",
-   "text": "07:15 opt-out sync failed on 2026-11-24 (steps: replies, ledger_sync)."
-  },
-  {
-   "at": "2026-11-24T21:12:18-05:00",
+   "at": "2026-11-25T18:30:27-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-24T21:12:18-05:00",
+ "published_at": "2026-11-25T18:30:27-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 10,
-   "filings": 3642,
-   "holds": 1080,
+   "errors": 3,
+   "filings": 3693,
+   "holds": 1120,
    "last_http_status": 0,
-   "leads_checked": 15,
-   "match_s": 3,
-   "needing_search": 4328,
+   "leads_checked": 30,
+   "match_s": 6,
+   "needing_search": 4642,
    "provider": "courtlistener",
-   "pull_age_h": 0.0,
+   "pull_age_h": 2.46,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 50,
-   "searched_this_run": 15,
+   "requests_used": 100,
+   "searched_this_run": 30,
    "starved_runs": 0,
-   "truncated": 2
+   "truncated": 0
   },
   "bounce": {
    "ceiling": 0.1,
@@ -59,7 +53,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 13,
+   "dead": 17,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -71,26 +65,26 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.054282468943980436,
-   "mailed": 142,
+   "lb": 0.07502767620322827,
+   "mailed": 144,
    "measured_day_blocked": false,
    "measured_post_trailing_blocked": false,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 13,
-   "post_lb": 0.054282468943980436,
-   "post_mailed": 142,
-   "post_rate": 0.09154929577464789,
+   "post_dead": 17,
+   "post_lb": 0.07502767620322827,
+   "post_mailed": 144,
+   "post_rate": 0.11805555555555555,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.09154929577464789,
+   "rate": 0.11805555555555555,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 8.55416
+   "usd": 7.34034
   },
   "clerk_bk": {
    "readable": false
@@ -98,10 +92,9 @@
   "health_fails": {
    "fresh": true,
    "names": [
+    "enriched (has value)",
     "skiptrace freshness",
-    "RULE: ARV-comp coverage",
-    "upstream sources",
-    "lead data freshness"
+    "RULE: ARV-comp coverage"
    ]
   },
   "morning_sends": {
@@ -112,20 +105,36 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-24",
-   "eligible": 31,
+   "date": "2026-11-25",
+   "eligible": 30,
    "judged": true,
    "paused": false,
    "readable": true,
    "scheduled": false,
    "sent": 0,
    "worker_run": {
-    "ev": {},
-    "no_email": {},
-    "queued": 0,
+    "board_age_days": 0,
+    "ev": {
+     "autostart_countdown": 1,
+     "autostart_run": 1,
+     "no_email": 7,
+     "open_requested": 1,
+     "run_end": 1,
+     "send_answer": 18,
+     "task_open": 1,
+     "worker_loaded": 1
+    },
+    "no_email": {
+     "none": 7
+    },
+    "queued": 5,
     "readable": true,
-    "refused": {},
-    "rows": 0,
+    "refused": {
+     "bounce_scan_stale": 14,
+     "unverified_first_touch": 1,
+     "unverified_recipient": 1
+    },
+    "rows": 31,
     "skipped": {}
    }
   },
@@ -134,22 +143,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-24",
-   "failed_steps": [
-    "replies",
-    "ledger_sync"
-   ],
+   "date": "2026-11-25",
+   "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": false,
-   "started_at": 1795522505,
+   "run_ok": true,
+   "started_at": 1795608903,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 11.34,
    "month": "2026-11",
    "readable": true,
-   "spent": 5.8401
+   "spent": 8.5437
   },
   "readiness": {
    "at": "2026-11-24T21:12:18-05:00",
