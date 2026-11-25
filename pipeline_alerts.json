@@ -1,37 +1,43 @@
 {
  "alerts": [
   {
-   "at": "2026-11-23T21:10:34-05:00",
+   "at": "2026-11-24T21:12:18-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
-   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage."
+   "text": "healthcheck FAIL stages: skiptrace freshness, RULE: ARV-comp coverage, upstream sources, lead data freshness."
   },
   {
-   "at": "2026-11-23T21:10:34-05:00",
+   "at": "2026-11-24T21:12:18-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-23 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-24 21:12): on battery; battery 27% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 2 DEALFLOW task(s) last result failed (DealFlow Opt-out Sync, DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-23T21:10:34-05:00",
+   "at": "2026-11-24T21:12:18-05:00",
+   "key": "optout-sync",
+   "severity": "fail",
+   "text": "07:15 opt-out sync failed on 2026-11-24 (steps: replies, ledger_sync)."
+  },
+  {
+   "at": "2026-11-24T21:12:18-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-23T21:10:34-05:00",
+ "published_at": "2026-11-24T21:12:18-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
    "errors": 10,
-   "filings": 3547,
-   "holds": 1066,
+   "filings": 3642,
+   "holds": 1080,
    "last_http_status": 0,
-   "leads_checked": 30,
-   "match_s": 2,
-   "needing_search": 4356,
+   "leads_checked": 15,
+   "match_s": 3,
+   "needing_search": 4328,
    "provider": "courtlistener",
    "pull_age_h": 0.0,
    "pull_attempts": 0,
@@ -39,10 +45,10 @@
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 51,
-   "searched_this_run": 30,
+   "requests_used": 50,
+   "searched_this_run": 15,
    "starved_runs": 0,
-   "truncated": 1
+   "truncated": 2
   },
   "bounce": {
    "ceiling": 0.1,
@@ -53,7 +59,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 21,
+   "dead": 13,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -65,20 +71,20 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.08425104498670957,
-   "mailed": 166,
+   "lb": 0.054282468943980436,
+   "mailed": 142,
    "measured_day_blocked": false,
    "measured_post_trailing_blocked": false,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 21,
-   "post_lb": 0.08425104498670957,
-   "post_mailed": 166,
-   "post_rate": 0.12650602409638553,
+   "post_dead": 13,
+   "post_lb": 0.054282468943980436,
+   "post_mailed": 142,
+   "post_rate": 0.09154929577464789,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.12650602409638553,
+   "rate": 0.09154929577464789,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
@@ -93,7 +99,9 @@
    "fresh": true,
    "names": [
     "skiptrace freshness",
-    "RULE: ARV-comp coverage"
+    "RULE: ARV-comp coverage",
+    "upstream sources",
+    "lead data freshness"
    ]
   },
   "morning_sends": {
@@ -104,7 +112,7 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-23",
+   "date": "2026-11-24",
    "eligible": 31,
    "judged": true,
    "paused": false,
@@ -112,26 +120,12 @@
    "scheduled": false,
    "sent": 0,
    "worker_run": {
-    "board_age_days": 0,
-    "ev": {
-     "autostart_countdown": 1,
-     "autostart_run": 1,
-     "no_email": 5,
-     "open_requested": 1,
-     "run_end": 1,
-     "send_answer": 36,
-     "task_open": 1,
-     "worker_loaded": 1
-    },
-    "no_email": {
-     "none": 5
-    },
-    "queued": 8,
+    "ev": {},
+    "no_email": {},
+    "queued": 0,
     "readable": true,
-    "refused": {
-     "merge_fields": 1
-    },
-    "rows": 47,
+    "refused": {},
+    "rows": 0,
     "skipped": {}
    }
   },
@@ -140,12 +134,15 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-23",
-   "failed_steps": [],
+   "date": "2026-11-24",
+   "failed_steps": [
+    "replies",
+    "ledger_sync"
+   ],
    "past_cutoff": true,
    "readable": true,
-   "run_ok": true,
-   "started_at": 1795437774,
+   "run_ok": false,
+   "started_at": 1795522505,
    "state": "finished"
   },
   "paid_reads": {
@@ -155,7 +152,7 @@
    "spent": 5.8401
   },
   "readiness": {
-   "at": "2026-11-23T21:10:34-05:00",
+   "at": "2026-11-24T21:12:18-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
@@ -164,8 +161,9 @@
    "disabled_names": [
     "DEALFLOW Phones"
    ],
-   "failed": 1,
+   "failed": 2,
    "failed_names": [
+    "DealFlow Opt-out Sync",
     "DEALFLOW Refresh"
    ],
    "interactive": 3,
@@ -174,8 +172,8 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": true,
-   "pct": 79,
+   "on_ac": false,
+   "pct": 27,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
