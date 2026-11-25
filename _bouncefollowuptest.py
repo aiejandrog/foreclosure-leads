@@ -23,6 +23,7 @@ import json
 import os
 # Follow-up sends are off unless this is exactly 1 (PR #294). This fixture expects one to leave.
 os.environ['DEALFLOW_FOLLOWUPS_ON'] = '1'
+os.environ['DEALFLOW_BOUNCE_RETRY_S'] = '0'   # no 120s wait inside the test
 import pathlib
 import shutil
 import socket
@@ -187,7 +188,7 @@ BROKEN = set()
 
 
 class FakeIMAP:
-    def __init__(self, host):
+    def __init__(self, host, timeout=None):
         self.user = None
 
     def login(self, u, pw):
@@ -206,7 +207,11 @@ class FakeIMAP:
         return 'OK', [b' '.join(ids)]
 
     def fetch(self, i, what):
-        return 'OK', [(b'1', INBOX[self.user][int(i) - 1])]
+        # bounces.py batches ids (b'1,2,3'); answer like imaplib: one tuple per message + b')'.
+        out = []
+        for x in (i if isinstance(i, bytes) else str(i).encode()).split(b','):
+            out += [(x + b' (BODY[] {1}', INBOX[self.user][int(x) - 1]), b')']
+        return 'OK', out
 
     def logout(self):
         pass

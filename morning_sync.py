@@ -67,7 +67,9 @@ STEPS = (
 
 # (name, script, timeout seconds) - run after the verdict is recorded; a failure is logged, never fatal
 AFTER = (
-    ('bounces', 'bounces.py', 8 * 60),
+    # 15m, not 8 (2026-11-25): a full 180-day scan is ~2m since batched fetch, plus a 120s retry
+    # pass when a mailbox fails; the notice count grows with send volume. 8m killed it every day.
+    ('bounces', 'bounces.py', 15 * 60),
     # A reply that says the owner filed bankruptcy puts the case on never_contact.json before the
     # 08:00 Morning Worker and the 10:00 cadence run (bk_said.py, 2026-10-15). Add-only.
     ('bk_said', 'bk_said.py --apply', 2 * 60),

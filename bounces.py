@@ -113,9 +113,40 @@ def _retry_secs():
         return 120
 
 
+def _imap_timeout():
+    try:
+        return float(os.environ.get('DEALFLOW_BOUNCE_IMAP_TIMEOUT_S', '60'))
+    except ValueError:
+        return 60.0
+
+
+FETCH_CHUNK = 100
+
+
+def _fetch_batched(M, ids):
+    """Yield each notice as a parsed message, FETCH_CHUNK per IMAP round trip.
+
+    2026-11-25: one FETCH per message made the 180-day scan (~1,750 notices) take over 8 minutes,
+    and morning_sync killed it every day ("killed after 8m"), so no clean scan was recorded and
+    follow-ups stayed held. Same strictness as before: a short or failed batch raises, so a
+    partial scan can never be recorded as clean."""
+    for k in range(0, len(ids), FETCH_CHUNK):
+        chunk = ids[k:k + FETCH_CHUNK]
+        typ, data = M.fetch(b','.join(chunk), '(BODY.PEEK[])')
+        if typ != 'OK' or not data:
+            raise imaplib.IMAP4.error('fetch returned %s' % typ)
+        parts = [d for d in data if isinstance(d, tuple) and len(d) > 1 and d[1]]
+        if len(parts) != len(chunk):
+            raise imaplib.IMAP4.error('fetch returned %d of %d messages' % (len(parts), len(chunk)))
+        for d in parts:
+            yield email.message_from_bytes(d[1])
+
+
 def _scan_mailbox(user, pw, since, found):
     """Add this mailbox's hard bounces to found. Returns (notices, soft_only). Raises on IMAP failure."""
-    M = imaplib.IMAP4_SSL('imap.gmail.com')
+    # Socket timeout (2026-11-25): a hung connection fails in 60s and gets the retry pass,
+    # instead of eating morning_sync's 8-minute budget and getting the whole step killed.
+    M = imaplib.IMAP4_SSL('imap.gmail.com', timeout=_imap_timeout())
     soft_only = 0
     try:
         M.login(user, pw)
@@ -127,11 +158,7 @@ def _scan_mailbox(user, pw, since, found):
             raise imaplib.IMAP4.error('search returned %s' % typ)
         ids = (data[0].split() if data and data[0] else [])
         print(f'scanning {len(ids)} delivery notice(s) since {since} as {user}')
-        for i in ids:
-            typ, raw = M.fetch(i, '(RFC822)')
-            if typ != 'OK' or not raw or not raw[0]:
-                raise imaplib.IMAP4.error('fetch returned %s' % typ)
-            msg = email.message_from_bytes(raw[0][1])
+        for msg in _fetch_batched(M, ids):
             text = _body_text(msg)
             if not HARD.search(text):
                 if SOFT.search(text):
