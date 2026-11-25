@@ -26,7 +26,7 @@ the only defence is to never send twice: bounce once, blacklisted permanently.
 The board reads bounced_emails.json at build time (make_tracker) and strips those addresses, so a
 bounced lead falls back to phone/door instead of burning another send.
 """
-import argparse, email, imaplib, json, os, re, sys
+import argparse, email, imaplib, json, os, re, sys, time
 from datetime import date, datetime, timedelta, timezone
 from email.header import decode_header, make_header
 
@@ -106,6 +106,13 @@ def _mailboxes(account):
     return [(u, pw) for u, pw in R._cred_map().items() if u and pw]
 
 
+def _retry_secs():
+    try:
+        return int(os.environ.get('DEALFLOW_BOUNCE_RETRY_S', '120'))
+    except ValueError:
+        return 120
+
+
 def _scan_mailbox(user, pw, since, found):
     """Add this mailbox's hard bounces to found. Returns (notices, soft_only). Raises on IMAP failure."""
     M = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -142,7 +149,8 @@ def _scan_mailbox(user, pw, since, found):
         except Exception: pass
 
 
-def _record_scan(started, since, boxes, failed, notices, hard, new, days, listed=None, list_ok=True):
+def _record_scan(started, since, boxes, failed, notices, hard, new, days, listed=None, list_ok=True,
+                 errors=None):
     """bounce_scan_status.json: what the follow-up gate (bounce_scan.py) trusts.
 
     Per MAILBOX, not per run: a scan of one inbox says nothing about another, so an --account run
@@ -161,6 +169,11 @@ def _record_scan(started, since, boxes, failed, notices, hard, new, days, listed
         r = mbs.setdefault(user.strip().lower(), {})
         r['last_run_started_utc'] = started
         r['last_run_ok'] = clean
+        # Error class + message only (an IMAP error never carries the password).
+        if user in (errors or {}):
+            r['last_error'] = errors[user]
+        elif clean:
+            r.pop('last_error', None)
         if clean:
             r['last_ok_started_utc'] = started
             r['last_ok_since'] = since.isoformat()
@@ -198,18 +211,34 @@ def main():
         sys.exit(1)
 
     since = since_d.strftime('%d-%b-%Y')
-    found, soft_only, notices, boxes, failed = {}, 0, 0, [], []
-    for user, pw in creds:
-        try:
-            n, soft = _scan_mailbox(user, pw, since, found)
-            notices += n
-            soft_only += soft
-            boxes.append(user)
-        except Exception as e:
-            # Keep going: the other mailboxes' bounces are still real and still get written. The
-            # run is not clean, so the follow-up gate does not move past it.
-            print(f'IMAP failed for {user}: {type(e).__name__}: {str(e)[:120]}')
-            failed.append(user)
+    found, soft_only, notices, boxes, failed, errors = {}, 0, 0, [], [], {}
+    todo = list(creds)
+    # One retry pass (2026-11-25). On 11-24 both mailboxes failed in 0.1s at 12:15 UTC (network,
+    # not credentials) and that single failed run held every follow-up from them for a day, since
+    # bounce_scan trusts only the LAST run. A failed mailbox is scanned once more after a wait;
+    # only a second failure leaves it failed. DEALFLOW_BOUNCE_RETRY_S=0 turns the retry off.
+    retry_s = max(0, _retry_secs())
+    for attempt in (1, 2):
+        again = []
+        for user, pw in todo:
+            try:
+                n, soft = _scan_mailbox(user, pw, since, found)
+                notices += n
+                soft_only += soft
+                boxes.append(user)
+                errors.pop(user, None)
+            except Exception as e:
+                # Keep going: the other mailboxes' bounces are still real and still get written.
+                # The run is not clean, so the follow-up gate does not move past it.
+                errors[user] = f'{type(e).__name__}: {str(e)[:120]}'
+                print(f'IMAP failed for {user} (attempt {attempt}): {errors[user]}')
+                again.append((user, pw))
+        if not again or attempt == 2 or not retry_s:
+            failed = [u for u, _ in again]
+            break
+        print(f'retrying {len(again)} mailbox(es) in {retry_s}s', flush=True)
+        time.sleep(retry_s)
+        todo = again
 
     try:
         prior = load_bounce_list(OUT)
@@ -220,7 +249,7 @@ def main():
               % type(e).__name__)
         if not a.dry_run:
             _record_scan(started, since_d, boxes, failed, notices, len(found), 0, a.days,
-                         list_ok=False)
+                         list_ok=False, errors=errors)
         return 1
 
     new = {k: v for k, v in found.items() if k not in prior}
@@ -239,7 +268,7 @@ def main():
     print(f'-> {OUT} (gitignored)')
     # Recorded only AFTER the list is on disk: a clean status must never precede the bounces it covers.
     _record_scan(started, since_d, boxes, failed, notices, len(found), len(new), a.days,
-                 listed=merged)
+                 listed=merged, errors=errors)
     if failed:
         print('!! not a clean scan (%s); follow-ups to addresses mailed since the last clean scan '
               'stay held.' % ', '.join(failed))
