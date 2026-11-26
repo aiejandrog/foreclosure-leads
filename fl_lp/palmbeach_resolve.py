@@ -54,10 +54,10 @@ CO_NO = 60                # Palm Beach; the default for every function below
 # County numbers on the FL DOR roll. Miami-Dade was added 2026-11-16 for the case-walk rows (md_case_walk.py),
 # which carry a defendant name and no legal description, exactly like Palm Beach court filings.
 COUNTIES = {'PALM BEACH': (60, 'pb-name'), 'MIAMI-DADE': (53, 'md-name')}
-RUNGS = ('pb-name', 'md-name', 'pb-pcn', 'pb-legal')
+RUNGS = ('pb-name', 'md-name', 'md-pagis', 'pb-pcn', 'pb-legal')
 # v2 (2026-11-18): the parcel number printed in a recorded lis pendens, non-owner parties skipped, and
 # both name orders tried. A 'none' written by v1 is asked again at once instead of after RETRY_NONE_DAYS.
-RESOLVER_V = 2
+RESOLVER_V = 3            # v3 (2026-11-26): Miami-Dade also asks the county parcel layer by full name
 PAGE = 60                 # rows asked per query; a full page on a bare last name = too common
 PAUSE_S = 0.35
 ENTITY_RE = re.compile(r'\b(LLC|INC|CORP|TRUST|ASSN|ASSOC|CO|LP|LTD|DMCC|PLLC|BANK|ESTATE)\b')
@@ -411,7 +411,101 @@ def resolve_row(rec, fetch=None, pause=PAUSE_S, co_no=CO_NO, rung='pb-name', gis
             return res
         if best is None or res.get('unreachable'):
             best = res
-    return legal_low or best
+    res = legal_low or best
+    if co_no == 53 and (not res or res.get('confidence') == 'none'):
+        got = resolve_pagis_name(rec, names)
+        if got and got.get('confidence') != 'none':
+            return got
+    return res
+
+
+# ---- Miami-Dade: the county's own parcel layer, searched by the FULL owner name (2026-11-26) ---------
+# MEASURED 2026-11-26: the state roll left 591 of the 726 name-only Miami-Dade filings at "none carrying
+# every name token" while the county's PaGis layer (the one lp_resolve already uses for recorded filings)
+# answered the same names: of 60 sampled people, 30 had exactly ONE parcel carrying every name token and
+# 14 of those 30 were homestead on the roll. PaGis is current to the last deed, the DOR roll is a yearly
+# snapshot. Same grading as every other name rung: one parcel + homestead = high; one parcel without it
+# = medium (a person confirms); several = low with candidates; none = nothing guessed.
+def resolve_pagis_name(rec, names=None, q=None, enrich=None):
+    """None / 'none' when no usable owner name or no parcel; never guesses between parcels."""
+    import lp_resolve as LR
+    q = q or LR.q
+    enrich = enrich or (lambda folio: FC.enrich(parcel_id=folio))
+    names = names if names is not None else candidate_owners(rec)
+    unreachable = False
+    for owner in names:
+        if ENTITY_RE.search(' '.join(str(owner).upper().split())) or LR.is_company(owner):
+            continue
+        tk = LR.owner_tokens(owner)
+        if len(tk) < 2:
+            continue
+        a = ' AND '.join("TRUE_OWNER1 LIKE '%%%s%%'" % LR.esc(t) for t in tk)
+        b = ' AND '.join("TRUE_OWNER2 LIKE '%%%s%%'" % LR.esc(t) for t in tk)
+        rows, trunc = q('(%s) OR (%s)' % (a, b))
+        if rows is None:
+            unreachable = True
+            continue
+        if trunc:
+            continue                                   # a name that fills the page cannot pick one
+        seen, hits = set(), []
+        for r in rows:
+            _h, _t, fld = LR.owner_agrees(r, owner)
+            fol = str(r.get('FOLIO') or '').strip()
+            if fld and fol and fol not in seen and (r.get('TRUE_SITE_ADDR') or '').strip():
+                seen.add(fol)
+                hits.append(r)
+        if not hits:
+            continue
+
+        def site(r):
+            return ' '.join(str(r.get('TRUE_SITE_ADDR') or '').split())
+        if len(hits) > 1:
+            return {'confidence': 'low', 'needsHuman': True, 'rung': 'md-pagis',
+                    'evidence': 'county parcel layer: %d parcels carry every token of %r; the name cannot '
+                                'pick one' % (len(hits), owner),
+                    'candidates': [{'folio': str(r.get('FOLIO') or ''), 'addr': site(r),
+                                    'city': str(r.get('TRUE_SITE_CITY') or '').strip().title(),
+                                    'owner': (r.get('TRUE_OWNER1') or '').strip()} for r in hits[:8]]}
+        r = hits[0]
+        folio = str(r.get('FOLIO') or '').strip()
+        row = {'folio': folio, 'addr': site(r), 'city': str(r.get('TRUE_SITE_CITY') or '').strip().title(),
+               'zip': str(r.get('TRUE_SITE_ZIP_CODE') or '').strip()[:5],
+               'paOwner': '; '.join(x for x in ((r.get('TRUE_OWNER1') or '').strip(),
+                                                (r.get('TRUE_OWNER2') or '').strip()) if x),
+               'candidates': [], 'ownerMismatch': False, 'rung': 'md-pagis'}
+        ev = 'county parcel layer: exactly one parcel in Miami-Dade carries every token of %r' % owner
+        cad = None
+        try:
+            cad = enrich(folio)
+        except Exception:
+            cad = None
+        if cad:
+            row['value'] = int(cad.get('market_value') or 0)
+            row['hs'] = bool(cad.get('homestead'))
+            mail = ' '.join(str(cad.get('mail_addr') or '').split())
+            if mail:
+                row['mailAddr'] = mail
+        def _lead(s):
+            return re.sub(r'[^A-Z0-9 ]', ' ', str(s or '').upper()).split()[:3]
+        self_mail = bool(cad and row.get('mailAddr') and len(_lead(row['addr'])) >= 2
+                         and _lead(row['mailAddr']) == _lead(row['addr']))
+        if cad and row['hs']:
+            row.update(confidence='high', needsHuman=False,
+                       evidence=ev + ' and the state roll shows HOMESTEAD there (the owner lives at the parcel)')
+        elif self_mail:
+            row.update(confidence='high', needsHuman=False,
+                       evidence=ev + ' and the owner\'s tax mailing address IS that parcel (lives there, '
+                                     'no exemption claimed)')
+        else:
+            row.update(confidence='medium', needsHuman=True,
+                       evidence=ev + (' (no homestead: absentee or second home)' if cad
+                                      else ' (the state roll has no record of that folio to cross-check)'))
+        return row
+    if unreachable:
+        return {'confidence': 'none', 'candidates': [], 'unreachable': True,
+                'evidence': 'county parcel layer unreachable'}
+    return {'confidence': 'none', 'candidates': [],
+            'evidence': 'county parcel layer: no parcel carries every token of the owner name'}
 
 
 def _resolve_name(rec, fetch=None, pause=PAUSE_S, co_no=CO_NO, rung='pb-name'):
@@ -519,7 +613,11 @@ def run(limit=0, src=SRC, out=OUT, fetch=None, pause=PAUSE_S, today=None, say=pr
         todo = todo[:limit]
     say('%d %s LP rows, %d to resolve by owner name' % (len(recs), county, len(todo)))
     counts, dead = {}, 0
+    t_start = time.time()
     for i, rec in enumerate(todo, 1):
+        if time.time() - t_start > 1500:            # the chain must not stall; the rest resume next run
+            say('  25-minute budget reached at %d of %d: the rest resume next run' % (i - 1, len(todo)))
+            break
         res = resolve_row(rec, fetch=fetch, pause=pause, co_no=co_no, rung=rung)
         if res.get('unreachable'):
             dead += 1
