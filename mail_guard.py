@@ -42,6 +42,10 @@ _PLACEHOLDER = re.compile(r'\[[A-Z][A-Z0-9 _/&.-]{2,}\]')
 # pattern this replaced let "[Your name]" and "<Your Name>" through. A URL or an address in angle
 # brackets ("<https://...>", "<me@x.com>") does not match: ':' and '@' are not in the token.
 _ANY_PLACEHOLDER = re.compile(r"\[[^\W\d_][\w '\u2019#&/.\-]{1,40}\]|<[^\W\d_][\w '\u2019#&/.\-]{1,40}>")
+# 2026-11-26: portfolio emails (an owner with 2+ cases) list each property as "... [Case CACE-26-013122]".
+# _ANY_PLACEHOLDER read that as a template token and refused TAVERAS. A real case reference always
+# carries a digit; "[Case]" / "[Case Number]" (no digit) is still a placeholder.
+_CASE_REF = re.compile(r'^\[Case [A-Za-z0-9-]*\d[A-Za-z0-9-]*\]$')
 # safe_street's fallback landing in the subject: "Regarding your property at your property".
 _DEGENERATE_SUBJECT = re.compile(
     r'(?:property at|propiedad en)\s+(?:your property|su propiedad)\s*$', re.I)
@@ -174,6 +178,8 @@ def merge_issues(subj='', body='', to=''):
     body_s = str(body or '')
     for label, text in (('subject', subj_s), ('body', body_s)):
         for m in sorted(set(_ANY_PLACEHOLDER.findall(text))):
+            if _CASE_REF.match(m):      # "[Case CACE-26-013122]": a real case ref in a portfolio list
+                continue
             bad.append('the %s still contains the placeholder %s' % (label, m))
     if _DEGENERATE_SUBJECT.search(subj_s.strip()):
         bad.append('the subject names the fallback "your property" instead of a street')
