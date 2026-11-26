@@ -1,48 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-25T18:30:27-05:00",
+   "at": "2026-11-26T15:15:20-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: enriched (has value), skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-25T18:30:27-05:00",
+   "at": "2026-11-26T15:15:20-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 21h ago."
+   "text": "Evening readiness check last ran 42h ago."
   },
   {
-   "at": "2026-11-25T18:30:27-05:00",
+   "at": "2026-11-26T15:15:20-05:00",
+   "key": "paid-reads-cap",
+   "severity": "warn",
+   "text": "Paid reads $11.24 of $11.34 (99%) this month, warn at 80%."
+  },
+  {
+   "at": "2026-11-26T15:15:20-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-25T18:30:27-05:00",
+ "published_at": "2026-11-26T15:15:20-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 3,
-   "filings": 3693,
-   "holds": 1120,
+   "errors": 8,
+   "filings": 3721,
+   "holds": 1138,
    "last_http_status": 0,
-   "leads_checked": 30,
+   "leads_checked": 16,
    "match_s": 6,
-   "needing_search": 4642,
+   "needing_search": 4719,
    "provider": "courtlistener",
-   "pull_age_h": 2.46,
+   "pull_age_h": 1.98,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 100,
-   "searched_this_run": 30,
+   "requests_used": 103,
+   "searched_this_run": 16,
    "starved_runs": 0,
-   "truncated": 0
+   "truncated": 3
   },
   "bounce": {
    "ceiling": 0.1,
@@ -53,7 +59,7 @@
    "day_min": 20,
    "day_rate": 0.0,
    "day_sent": 0,
-   "dead": 17,
+   "dead": 21,
    "ft_cutoff": "2026-09-26T18:21:42+00:00",
    "ft_dead": 0,
    "ft_hard_bounces": 2,
@@ -65,26 +71,26 @@
    "ft_why": "not_enforced",
    "hist_dead": 0,
    "hist_sent": 0,
-   "lb": 0.07502767620322827,
-   "mailed": 144,
+   "lb": 0.08976012076172954,
+   "mailed": 156,
    "measured_day_blocked": false,
    "measured_post_trailing_blocked": false,
    "measured_rule": "slow_restart",
    "measured_why": "slow_restart",
-   "post_dead": 17,
-   "post_lb": 0.07502767620322827,
-   "post_mailed": 144,
-   "post_rate": 0.11805555555555555,
+   "post_dead": 21,
+   "post_lb": 0.08976012076172954,
+   "post_mailed": 156,
+   "post_rate": 0.1346153846153846,
    "post_trailing_blocked": false,
    "pre_dead": 0,
    "pre_mailed": 0,
-   "rate": 0.11805555555555555,
+   "rate": 0.1346153846153846,
    "readable": true,
    "trailing_blocked": false,
    "window": 7
   },
   "captcha": {
-   "usd": 7.34034
+   "usd": 6.11882
   },
   "clerk_bk": {
    "readable": false
@@ -105,8 +111,8 @@
    },
    "cap": 0,
    "caps": [],
-   "date": "2026-11-25",
-   "eligible": 30,
+   "date": "2026-11-26",
+   "eligible": 29,
    "judged": true,
    "paused": false,
    "readable": true,
@@ -117,24 +123,23 @@
     "ev": {
      "autostart_countdown": 1,
      "autostart_run": 1,
-     "no_email": 7,
+     "no_email": 6,
      "open_requested": 1,
      "run_end": 1,
-     "send_answer": 18,
+     "send_answer": 15,
      "task_open": 1,
      "worker_loaded": 1
     },
     "no_email": {
-     "none": 7
+     "none": 6
     },
     "queued": 5,
     "readable": true,
     "refused": {
-     "bounce_scan_stale": 14,
-     "unverified_first_touch": 1,
-     "unverified_recipient": 1
+     "merge_fields": 1,
+     "unverified_recipient": 2
     },
-    "rows": 31,
+    "rows": 27,
     "skipped": {}
    }
   },
@@ -143,19 +148,19 @@
    "unreadable": false
   },
   "optout_sync": {
-   "date": "2026-11-25",
+   "date": "2026-11-26",
    "failed_steps": [],
    "past_cutoff": true,
    "readable": true,
    "run_ok": true,
-   "started_at": 1795608903,
+   "started_at": 1795695301,
    "state": "finished"
   },
   "paid_reads": {
    "cap": 11.34,
    "month": "2026-11",
    "readable": true,
-   "spent": 8.5437
+   "spent": 11.2362
   },
   "readiness": {
    "at": "2026-11-24T21:12:18-05:00",
