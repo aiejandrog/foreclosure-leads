@@ -759,8 +759,18 @@ def main():
         # them high-confidence, and lp_leads then drops addr/folio/value/hs on all of them. Rows
         # marked 'unknown' (transport failure, see resolve()) are held back: the previous
         # resolution stays, and the case is simply retried next run.
+        # A NO-SIGNAL RESULT MUST NEVER OVERWRITE A RESOLVED ROW (2026-11-27). The 817 case-walk
+        # rows carry no legal description, so resolve() returns the 'none' placeholder for every
+        # one of them -- and this merge wrote that placeholder over 238 addresses the OWNER-NAME
+        # resolver (palmbeach_resolve --county miami, rung md-pagis/md-name) had settled the day
+        # before: 223 high-confidence rows fell to 112 overnight and the name resolver re-bought
+        # the whole backlog the next night. Same philosophy as the 'unknown' hold above: "none"
+        # from a resolver that had nothing to look at is a failed lookup, not a finding.
         _held = [c for c, r in out.items()
-                 if r.get('confidence') == 'unknown' and c in prev]
+                 if c in prev and isinstance(prev[c], dict)
+                 and (r.get('confidence') == 'unknown'
+                      or (r.get('confidence') == 'none'
+                          and prev[c].get('confidence') in ('high', 'medium', 'low')))]
         _merge = {c: r for c, r in out.items() if c not in _held}
         prev.update(_merge)
         json.dump(prev, open(OUT, 'w', encoding='utf-8'), indent=1)
