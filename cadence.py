@@ -693,7 +693,7 @@ def _run(args):
     if _llcwarn:
         print('  ENTITY GATE: signing as %r — %s' % (_llc, _llcwarn))
     state = load_json(STATE, {})
-    cred = load_keys()                 # every inbox outreach ever left from, company first
+    cred = load_key()
     if not cred and not args.dry_run:
         print('gmail.key missing (you@gmail.com:apppassword) — running as dry-run.')
 
@@ -889,8 +889,10 @@ def _run(args):
             if str(ev.get('ev') or '').startswith('sent step 1'):
                 _since[s['email']] = ev.get('d')
                 break
-    replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred,
-                           since=_since)
+    # THE REPLY CHECK READS EVERY INBOX (load_keys); `cred` stays the ONE SMTP login the send
+    # path uses as a (user, pw) tuple everywhere below -- smtp.login(*cred), cred[0], cred[1].
+    replies = imap_replies(load_keys() or cred, [s['email'] for s in active.values()],
+                           args.dry_run or not cred, since=_since)
     for c, s in active.items():
         got = replies.get(s['email'])
         if got == 'replied':
