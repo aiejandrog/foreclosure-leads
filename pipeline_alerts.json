@@ -1,54 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-26T15:15:20-05:00",
+   "at": "2026-11-26T21:10:04-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: enriched (has value), skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-26T15:15:20-05:00",
+   "at": "2026-11-26T21:10:04-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Evening readiness check last ran 42h ago."
+   "text": "Laptop readiness (checked 11-26 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-26T15:15:20-05:00",
+   "at": "2026-11-26T21:10:04-05:00",
    "key": "paid-reads-cap",
    "severity": "warn",
-   "text": "Paid reads $11.24 of $11.34 (99%) this month, warn at 80%."
+   "text": "Paid reads $11.34 of $11.34 (100%) this month, warn at 80%."
   },
   {
-   "at": "2026-11-26T15:15:20-05:00",
+   "at": "2026-11-26T21:10:04-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-26T15:15:20-05:00",
+ "published_at": "2026-11-26T21:10:04-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 8,
+   "errors": 3,
    "filings": 3721,
-   "holds": 1138,
+   "holds": 1166,
    "last_http_status": 0,
-   "leads_checked": 16,
-   "match_s": 6,
-   "needing_search": 4719,
+   "leads_checked": 32,
+   "match_s": 2,
+   "needing_search": 4699,
    "provider": "courtlistener",
-   "pull_age_h": 1.98,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
    "reason": "time_budget",
-   "requests_used": 103,
-   "searched_this_run": 16,
+   "requests_used": 100,
+   "searched_this_run": 32,
    "starved_runs": 0,
-   "truncated": 3
+   "truncated": 1
   },
   "bounce": {
    "ceiling": 0.1,
@@ -90,7 +90,7 @@
    "window": 7
   },
   "captcha": {
-   "usd": 6.11882
+   "usd": 6.07387
   },
   "clerk_bk": {
    "readable": false
@@ -160,10 +160,10 @@
    "cap": 11.34,
    "month": "2026-11",
    "readable": true,
-   "spent": 11.2362
+   "spent": 11.3385
   },
   "readiness": {
-   "at": "2026-11-24T21:12:18-05:00",
+   "at": "2026-11-26T21:10:04-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
@@ -172,9 +172,8 @@
    "disabled_names": [
     "DEALFLOW Phones"
    ],
-   "failed": 2,
+   "failed": 1,
    "failed_names": [
-    "DealFlow Opt-out Sync",
     "DEALFLOW Refresh"
    ],
    "interactive": 3,
@@ -183,8 +182,8 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": false,
-   "pct": 27,
+   "on_ac": true,
+   "pct": 79,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
