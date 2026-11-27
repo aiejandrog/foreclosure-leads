@@ -167,7 +167,12 @@ rec('run-leads stops before the push when the rebuild fails', 'REBUILD FAILED' i
 # ---- 16 ----------------------------------------------------------------------------------------
 import publish_guard as PG  # noqa: E402
 
-_pg = (PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv)
+# main() runs a real `git fetch origin` (180 s timeout) before it compares. The test stubs the
+# baseline it compares against, so that fetch only costs time, and on a slow runner it hung past
+# 180 s and failed the suite (main, 2026-11-16). Stub it here; publish_guard itself is unchanged.
+import types  # noqa: E402
+_pg = (PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv, PG.subprocess)
+PG.subprocess = types.SimpleNamespace(run=lambda *a, **k: None)
 gd = tempfile.mkdtemp(prefix='auditfix2_guard_')
 PG.DOCS = os.path.join(gd, 'index.html')
 PG.LAST_GOOD = os.path.join(gd, 'lastgood.json')
@@ -205,7 +210,7 @@ try:
         codes.append(PG.main())
     rec('a slow shrink across the day is caught against the day baseline', codes[0] == 0 and 2 in codes, codes)
 finally:
-    PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv = _pg
+    PG.DOCS, PG.LAST_GOOD, PG.cov_of_git, PG.integrity, sys.argv, PG.subprocess = _pg
 
 # ---- 18 ----------------------------------------------------------------------------------------
 r = src('records_liens.py')
