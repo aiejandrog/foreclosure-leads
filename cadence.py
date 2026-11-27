@@ -529,6 +529,30 @@ def load_key():
     return user.strip(), pw.strip()
 
 
+def load_keys():
+    """EVERY mailbox with a working password, company first (2026-11-27). The reply check read
+    only `KEY` (the company inbox once bsg_gmail.key existed), while 81% of first touches left
+    from the personal Gmail -- so an owner who replied there kept getting follow-ups, the exact
+    thing the auto-cancel exists to stop. Same fix replies.py and bounces.py already carry."""
+    out, seen = [], set()
+    for fn in ('bsg_gmail.key', 'gmail.key'):
+        p = os.path.join(HERE, fn)
+        if not os.path.exists(p):
+            continue
+        try:
+            line = open(p, encoding='utf-8').read().strip()
+        except Exception:
+            continue
+        if ':' not in line:
+            continue
+        user, pw = line.split(':', 1)
+        user, pw = user.strip().lower(), pw.strip()
+        if user and pw and user not in seen:
+            seen.add(user)
+            out.append((user, pw))
+    return out
+
+
 def imap_replies(cred, emails, dry, since=None):
     """Return {email: 'replied'|'stopped'} for anything found in the inbox from these addresses.
 
@@ -544,6 +568,18 @@ def imap_replies(cred, emails, dry, since=None):
     if dry:
         print(f'  [dry-run] would IMAP-search {len(emails)} owner addresses for replies/STOP words')
         return {}
+    # Every mailbox, merged; 'stopped' always wins over 'replied' for the same address.
+    creds = cred if isinstance(cred, list) else [cred]
+    out = {}
+    for _c in creds:
+        got = _imap_replies_one(_c, emails, since)
+        for _em, _st in got.items():
+            if out.get(_em) != 'stopped':
+                out[_em] = _st
+    return out
+
+
+def _imap_replies_one(cred, emails, since=None):
     import imaplib
     out = {}
     user, pw = cred
@@ -582,7 +618,7 @@ def imap_replies(cred, emails, dry, since=None):
                         out[em] = 'stopped'
         M.logout()
     except Exception as e:
-        print('  IMAP check failed (skipping this pass):', str(e)[:90])
+        print('  IMAP check failed for %s (skipping that mailbox):' % user, str(e)[:90])
     return out
 
 
@@ -657,7 +693,7 @@ def _run(args):
     if _llcwarn:
         print('  ENTITY GATE: signing as %r — %s' % (_llc, _llcwarn))
     state = load_json(STATE, {})
-    cred = load_key()
+    cred = load_keys()                 # every inbox outreach ever left from, company first
     if not cred and not args.dry_run:
         print('gmail.key missing (you@gmail.com:apppassword) — running as dry-run.')
 
