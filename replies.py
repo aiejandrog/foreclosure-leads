@@ -611,176 +611,192 @@ def main():
             print(f'    ... and {len(all_emails)-12} more')
         return
 
-    user, pw = cred
-    print(f'checking mailbox: {user}')
+    # EVERY mailbox with a working password is scanned, merged into the same `found`
+    # (2026-11-27). load_key's `for u, pw in cmap.items(): return u, pw` opened only the FIRST
+    # key file once bsg_gmail.key existed (2026-09-14) -- and 3,401 of 4,191 real sends (81%)
+    # left from the personal Gmail, so every reply to them was invisible for ten weeks.
+    # bounces.py hit this exact wall and fixed it 2026-10-19 (_mailboxes); this is that fix.
+    # --account and the env secret still force exactly one mailbox, the same contract as before.
+    if account or (os.environ.get('GMAIL_APP_PASSWORD') or '').strip():
+        creds = [cred]
+    else:
+        creds = list(_cred_map().items()) or [cred]
     since = (datetime.now() - timedelta(days=days)).strftime('%d-%b-%Y')
     prior = _load_json('replies.json', {})
-    # MERGE, don't overwrite. Before 2026-09-13 `found` started empty and line ~554 dumped ONLY the
-    # current 30-day window, so (a) scanning a second inbox (company + personal) erased the first,
-    # and (b) any lean run silently discarded warm replies that had simply aged out of the window --
-    # the same reply-data-loss this file's history calls the cardinal sin. is_new still compares
-    # against the untouched `prior`, so NEW-reply alerts are unchanged.
-    found = dict(prior)
+    found = dict(prior)                   # MERGE, never overwrite (see the 2026-09-13 note below)
     new_alerts = []
-    try:
-        # Connect with a bounded retry on TRANSIENT network faults only (added 2026-09-17).
-        # The 06:45 scheduled run died on `[Errno 11001] getaddrinfo failed` -- DNS, not
-        # credentials -- and the broad `except` at the bottom of this block does `return` BEFORE
-        # the write, so a single blip at that hour silently skipped the entire scan while the task
-        # still exited 0. That is how replies.json sat frozen at 09-11 for six days. Wi-Fi is
-        # frequently not up yet at 05:30-06:45; the network deserves a second look, the password
-        # does not. imaplib.IMAP4.error (AUTHENTICATIONFAILED) is NOT an OSError, so a bad app
-        # password still falls straight through to the handler below on the first try -- no
-        # pointless retries against an account that could lock.
-        M = None
-        for attempt, pause in enumerate((5, 15, 0), 1):
-            try:
-                M = imaplib.IMAP4_SSL('imap.gmail.com', timeout=45)
-                M.login(user, pw)
-                break
-            except OSError as e:
-                if M is not None:
-                    try:
-                        M.shutdown()
-                    except Exception:
-                        pass
-                    M = None
-                if not pause:
-                    raise
-                print(f'  IMAP attempt {attempt} failed ({str(e)[:70]}) — retrying in {pause}s')
-                time.sleep(pause)
-        M.select('INBOX')
-        # ---- PASS 1: replies FROM a known owner address (rewritten 2026-09-13) -------------------
-        # The old PASS 1 fired one IMAP SEARCH per owner address -- 4,306 of them on 2026-09-13 --
-        # every run. That O(owners) loop is what blew the scheduled task's PT30M limit and left
-        # replies.json frozen for weeks (killed mid-scan = nothing written). Same result now at
-        # O(inbox): ONE search for the window, then BATCHED header fetches (one round trip per 500
-        # messages), and match senders locally. Full RFC822 is still pulled -- for STOP scan +
-        # excerpt -- but only for the handful of owner addresses that actually wrote in. PASS 2
-        # (unchanged, below) still catches replies from addresses NOT on file, by subject.
-        owner_set = set(all_emails)
-        typ, data = M.search(None, f'(SINCE {since})')
-        win_ids = data[0].split() if (typ == 'OK' and data and data[0]) else []
-        print(f'  sweeping {len(win_ids)} inbox message(s) since {since}')
-        sender_mids = {}      # bare-email -> [seq-id, ...], ascending == oldest -> newest
-        for _i in range(0, len(win_ids), 500):
-            chunk = b','.join(win_ids[_i:_i + 500])
-            typh, hdata = M.fetch(chunk, '(BODY.PEEK[HEADER.FIELDS (FROM)])')
-            if typh != 'OK' or not hdata:
-                continue
-            for item in hdata:
-                if not (isinstance(item, tuple) and item[0] and item[1]):
+    scanned_ok = 0
+    for user, pw in creds:
+        print(f'checking mailbox: {user}')
+        # MERGE, don't overwrite. Before 2026-09-13 `found` started empty and line ~554 dumped ONLY the
+        # current 30-day window, so (a) scanning a second inbox (company + personal) erased the first,
+        # and (b) any lean run silently discarded warm replies that had simply aged out of the window --
+        # the same reply-data-loss this file's history calls the cardinal sin. is_new still compares
+        # against the untouched `prior`, so NEW-reply alerts are unchanged.
+        try:
+            # Connect with a bounded retry on TRANSIENT network faults only (added 2026-09-17).
+            # The 06:45 scheduled run died on `[Errno 11001] getaddrinfo failed` -- DNS, not
+            # credentials -- and the broad `except` at the bottom of this block does `return` BEFORE
+            # the write, so a single blip at that hour silently skipped the entire scan while the task
+            # still exited 0. That is how replies.json sat frozen at 09-11 for six days. Wi-Fi is
+            # frequently not up yet at 05:30-06:45; the network deserves a second look, the password
+            # does not. imaplib.IMAP4.error (AUTHENTICATIONFAILED) is NOT an OSError, so a bad app
+            # password still falls straight through to the handler below on the first try -- no
+            # pointless retries against an account that could lock.
+            M = None
+            for attempt, pause in enumerate((5, 15, 0), 1):
+                try:
+                    M = imaplib.IMAP4_SSL('imap.gmail.com', timeout=45)
+                    M.login(user, pw)
+                    break
+                except OSError as e:
+                    if M is not None:
+                        try:
+                            M.shutdown()
+                        except Exception:
+                            pass
+                        M = None
+                    if not pause:
+                        raise
+                    print(f'  IMAP attempt {attempt} failed ({str(e)[:70]}) — retrying in {pause}s')
+                    time.sleep(pause)
+            M.select('INBOX')
+            # ---- PASS 1: replies FROM a known owner address (rewritten 2026-09-13) -------------------
+            # The old PASS 1 fired one IMAP SEARCH per owner address -- 4,306 of them on 2026-09-13 --
+            # every run. That O(owners) loop is what blew the scheduled task's PT30M limit and left
+            # replies.json frozen for weeks (killed mid-scan = nothing written). Same result now at
+            # O(inbox): ONE search for the window, then BATCHED header fetches (one round trip per 500
+            # messages), and match senders locally. Full RFC822 is still pulled -- for STOP scan +
+            # excerpt -- but only for the handful of owner addresses that actually wrote in. PASS 2
+            # (unchanged, below) still catches replies from addresses NOT on file, by subject.
+            owner_set = set(all_emails)
+            typ, data = M.search(None, f'(SINCE {since})')
+            win_ids = data[0].split() if (typ == 'OK' and data and data[0]) else []
+            print(f'  sweeping {len(win_ids)} inbox message(s) since {since}')
+            sender_mids = {}      # bare-email -> [seq-id, ...], ascending == oldest -> newest
+            for _i in range(0, len(win_ids), 500):
+                chunk = b','.join(win_ids[_i:_i + 500])
+                typh, hdata = M.fetch(chunk, '(BODY.PEEK[HEADER.FIELDS (FROM)])')
+                if typh != 'OK' or not hdata:
                     continue
-                mseq = re.match(rb'(\d+)', item[0])
-                if not mseq:
-                    continue
-                hmsg = email.message_from_bytes(item[1])
-                snd = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
-                if snd:
-                    sender_mids.setdefault(snd, []).append(mseq.group(1).decode())
-        for addr in sorted(owner_set & set(sender_mids)):
-            mids = sender_mids[addr]
-            typ, msg_data = M.fetch(mids[-1], '(RFC822)')     # newest message from this owner
-            raw = msg_data[0][1] if (typ == 'OK' and msg_data and msg_data[0]) else b''
-            subj, when, fresh, is_stop, _snd = _read_msg(raw)
-            rec = {'email': addr, 'n': len(mids), 'subject': subj, 'when': when,
-                   'stop': is_stop,
-                   'excerpt': ' '.join(fresh.split())[:220],
-                   'checked': datetime.now().isoformat(timespec='minutes')}
-            # NEW means the message count for this address grew since the last run, not just "the
-            # key is new" -- with days=30 the same reply reappears in this window every day for a
-            # month, and a returning replier's SECOND message should still alert even though the
-            # address itself was already known.
-            is_new = rec['n'] > ((prior.get('@' + addr) or {}).get('n') or 0)
-            found['@' + addr] = rec
-            case_hit = None
-            for case, ems in by_case.items():
-                if addr in ems:
-                    found[case] = rec
-                    case_hit = case
-            flag = '  [STOP WORD IN SUBJECT]' if rec['stop'] else ''
-            print(f'  REPLY from {addr} — {len(mids)} msg(s) · {subj[:52]}{flag}')
-            if is_new:
-                new_alerts.append({'case': case_hit, 'email': addr, 'when': when,
-                                    'stop': is_stop, 'excerpt': rec['excerpt']})
-                print(f'  NEW SELLER REPLY | {case_hit or "no case on file"} | {addr} | '
-                      f'{rec["excerpt"][:90]}')
-
-        # ---- PASS 2: SUBJECT match — a reply from an address we DON'T have on file ---------------
-        # PASS 1 only searches FROM the addresses skiptrace found. An owner who replies from ANY
-        # other address is invisible to it. That is not hypothetical: 2026-08-03, Toni Labriola
-        # (1533 W River Dr, auction 3 days out) replied "call me tomorrow" from an address not in
-        # her file, and the scan reported zero new replies -- Alejandro only caught it by reading
-        # his own inbox. Same failure class as the Capri lead: the warmest signal the system can
-        # produce, sitting invisible.
-        # Our subject is always "Regarding your property at <ADDRESS>", and replies keep it as
-        # "Re: ...", so the SUBJECT itself identifies the lead even when the sender doesn't.
-        # Skip anything PASS 1 already has, and skip our own address (a reply we sent).
-        seen = set(all_emails)
-        typ, data = M.search(None, f'(SINCE {since} SUBJECT "{SUBJ_TAG}")')
-        if typ == 'OK' and data and data[0]:
-            addr_map = owner_addrs()
-            # HEADER-FIRST TRIAGE (2026-08-26). This loop full-fetched RFC822 for EVERY message in
-            # the 30-day subject window just to read who sent it, then discarded nearly all of them
-            # -- and the window only ever grows, so the run got slower every day until the 06:45
-            # task blew through its PT30M ExecutionTimeLimit mid-scan (killed = replies.json never
-            # written = that morning's detected replies thrown away). Sender/self/bounce/subject-
-            # frag are all HEADER questions; fetch headers only (cheap, no body), and pay for the
-            # full message -- excerpt + STOP scan need the body -- only for the handful that survive.
-            for mid in data[0].split():
-                typh, hd = M.fetch(mid, '(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)])')
-                if typh != 'OK' or not hd or not hd[0] or not isinstance(hd[0], tuple):
-                    continue
-                hmsg = email.message_from_bytes(hd[0][1])
-                sender = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
-                hsubj = str(make_header(decode_header(hmsg.get('Subject') or '')))
-                if not sender or sender == str(user).lower() or sender in seen:
-                    continue
-                # a bounce/auto-notice is not an owner writing back
-                if re.search(r'(mailer-daemon|postmaster|no-?reply|do-?not-?reply)', sender, re.I):
-                    continue
-                mfrag = re.search(r'property at\s+(.+)$', hsubj or '', re.I)
-                if not mfrag or not _norm_addr(mfrag.group(1)):
-                    continue
-                typ2, md = M.fetch(mid, '(RFC822)')
-                if typ2 != 'OK' or not md or not md[0]:
-                    continue
-                subj, when, fresh, is_stop, sender = _read_msg(md[0][1])
-                if not sender or sender == str(user).lower() or sender in seen:
-                    continue
-                m = re.search(r'property at\s+(.+)$', subj or '', re.I)
-                frag = _norm_addr(m.group(1)) if m else ''
-                if not frag:
-                    continue
-                case = None
-                for c, a in addr_map.items():
-                    if a and (a.startswith(frag) or frag.startswith(a)):
-                        case = c
-                        break
-                rec = {'email': sender, 'n': 1, 'subject': subj, 'when': when,
+                for item in hdata:
+                    if not (isinstance(item, tuple) and item[0] and item[1]):
+                        continue
+                    mseq = re.match(rb'(\d+)', item[0])
+                    if not mseq:
+                        continue
+                    hmsg = email.message_from_bytes(item[1])
+                    snd = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
+                    if snd:
+                        sender_mids.setdefault(snd, []).append(mseq.group(1).decode())
+            for addr in sorted(owner_set & set(sender_mids)):
+                mids = sender_mids[addr]
+                typ, msg_data = M.fetch(mids[-1], '(RFC822)')     # newest message from this owner
+                raw = msg_data[0][1] if (typ == 'OK' and msg_data and msg_data[0]) else b''
+                subj, when, fresh, is_stop, _snd = _read_msg(raw)
+                rec = {'email': addr, 'n': len(mids), 'subject': subj, 'when': when,
                        'stop': is_stop,
                        'excerpt': ' '.join(fresh.split())[:220],
-                       'via': 'subject-match', 'new_address': True,
                        'checked': datetime.now().isoformat(timespec='minutes')}
-                is_new = ('@' + sender) not in prior
-                found['@' + sender] = rec
-                if case:
-                    found[case] = rec
-                seen.add(sender)
-                flag = '  [STOP WORD]' if is_stop else ''
-                print(f'  REPLY from {sender} (NEW ADDRESS, matched by subject) — '
-                      f'{subj[:46]}{flag}')
-                print(f'      -> lead: {case or "no case matched — check the address"}'
-                      f'   ** add {sender} to this owner\'s file **')
+                # NEW means the message count for this address grew since the last run, not just "the
+                # key is new" -- with days=30 the same reply reappears in this window every day for a
+                # month, and a returning replier's SECOND message should still alert even though the
+                # address itself was already known.
+                is_new = rec['n'] > ((prior.get('@' + addr) or {}).get('n') or 0)
+                found['@' + addr] = rec
+                case_hit = None
+                for case, ems in by_case.items():
+                    if addr in ems:
+                        found[case] = rec
+                        case_hit = case
+                flag = '  [STOP WORD IN SUBJECT]' if rec['stop'] else ''
+                print(f'  REPLY from {addr} — {len(mids)} msg(s) · {subj[:52]}{flag}')
                 if is_new:
-                    new_alerts.append({'case': case, 'email': sender, 'when': when,
+                    new_alerts.append({'case': case_hit, 'email': addr, 'when': when,
                                         'stop': is_stop, 'excerpt': rec['excerpt']})
-                    print(f'  NEW SELLER REPLY | {case or "no case on file"} | {sender} | '
+                    print(f'  NEW SELLER REPLY | {case_hit or "no case on file"} | {addr} | '
                           f'{rec["excerpt"][:90]}')
-        M.logout()
-    except Exception as e:
-        print('IMAP check failed:', str(e)[:140])
-        print('  (app password wrong, IMAP disabled in Gmail settings, or network.)')
+
+            # ---- PASS 2: SUBJECT match — a reply from an address we DON'T have on file ---------------
+            # PASS 1 only searches FROM the addresses skiptrace found. An owner who replies from ANY
+            # other address is invisible to it. That is not hypothetical: 2026-08-03, Toni Labriola
+            # (1533 W River Dr, auction 3 days out) replied "call me tomorrow" from an address not in
+            # her file, and the scan reported zero new replies -- Alejandro only caught it by reading
+            # his own inbox. Same failure class as the Capri lead: the warmest signal the system can
+            # produce, sitting invisible.
+            # Our subject is always "Regarding your property at <ADDRESS>", and replies keep it as
+            # "Re: ...", so the SUBJECT itself identifies the lead even when the sender doesn't.
+            # Skip anything PASS 1 already has, and skip our own address (a reply we sent).
+            seen = set(all_emails)
+            typ, data = M.search(None, f'(SINCE {since} SUBJECT "{SUBJ_TAG}")')
+            if typ == 'OK' and data and data[0]:
+                addr_map = owner_addrs()
+                # HEADER-FIRST TRIAGE (2026-08-26). This loop full-fetched RFC822 for EVERY message in
+                # the 30-day subject window just to read who sent it, then discarded nearly all of them
+                # -- and the window only ever grows, so the run got slower every day until the 06:45
+                # task blew through its PT30M ExecutionTimeLimit mid-scan (killed = replies.json never
+                # written = that morning's detected replies thrown away). Sender/self/bounce/subject-
+                # frag are all HEADER questions; fetch headers only (cheap, no body), and pay for the
+                # full message -- excerpt + STOP scan need the body -- only for the handful that survive.
+                for mid in data[0].split():
+                    typh, hd = M.fetch(mid, '(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)])')
+                    if typh != 'OK' or not hd or not hd[0] or not isinstance(hd[0], tuple):
+                        continue
+                    hmsg = email.message_from_bytes(hd[0][1])
+                    sender = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
+                    hsubj = str(make_header(decode_header(hmsg.get('Subject') or '')))
+                    if not sender or sender == str(user).lower() or sender in seen:
+                        continue
+                    # a bounce/auto-notice is not an owner writing back
+                    if re.search(r'(mailer-daemon|postmaster|no-?reply|do-?not-?reply)', sender, re.I):
+                        continue
+                    mfrag = re.search(r'property at\s+(.+)$', hsubj or '', re.I)
+                    if not mfrag or not _norm_addr(mfrag.group(1)):
+                        continue
+                    typ2, md = M.fetch(mid, '(RFC822)')
+                    if typ2 != 'OK' or not md or not md[0]:
+                        continue
+                    subj, when, fresh, is_stop, sender = _read_msg(md[0][1])
+                    if not sender or sender == str(user).lower() or sender in seen:
+                        continue
+                    m = re.search(r'property at\s+(.+)$', subj or '', re.I)
+                    frag = _norm_addr(m.group(1)) if m else ''
+                    if not frag:
+                        continue
+                    case = None
+                    for c, a in addr_map.items():
+                        if a and (a.startswith(frag) or frag.startswith(a)):
+                            case = c
+                            break
+                    rec = {'email': sender, 'n': 1, 'subject': subj, 'when': when,
+                           'stop': is_stop,
+                           'excerpt': ' '.join(fresh.split())[:220],
+                           'via': 'subject-match', 'new_address': True,
+                           'checked': datetime.now().isoformat(timespec='minutes')}
+                    is_new = ('@' + sender) not in prior
+                    found['@' + sender] = rec
+                    if case:
+                        found[case] = rec
+                    seen.add(sender)
+                    flag = '  [STOP WORD]' if is_stop else ''
+                    print(f'  REPLY from {sender} (NEW ADDRESS, matched by subject) — '
+                          f'{subj[:46]}{flag}')
+                    print(f'      -> lead: {case or "no case matched — check the address"}'
+                          f'   ** add {sender} to this owner\'s file **')
+                    if is_new:
+                        new_alerts.append({'case': case, 'email': sender, 'when': when,
+                                            'stop': is_stop, 'excerpt': rec['excerpt']})
+                        print(f'  NEW SELLER REPLY | {case or "no case on file"} | {sender} | '
+                              f'{rec["excerpt"][:90]}')
+            M.logout()
+            scanned_ok += 1
+        except Exception as e:
+            print('IMAP check failed for %s: %s' % (user, str(e)[:140]))
+            print('  (app password wrong, IMAP disabled in Gmail settings, or network.)')
+            continue                   # a dead mailbox must not hide the next one's replies
+
+    if not scanned_ok:
+        print('no mailbox could be scanned - replies.json left untouched')
         return
 
     json.dump(found, open(OUT, 'w', encoding='utf-8'), indent=1)
