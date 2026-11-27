@@ -1658,6 +1658,9 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--case', default='')
+    ap.add_argument('--cases-file', default='',
+                    help='JSON list of case numbers: pull ONLY these (fresh or previously failed), in one '
+                         'browser session. For a targeted backlog, e.g. leads that just got an address.')
     ap.add_argument('--tier', default='')
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--limit', type=int, default=0)
@@ -1805,9 +1808,11 @@ def _run(a, ap):
     md_retries = []          # previously-failed traces, retried within the run's budget
     no_token = []            # --reanalyze: pre-lien chains with no cached token (counted, never minted)
     skipped = {}
+    _only = set(json.load(open(a.cases_file, encoding='utf-8'))) if a.cases_file else None
     for r in leads:
         case = r.get('Case #', '') or ''
         if a.case and case != a.case: continue
+        if _only is not None and case not in _only: continue
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         oc = (r.get('owner_clean', '') or '').strip()
         if not oc: continue                                        # kimi: companies traced too (folio-isolated)
