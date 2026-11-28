@@ -1,54 +1,54 @@
 {
  "alerts": [
   {
-   "at": "2026-11-27T14:40:13-05:00",
+   "at": "2026-11-27T21:10:37-05:00",
    "key": "healthcheck-fail",
    "severity": "fail",
    "text": "healthcheck FAIL stages: enriched (has value), skiptrace freshness, RULE: ARV-comp coverage."
   },
   {
-   "at": "2026-11-27T14:40:13-05:00",
+   "at": "2026-11-27T21:10:37-05:00",
    "key": "laptop-readiness",
    "severity": "fail",
-   "text": "Laptop readiness (checked 11-26 21:10): 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
+   "text": "Laptop readiness (checked 11-27 21:10): on battery; battery 31% (under 50%); 1 DEALFLOW task(s) disabled (DEALFLOW Phones); 1 DEALFLOW task(s) last result failed (DEALFLOW Refresh); 3 DEALFLOW task(s) logon Interactive only (DEALFLOW Phones, DEALFLOW Refresh, DealFlow Replies)."
   },
   {
-   "at": "2026-11-27T14:40:13-05:00",
+   "at": "2026-11-27T21:10:37-05:00",
    "key": "paid-reads-cap",
    "severity": "warn",
    "text": "Paid reads $13.99 of $17.40 (80%) this month, warn at 80%."
   },
   {
-   "at": "2026-11-27T14:40:13-05:00",
+   "at": "2026-11-27T21:10:37-05:00",
    "key": "tracerfy-credits",
    "severity": "fail",
    "text": "Tracerfy balance 1 credits; one lookup costs 5. Cannot pay for a lookup."
   }
  ],
- "published_at": "2026-11-27T14:40:13-05:00",
+ "published_at": "2026-11-27T21:10:37-05:00",
  "signals": {
   "bake_bk": {
    "degraded": false
   },
   "bk_lookup": {
-   "errors": 1,
+   "errors": 9,
    "filings": 3725,
-   "holds": 1167,
+   "holds": 1172,
    "last_http_status": 0,
-   "leads_checked": 2,
-   "match_s": 6,
-   "needing_search": 4693,
+   "leads_checked": 19,
+   "match_s": 5,
+   "needing_search": 4701,
    "provider": "courtlistener",
-   "pull_age_h": 2.27,
+   "pull_age_h": 0.0,
    "pull_attempts": 0,
    "pull_fail": "",
    "pull_ok": true,
    "readable": true,
-   "reason": "budget",
-   "requests_used": 115,
-   "searched_this_run": 2,
+   "reason": "time_budget",
+   "requests_used": 65,
+   "searched_this_run": 19,
    "starved_runs": 0,
-   "truncated": 1
+   "truncated": 4
   },
   "bounce": {
    "ceiling": 0.1,
@@ -128,7 +128,7 @@
      "run_end": 1,
      "send_answer": 37,
      "task_open": 1,
-     "worker_loaded": 1
+     "worker_loaded": 2
     },
     "no_email": {
      "none": 5
@@ -139,7 +139,7 @@
      "unverified_first_touch": 1,
      "unverified_recipient": 1
     },
-    "rows": 48,
+    "rows": 49,
     "skipped": {}
    }
   },
@@ -163,7 +163,7 @@
    "spent": 13.9908
   },
   "readiness": {
-   "at": "2026-11-26T21:10:04-05:00",
+   "at": "2026-11-27T21:10:37-05:00",
    "battery_present": true,
    "degraded": 0,
    "degraded_codes": [],
@@ -182,8 +182,8 @@
     "DEALFLOW Refresh",
     "DealFlow Replies"
    ],
-   "on_ac": true,
-   "pct": 79,
+   "on_ac": false,
+   "pct": 31,
    "port_open": true,
    "power_ok": true,
    "present_check": true,
